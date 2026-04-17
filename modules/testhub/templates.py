@@ -73,7 +73,7 @@ TEST_HUB_HTML = """
             <select id="apiSelector" onchange="handleApiChange()">
                 <option value="attendance-detail">Alumnos - Análisis Detallado (Asistencia)</option>
                 <option value="husky">Alumnos - Husky Pass Tasa de Captura</option>
-                <option value="retardos">Alumnos - Husky Pass Retardos Histórico</option>
+                <option value="retardos">Alumnos - Husky Pass Retardos (Plantel)</option>
                 <option value="emp-kardex">Empleados - Asistencia y Retardos (Kardex)</option>
             </select>
         </div>
@@ -197,7 +197,7 @@ TEST_HUB_HTML = """
         <div id="viewRetardos" class="view-layer">
             <div class="card full-col">
                 <div style="display:flex; justify-content:space-between; align-items:center; border-bottom: 1px solid #444; padding-bottom: 10px; margin-bottom: 15px;">
-                    <h3 style="border:none; margin:0; padding:0;">⏰ Historial de Retardos</h3>
+                    <h3 style="border:none; margin:0; padding:0;">⏰ Historial de Retardos (Plantel)</h3>
                     <div id="retardosKpi" style="font-size: 20px; font-weight:bold; color:var(--accent);"></div>
                 </div>
                 <div class="table-container">
@@ -206,6 +206,7 @@ TEST_HUB_HTML = """
                             <tr>
                                 <th>ID Registro</th>
                                 <th>Alumno</th>
+                                <th>Matrícula</th>
                                 <th>Fecha</th>
                                 <th>Hora de Entrada</th>
                             </tr>
@@ -293,14 +294,9 @@ TEST_HUB_HTML = """
         }
 
         function handleApiChange() {
-            const api = document.getElementById('apiSelector').value;
-            if (api === 'retardos') {
-                document.getElementById('plantelContainer').style.display = 'none';
-                document.getElementById('matriculaContainer').style.display = 'block';
-            } else {
-                document.getElementById('plantelContainer').style.display = 'block';
-                document.getElementById('matriculaContainer').style.display = 'none';
-            }
+            // Se deshabilita el selector de matrícula dado que ahora retardos opera por Plantel
+            document.getElementById('plantelContainer').style.display = 'block';
+            document.getElementById('matriculaContainer').style.display = 'none';
             clearDashboards();
         }
 
@@ -315,7 +311,6 @@ TEST_HUB_HTML = """
             const api = document.getElementById('apiSelector').value;
             const scope = document.getElementById('scopeSelector').value;
             const plantel = document.getElementById('plantel').value;
-            const matricula = document.getElementById('matriculaInput').value;
             const start = document.getElementById('startDate').value;
             const end = document.getElementById('endDate').value;
             
@@ -326,8 +321,7 @@ TEST_HUB_HTML = """
             } else if (api === 'attendance-detail') {
                 url = `/api/v1/attendance/detail?plantel=${plantel}&scope=${scope}`;
             } else if (api === 'retardos') {
-                if (!matricula) return alert("Por favor ingresa una matrícula válida.");
-                url = `/api/v1/husky/students/${matricula}/retardos?scope=${scope}`;
+                url = `/api/v1/husky/retardos?plantel=${plantel}&scope=${scope}`;
             } else if (api === 'emp-kardex') {
                 url = `/api/v1/employee-attendance/kardex-report?plantel=${plantel}&scope=${scope}`;
             }
@@ -518,12 +512,13 @@ TEST_HUB_HTML = """
             const rBody = document.querySelector('#retardosTable tbody');
             
             if (data.retardos.length === 0) {
-                rBody.innerHTML = `<tr><td colspan="4" style="text-align:center; color:#888;">No hay retardos registrados en el rango (Scope: ${data.scope}).</td></tr>`;
+                rBody.innerHTML = `<tr><td colspan="5" style="text-align:center; color:#888;">No hay retardos registrados en el rango (Scope: ${data.scope}).</td></tr>`;
             } else {
                 rBody.innerHTML = data.retardos.map(r => `
                     <tr>
                         <td><span class="tag">${r.id}</span></td>
                         <td><b>${r.student_fullname}</b></td>
+                        <td>${r.matricula}</td>
                         <td>${r.date}</td>
                         <td style="color:var(--warning); font-weight:bold;">${r.time}</td>
                     </tr>
@@ -541,7 +536,7 @@ TEST_HUB_HTML = """
             // Render Debug Metadata (Unmapped Areas)
             const dbgContainer = document.getElementById('kardexDebugContainer');
             const unmappedList = document.getElementById('unmappedAreasList');
-            if (data.debug.unmapped_areas.length > 0) {
+            if (data.debug.unmapped_areas && data.debug.unmapped_areas.length > 0) {
                 dbgContainer.style.display = 'block';
                 unmappedList.innerHTML = data.debug.unmapped_areas.map(a => `<span class="tag tag-warn">${a}</span>`).join('');
             } else {

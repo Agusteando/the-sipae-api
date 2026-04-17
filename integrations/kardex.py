@@ -61,3 +61,30 @@ async def fetch_kardex_records(start_date: date, end_date: date, area: str = Non
     except Exception as e:
         logger.error(f"Error fetching Kardex records: {e}")
     return []
+
+
+async def fetch_crossover_records(start_date: date, end_date: date, plantel: str) -> List[Dict[str, Any]]:
+    """
+    Fetches employee crossover records dynamically from the target plantel API layer.
+    """
+    url = f"{settings.kardex_api_url}/api/crossover/plantel"
+    params = {
+        "plantel": plantel,
+        "fecha_inicio": start_date.isoformat(),
+        "fecha_fin": end_date.isoformat()
+    }
+    logger.info(f"Fetching Crossover API records from {url} with params {params}")
+    try:
+        async with httpx.AsyncClient() as client:
+            resp = await client.get(url, params=params, timeout=20.0)
+            if resp.status_code == 200:
+                data = resp.json()
+                if isinstance(data, list):
+                    return data
+                elif isinstance(data, dict) and "data" in data:
+                    return data["data"]
+            else:
+                logger.warning(f"Crossover API responded with status code: {resp.status_code}")
+    except Exception as e:
+        logger.error(f"Error fetching Crossover API records: {e}")
+    return []

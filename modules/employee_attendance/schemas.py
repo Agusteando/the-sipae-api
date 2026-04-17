@@ -21,6 +21,7 @@ class DebugInfo(BaseModel):
 
 class EmployeeAttendanceResponse(BaseModel):
     plantel: str
+    source_plantel_requested: str
     scope: str
     date_range: Dict[str, date]
     summary: SummaryCounts

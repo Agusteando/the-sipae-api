@@ -1,7 +1,10 @@
 from datetime import date
 from core.utils import resolve_plantel
+from core.logger import get_logger
 from integrations.external_bot import fetch_expected_population
-from .repository import get_daily_scans, fetch_student_retardos_by_matricula
+from .repository import get_daily_scans, fetch_plantel_retardos
+
+logger = get_logger("service.husky")
 
 async def calculate_husky_daily_rate(plantel: str, start_date: date, end_date: date, scope: str) -> dict:
     """
@@ -36,24 +39,44 @@ async def calculate_husky_daily_rate(plantel: str, start_date: date, end_date: d
     }
 
 
-async def get_student_retardos(matricula: str, start_date: date, end_date: date, scope: str) -> dict:
+async def get_plantel_retardos(plantel: str, start_date: date, end_date: date, scope: str) -> dict:
     """
-    Extracts all tardies for the student precisely within the provided scoped date range.
-    No hardcoded date logic exists here; the global contract determines the boundaries.
+    Extracts all tardies globally for the requested plantel within the provided date range.
+    Applies the exact tardiness threshold driven by the resolved normalized plantel code.
     """
-    records = await fetch_student_retardos_by_matricula(matricula, start_date, end_date)
+    plantel_info = resolve_plantel(plantel)
+    db_code = plantel_info["db_code"]
+    
+    # Apply strict rules for threshold mappings based on normalized plantel
+    if db_code in ['PM', 'PT']:
+        threshold_time = '08:01:00'
+    elif db_code in ['SM', 'ST']:
+        threshold_time = '07:01:00'
+    else:
+        threshold_time = '09:01:00'
+
+    logger.info(f"Requested Plantel: {plantel}")
+    logger.info(f"Normalized Plantel (db_code): {db_code}")
+    logger.info(f"Tardiness Threshold Applied: > {threshold_time}")
+    logger.info(f"SQL Parameters: db_code={db_code}%, start_date={start_date}, end_date={end_date}, threshold_time={threshold_time}")
+
+    records = await fetch_plantel_retardos(db_code, start_date, end_date, threshold_time)
+    
+    logger.info(f"Total rows returned after threshold filtering: {len(records)}")
     
     formatted_retardos = []
     for r in records:
         formatted_retardos.append({
             "id": r["id"],
-            "student_fullname": r["student_fullname"],
+            "student_fullname": str(r["student_fullname"]).strip() if r["student_fullname"] else "Desconocido",
+            "matricula": r.get("matricula") or "N/A",
             "date": r["date"],
             "time": str(r["time"]) 
         })
         
     return {
-        "matricula": matricula,
+        "plantel_requested": plantel_info["plantel_requested"],
+        "resolved_name": plantel_info["resolved_name"],
         "scope": scope,
         "date_range": {"start": start_date, "end": end_date},
         "total_retardos": len(formatted_retardos),
