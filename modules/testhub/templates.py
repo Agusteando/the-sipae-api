@@ -26,7 +26,7 @@ TEST_HUB_HTML = """
         
         /* Text & Status */
         .kpi-row { display: flex; justify-content: space-around; flex-wrap: wrap; margin-bottom: 15px; }
-        .kpi-box { text-align: center; background: #1e1e2f; padding: 15px; border-radius: 6px; min-width: 120px; }
+        .kpi-box { text-align: center; background: #1e1e2f; padding: 15px; border-radius: 6px; min-width: 120px; border: 1px solid #333; }
         .kpi-box .val { font-size: 26px; font-weight: bold; color: var(--info); }
         .kpi-box .lbl { font-size: 12px; color: #aaa; text-transform: uppercase; margin-top: 5px; }
         
@@ -34,10 +34,11 @@ TEST_HUB_HTML = """
         .status-complete { background: rgba(46, 204, 113, 0.1); border-color: var(--success); color: var(--success); }
         .status-missing { background: rgba(231, 76, 60, 0.1); border-color: var(--accent); color: var(--accent); }
 
-        /* Tags for missing groups */
+        /* Tags */
         .tag-container { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-top: 15px; }
         .tag { background: rgba(255,255,255,0.1); padding: 5px 12px; border-radius: 20px; font-size: 14px; font-weight: bold; border: 1px solid #555; }
         .tag.tag-red { border-color: var(--accent); color: var(--accent); background: rgba(255, 71, 87, 0.1); }
+        .tag.tag-warn { border-color: var(--warning); color: var(--warning); background: rgba(241, 196, 15, 0.1); }
 
         /* Tables */
         table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 14px; }
@@ -70,13 +71,13 @@ TEST_HUB_HTML = """
         <div>
             <label>Servicio API:</label>
             <select id="apiSelector" onchange="handleApiChange()">
-                <option value="attendance-detail">Asistencia - Análisis Detallado</option>
-                <option value="husky">Husky Pass - Tasa de Captura</option>
-                <option value="retardos">Husky Pass - Retardos por Alumno</option>
+                <option value="attendance-detail">Alumnos - Análisis Detallado (Asistencia)</option>
+                <option value="husky">Alumnos - Husky Pass Tasa de Captura</option>
+                <option value="retardos">Alumnos - Husky Pass Retardos Histórico</option>
+                <option value="emp-kardex">Empleados - Asistencia y Retardos (Kardex)</option>
             </select>
         </div>
 
-        <!-- Plantel vs Matricula toggles based on selected API -->
         <div id="plantelContainer">
             <label>Plantel:</label>
             <select id="plantel">
@@ -94,7 +95,6 @@ TEST_HUB_HTML = """
             <input type="text" id="matriculaInput" placeholder="Ej: 12345">
         </div>
 
-        <!-- Enforced Default Scope System -->
         <div>
             <label>Alcance (Scope):</label>
             <select id="scopeSelector" onchange="handleScopeChange()">
@@ -216,6 +216,57 @@ TEST_HUB_HTML = """
             </div>
         </div>
 
+        <!-- EMPLOYEES KARDEX VIEW -->
+        <div id="viewEmployeeKardex" class="view-layer">
+            <div class="card full-col">
+                <div style="display:flex; justify-content:space-between; align-items:center; border-bottom: 1px solid #444; padding-bottom: 10px; margin-bottom: 15px;">
+                    <h3 style="border:none; margin:0; padding:0;">🗂️ KPIs de Plantilla Externa (Kardex)</h3>
+                </div>
+                <div class="kpi-row" id="kardexKpiContainer"></div>
+                
+                <div id="kardexDebugContainer" style="display:none; margin-bottom: 20px; padding: 15px; border: 1px solid var(--warning); background: rgba(241, 196, 15, 0.05); border-radius: 6px;">
+                    <p style="margin-top:0; font-weight:bold; color: var(--warning);">⚠️ Diagnóstico: Áreas Externas No Mapeadas</p>
+                    <p style="font-size: 12px; color: #bbb; margin-bottom: 10px;">Las siguientes áreas fueron detectadas en Kardex pero no están enlazadas a un Plantel normalizado. No afectarán los conteos oficiales, pero deben mapearse en código si es necesario.</p>
+                    <div class="tag-container" id="unmappedAreasList" style="justify-content: flex-start;"></div>
+                </div>
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+                    <div>
+                        <h4 style="color:var(--warning); margin-bottom: 10px;">⏱️ Empleados con Retardos</h4>
+                        <div class="table-container">
+                            <table id="empRetardosTable">
+                                <thead>
+                                    <tr>
+                                        <th>ID</th>
+                                        <th>Nombre</th>
+                                        <th>Fecha</th>
+                                        <th>Estatus Kardex</th>
+                                    </tr>
+                                </thead>
+                                <tbody></tbody>
+                            </table>
+                        </div>
+                    </div>
+                    <div>
+                        <h4 style="color:var(--accent); margin-bottom: 10px;">🚫 Empleados con Ausencias</h4>
+                        <div class="table-container">
+                            <table id="empAusenciasTable">
+                                <thead>
+                                    <tr>
+                                        <th>ID</th>
+                                        <th>Nombre</th>
+                                        <th>Fecha</th>
+                                        <th>Estatus Kardex</th>
+                                    </tr>
+                                </thead>
+                                <tbody></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <!-- RAW JSON LOG -->
         <div class="card full-col">
             <h3>⚙️ Carga de Datos en Crudo (JSON)</h3>
@@ -277,6 +328,8 @@ TEST_HUB_HTML = """
             } else if (api === 'retardos') {
                 if (!matricula) return alert("Por favor ingresa una matrícula válida.");
                 url = `/api/v1/husky/students/${matricula}/retardos?scope=${scope}`;
+            } else if (api === 'emp-kardex') {
+                url = `/api/v1/employee-attendance/kardex-report?plantel=${plantel}&scope=${scope}`;
             }
 
             if (scope === 'range') {
@@ -302,6 +355,9 @@ TEST_HUB_HTML = """
                 } else if (api === 'retardos') {
                     document.getElementById('viewRetardos').classList.add('active');
                     renderRetardos(data);
+                } else if (api === 'emp-kardex') {
+                    document.getElementById('viewEmployeeKardex').classList.add('active');
+                    renderEmployeeKardex(data);
                 }
             } catch (error) {
                 alert('Error en la conexión. Revisa la consola.');
@@ -470,6 +526,54 @@ TEST_HUB_HTML = """
                         <td><b>${r.student_fullname}</b></td>
                         <td>${r.date}</td>
                         <td style="color:var(--warning); font-weight:bold;">${r.time}</td>
+                    </tr>
+                `).join('');
+            }
+        }
+
+        function renderEmployeeKardex(data) {
+            // Render KPIs
+            document.getElementById('kardexKpiContainer').innerHTML = `
+                <div class="kpi-box"><div class="val" style="color:var(--warning);">${data.summary.retardos_count}</div><div class="lbl">Retardos</div></div>
+                <div class="kpi-box"><div class="val" style="color:var(--accent);">${data.summary.ausencias_count}</div><div class="lbl">Ausencias / Faltas</div></div>
+            `;
+
+            // Render Debug Metadata (Unmapped Areas)
+            const dbgContainer = document.getElementById('kardexDebugContainer');
+            const unmappedList = document.getElementById('unmappedAreasList');
+            if (data.debug.unmapped_areas.length > 0) {
+                dbgContainer.style.display = 'block';
+                unmappedList.innerHTML = data.debug.unmapped_areas.map(a => `<span class="tag tag-warn">${a}</span>`).join('');
+            } else {
+                dbgContainer.style.display = 'none';
+            }
+
+            // Render Retardos Table
+            const retBody = document.querySelector('#empRetardosTable tbody');
+            if (data.retardos.length === 0) {
+                retBody.innerHTML = `<tr><td colspan="4" style="text-align:center; color:#888;">Sin registros.</td></tr>`;
+            } else {
+                retBody.innerHTML = data.retardos.map(r => `
+                    <tr>
+                        <td><span class="tag">${r.employee_id}</span></td>
+                        <td><b>${r.employee_name}</b></td>
+                        <td>${r.date}</td>
+                        <td>${r.raw_status}</td>
+                    </tr>
+                `).join('');
+            }
+
+            // Render Ausencias Table
+            const ausBody = document.querySelector('#empAusenciasTable tbody');
+            if (data.ausencias.length === 0) {
+                ausBody.innerHTML = `<tr><td colspan="4" style="text-align:center; color:#888;">Sin registros.</td></tr>`;
+            } else {
+                ausBody.innerHTML = data.ausencias.map(a => `
+                    <tr>
+                        <td><span class="tag">${a.employee_id}</span></td>
+                        <td><b>${a.employee_name}</b></td>
+                        <td>${a.date}</td>
+                        <td>${a.raw_status}</td>
                     </tr>
                 `).join('');
             }

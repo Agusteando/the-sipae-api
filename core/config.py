@@ -23,6 +23,7 @@ class Settings(BaseSettings):
 
     # External APIs
     external_bot_api_url: str = "https://bot.casitaapps.com/fetch-base-simple"
+    kardex_api_url: str = "https://kardex.casitaapps.com"
 
     # Automatically load from absolute .env file path
     model_config = SettingsConfigDict(env_file=ENV_PATH, env_file_encoding="utf-8", extra="ignore")

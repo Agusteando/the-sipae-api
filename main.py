@@ -6,8 +6,9 @@ from core.config import settings
 from modules.testhub.router import router as testhub_router
 from modules.husky.router import router as husky_router
 from modules.attendance.router import router as attendance_router
+from modules.employee_attendance.router import router as employee_router
 
-app = FastAPI(title="The SIPAE API Hub", version="1.3.0")
+app = FastAPI(title="The SIPAE API Hub", version="1.4.0")
 
 @app.get("/", include_in_schema=False)
 async def redirect_root_to_hub():
@@ -20,6 +21,7 @@ async def redirect_root_to_hub():
 app.include_router(testhub_router)
 app.include_router(husky_router)
 app.include_router(attendance_router)
+app.include_router(employee_router)
 
 if __name__ == "__main__":
     import uvicorn
