@@ -66,10 +66,10 @@ async def fetch_kardex_records(start_date: date, end_date: date, area: str = Non
 async def fetch_crossover_records(start_date: date, end_date: date, plantel: str) -> List[Dict[str, Any]]:
     """
     Fetches employee crossover records dynamically from the target plantel API layer.
+    Properly formats the exact crossover path parameter specification.
     """
-    url = f"{settings.kardex_api_url}/api/crossover/plantel"
+    url = f"{settings.kardex_api_url}/api/crossover/plantel/{plantel}"
     params = {
-        "plantel": plantel,
         "fecha_inicio": start_date.isoformat(),
         "fecha_fin": end_date.isoformat()
     }
