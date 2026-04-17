@@ -53,6 +53,9 @@ TEST_HUB_HTML = """
         .view-layer { display: none; }
         .view-layer.active { display: contents; }
         .full-col { grid-column: 1 / -1; }
+        
+        /* Chart Wrappers */
+        .chart-container-relative { position: relative; height: 300px; width: 100%; }
     </style>
 </head>
 <body>
@@ -101,7 +104,10 @@ TEST_HUB_HTML = """
             </div>
             <div class="card">
                 <h3>📈 Tendencia Diaria (Entradas vs Salidas)</h3>
-                <canvas id="barChart"></canvas>
+                <!-- The wrapper below stops Chart.js from infinitely resizing the canvas -->
+                <div class="chart-container-relative">
+                    <canvas id="barChart"></canvas>
+                </div>
             </div>
         </div>
 
@@ -111,7 +117,9 @@ TEST_HUB_HTML = """
             <!-- Range Mode Only: Trend Chart & Day Selector -->
             <div class="card full-col" id="attRangeWrapper" style="display:none;">
                 <h3>📅 Tendencia Mensual / Rango de Fechas</h3>
-                <div style="height: 250px;"><canvas id="attendanceRangeChart"></canvas></div>
+                <div class="chart-container-relative" style="height: 250px;">
+                    <canvas id="attendanceRangeChart"></canvas>
+                </div>
                 
                 <div style="margin-top: 20px; background: #1e1e2f; padding: 15px; border-radius: 6px; text-align: center;">
                     <label style="font-weight:bold; margin-right:10px;">Inspeccionar día específico:</label>
