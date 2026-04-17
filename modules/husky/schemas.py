@@ -15,6 +15,7 @@ class HuskyDailyRateResponse(BaseModel):
     plantel_requested: str
     resolved_name: str
     expected_population: int
+    scope: str
     date_range: DateRangeModel
     daily_datapoints: Dict[str, DailyDatapointModel]
 
@@ -29,6 +30,7 @@ class RetardoDetailModel(BaseModel):
 
 class StudentRetardosResponse(BaseModel):
     matricula: str
-    school_year: str
+    scope: str
+    date_range: DateRangeModel
     total_retardos: int
     retardos: List[RetardoDetailModel]

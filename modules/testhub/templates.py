@@ -13,10 +13,10 @@ TEST_HUB_HTML = """
         h1 { text-align: center; color: #fff; margin-bottom: 5px; }
         p.subtitle { text-align: center; color: #a0a0b0; margin-top: 0; margin-bottom: 30px; }
         
-        .controls { background: var(--panel); padding: 20px; border-radius: 8px; display: flex; flex-wrap: wrap; gap: 15px; justify-content: center; align-items: center; box-shadow: 0 4px 6px rgba(0,0,0,0.3); margin-bottom: 30px; }
-        .controls label { font-weight: bold; font-size: 14px; color: #bbb; }
+        .controls { background: var(--panel); padding: 20px; border-radius: 8px; display: flex; flex-wrap: wrap; gap: 15px; justify-content: center; align-items: flex-end; box-shadow: 0 4px 6px rgba(0,0,0,0.3); margin-bottom: 30px; }
+        .controls label { font-weight: bold; font-size: 14px; color: #bbb; display: block; margin-bottom: 5px;}
         .controls select, .controls input { background: #1e1e2f; color: #fff; border: 1px solid #444; padding: 8px 12px; border-radius: 4px; outline: none; }
-        .controls button { background: var(--accent); color: white; border: none; padding: 10px 20px; border-radius: 4px; cursor: pointer; font-weight: bold; transition: 0.3s; }
+        .controls button { background: var(--accent); color: white; border: none; padding: 10px 20px; border-radius: 4px; cursor: pointer; font-weight: bold; transition: 0.3s; height: 38px;}
         .controls button:hover { background: var(--accent-hover); }
 
         /* Grid System */
@@ -56,22 +56,28 @@ TEST_HUB_HTML = """
         
         /* Chart Wrappers */
         .chart-container-relative { position: relative; height: 300px; width: 100%; }
+        
+        /* Flex Helpers */
+        .flex-container { display: flex; gap: 15px; }
     </style>
 </head>
 <body>
 
     <h1>🐺 SIPAE API Hub</h1>
-    <p class="subtitle">Panel Central de Microservicios Operativos</p>
+    <p class="subtitle">Panel Central de Microservicios Operativos (Default: Solo Hoy)</p>
 
     <div class="controls">
         <div>
             <label>Servicio API:</label>
-            <select id="apiSelector" onchange="clearDashboards()">
+            <select id="apiSelector" onchange="handleApiChange()">
                 <option value="attendance-detail">Asistencia - Análisis Detallado</option>
                 <option value="husky">Husky Pass - Tasa de Captura</option>
+                <option value="retardos">Husky Pass - Retardos por Alumno</option>
             </select>
         </div>
-        <div>
+
+        <!-- Plantel vs Matricula toggles based on selected API -->
+        <div id="plantelContainer">
             <label>Plantel:</label>
             <select id="plantel">
                 <option value="PT">Primaria Toluca (PT)</option>
@@ -82,14 +88,34 @@ TEST_HUB_HTML = """
                 <option value="CM">ISSSTE Metepec (CM)</option>
             </select>
         </div>
-        <div>
-            <label>Desde:</label>
-            <input type="date" id="startDate">
+
+        <div id="matriculaContainer" style="display: none;">
+            <label>Matrícula:</label>
+            <input type="text" id="matriculaInput" placeholder="Ej: 12345">
         </div>
+
+        <!-- Enforced Default Scope System -->
         <div>
-            <label>Hasta:</label>
-            <input type="date" id="endDate">
+            <label>Alcance (Scope):</label>
+            <select id="scopeSelector" onchange="handleScopeChange()">
+                <option value="today">Hoy (Default Global)</option>
+                <option value="range">Rango Personalizado</option>
+                <option value="month">Este Mes</option>
+                <option value="ciclo_escolar">Ciclo Escolar Actual</option>
+            </select>
         </div>
+
+        <div id="dateInputs" class="flex-container" style="display: none;">
+            <div>
+                <label>Desde:</label>
+                <input type="date" id="startDate">
+            </div>
+            <div>
+                <label>Hasta:</label>
+                <input type="date" id="endDate">
+            </div>
+        </div>
+
         <button onclick="fetchData()">⚡ Ejecutar Consulta</button>
     </div>
 
@@ -104,7 +130,6 @@ TEST_HUB_HTML = """
             </div>
             <div class="card">
                 <h3>📈 Tendencia Diaria (Entradas vs Salidas)</h3>
-                <!-- The wrapper below stops Chart.js from infinitely resizing the canvas -->
                 <div class="chart-container-relative">
                     <canvas id="barChart"></canvas>
                 </div>
@@ -113,27 +138,21 @@ TEST_HUB_HTML = """
 
         <!-- ATTENDANCE VIEW -->
         <div id="viewAttendance" class="view-layer">
-            
-            <!-- Range Mode Only: Trend Chart & Day Selector -->
             <div class="card full-col" id="attRangeWrapper" style="display:none;">
-                <h3>📅 Tendencia Mensual / Rango de Fechas</h3>
+                <h3>📅 Tendencia Histórica</h3>
                 <div class="chart-container-relative" style="height: 250px;">
                     <canvas id="attendanceRangeChart"></canvas>
                 </div>
-                
                 <div style="margin-top: 20px; background: #1e1e2f; padding: 15px; border-radius: 6px; text-align: center;">
                     <label style="font-weight:bold; margin-right:10px;">Inspeccionar día específico:</label>
                     <select id="daySelector" onchange="renderSpecificDay()"></select>
                 </div>
             </div>
 
-            <!-- Shared Daily Details (Used by Daily mode AND specific day selection in Range mode) -->
             <div class="card" id="attStatusCard" style="display:none;">
                 <h3 id="attDayTitle">📋 Cobertura y KPIs del Día</h3>
                 <div id="attendanceStatus" class="status-indicator"></div>
-                
                 <div class="kpi-row" id="kpiContainer"></div>
-                
                 <div id="missingGroupsContainer" style="display:none; margin-top: 15px; border-top: 1px solid #444; padding-top: 15px;">
                     <p style="text-align: center; color: #bbb; margin-bottom: 10px;">Grupos Faltantes Identificados:</p>
                     <div class="tag-container" id="missingGroupsList"></div>
@@ -172,7 +191,29 @@ TEST_HUB_HTML = """
                     </table>
                 </div>
             </div>
+        </div>
 
+        <!-- RETARDOS VIEW -->
+        <div id="viewRetardos" class="view-layer">
+            <div class="card full-col">
+                <div style="display:flex; justify-content:space-between; align-items:center; border-bottom: 1px solid #444; padding-bottom: 10px; margin-bottom: 15px;">
+                    <h3 style="border:none; margin:0; padding:0;">⏰ Historial de Retardos</h3>
+                    <div id="retardosKpi" style="font-size: 20px; font-weight:bold; color:var(--accent);"></div>
+                </div>
+                <div class="table-container">
+                    <table id="retardosTable">
+                        <thead>
+                            <tr>
+                                <th>ID Registro</th>
+                                <th>Alumno</th>
+                                <th>Fecha</th>
+                                <th>Hora de Entrada</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
         </div>
 
         <!-- RAW JSON LOG -->
@@ -190,6 +231,28 @@ TEST_HUB_HTML = """
         let charts = { gauge: null, bar: null, attRange: null };
         let currentGlobalData = null; 
 
+        function handleScopeChange() {
+            const scope = document.getElementById('scopeSelector').value;
+            const dateInputs = document.getElementById('dateInputs');
+            if (scope === 'range') {
+                dateInputs.style.display = 'flex';
+            } else {
+                dateInputs.style.display = 'none';
+            }
+        }
+
+        function handleApiChange() {
+            const api = document.getElementById('apiSelector').value;
+            if (api === 'retardos') {
+                document.getElementById('plantelContainer').style.display = 'none';
+                document.getElementById('matriculaContainer').style.display = 'block';
+            } else {
+                document.getElementById('plantelContainer').style.display = 'block';
+                document.getElementById('matriculaContainer').style.display = 'none';
+            }
+            clearDashboards();
+        }
+
         function clearDashboards() {
             document.getElementById('mainDashboard').style.display = 'none';
             if(charts.gauge) charts.gauge.destroy();
@@ -199,15 +262,25 @@ TEST_HUB_HTML = """
 
         async function fetchData() {
             const api = document.getElementById('apiSelector').value;
+            const scope = document.getElementById('scopeSelector').value;
             const plantel = document.getElementById('plantel').value;
+            const matricula = document.getElementById('matriculaInput').value;
             const start = document.getElementById('startDate').value;
             const end = document.getElementById('endDate').value;
             
             let url = '';
+            
             if (api === 'husky') {
-                url = `/api/v1/husky/scans/daily-rate?plantel=${plantel}&start_date=${start}&end_date=${end}`;
-            } else {
-                url = `/api/v1/attendance/detail?plantel=${plantel}&start_date=${start}&end_date=${end}`;
+                url = `/api/v1/husky/scans/daily-rate?plantel=${plantel}&scope=${scope}`;
+            } else if (api === 'attendance-detail') {
+                url = `/api/v1/attendance/detail?plantel=${plantel}&scope=${scope}`;
+            } else if (api === 'retardos') {
+                if (!matricula) return alert("Por favor ingresa una matrícula válida.");
+                url = `/api/v1/husky/students/${matricula}/retardos?scope=${scope}`;
+            }
+
+            if (scope === 'range') {
+                url += `&start_date=${start}&end_date=${end}`;
             }
             
             try {
@@ -223,9 +296,12 @@ TEST_HUB_HTML = """
                 if (api === 'husky') {
                     document.getElementById('viewHusky').classList.add('active');
                     renderHusky(data);
-                } else {
+                } else if (api === 'attendance-detail') {
                     document.getElementById('viewAttendance').classList.add('active');
                     renderAttendance(data);
+                } else if (api === 'retardos') {
+                    document.getElementById('viewRetardos').classList.add('active');
+                    renderRetardos(data);
                 }
             } catch (error) {
                 alert('Error en la conexión. Revisa la consola.');
@@ -376,6 +452,24 @@ TEST_HUB_HTML = """
                         <td>${a.name}</td>
                         <td><b>${a.grado}° ${a.grupo}</b></td>
                         <td><span class="tag">${a.motivo || 'N/A'}</span></td>
+                    </tr>
+                `).join('');
+            }
+        }
+
+        function renderRetardos(data) {
+            document.getElementById('retardosKpi').innerText = `Total: ${data.total_retardos} Retardos`;
+            const rBody = document.querySelector('#retardosTable tbody');
+            
+            if (data.retardos.length === 0) {
+                rBody.innerHTML = `<tr><td colspan="4" style="text-align:center; color:#888;">No hay retardos registrados en el rango (Scope: ${data.scope}).</td></tr>`;
+            } else {
+                rBody.innerHTML = data.retardos.map(r => `
+                    <tr>
+                        <td><span class="tag">${r.id}</span></td>
+                        <td><b>${r.student_fullname}</b></td>
+                        <td>${r.date}</td>
+                        <td style="color:var(--warning); font-weight:bold;">${r.time}</td>
                     </tr>
                 `).join('');
             }

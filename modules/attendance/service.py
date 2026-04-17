@@ -6,11 +6,12 @@ from .repository import fetch_attendance_data
 
 logger = get_logger("service.attendance")
 
-async def get_attendance_detail_report(plantel: str, start_date: date, end_date: date) -> dict:
+async def get_attendance_detail_report(plantel: str, start_date: date, end_date: date, scope: str) -> dict:
     """
     Business logic for attendance metrics, group summarization, and coverage gap detection.
+    Now rigorously enforcing the scope output contract.
     """
-    logger.info(f"Starting extraction for {plantel} ({start_date} to {end_date})")
+    logger.info(f"Starting extraction for {plantel} ({start_date} to {end_date} - Scope: {scope})")
 
     plantel_info = resolve_plantel(plantel)
     is_daily = (start_date == end_date)
@@ -18,7 +19,6 @@ async def get_attendance_detail_report(plantel: str, start_date: date, end_date:
     expected_groups_list = await fetch_expected_groups(plantel_info["sheets_code"])
     expected_set = {(g["grado"], g["grupo"]) for g in expected_groups_list}
     total_expected = len(expected_set)
-    logger.info(f"Found {total_expected} expected unique groups.")
 
     stats_results, absents_results = await fetch_attendance_data(
         plantel_info["db_code"], start_date, end_date
@@ -99,6 +99,7 @@ async def get_attendance_detail_report(plantel: str, start_date: date, end_date:
     base_response = {
         "plantel_requested": plantel_info["plantel_requested"],
         "resolved_name": plantel_info["resolved_name"],
+        "scope": scope,
         "mode": "daily" if is_daily else "range",
         "date_range": {"start": start_date, "end": end_date}
     }
