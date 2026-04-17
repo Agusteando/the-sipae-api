@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Query, Path, HTTPException, Depends
-from core.dependencies import DateRangeParams, DateScopeParams
+from core.dependencies import DateScopeParams
 from .service import calculate_husky_daily_rate, get_student_retardos
 from .schemas import HuskyDailyRateResponse, StudentRetardosResponse
 
