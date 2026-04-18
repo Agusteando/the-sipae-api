@@ -42,17 +42,66 @@ async def get_kardex_attendance_report(plantel: str, start_date: date, end_date:
     logger.info(f"Processing Employee Crossover for Plantel: {norm_plantel} ({start_date} -> {end_date})")
     
     # 1. Primary Source: Exact Crossover Endpoint
-    raw_records = await fetch_crossover_records(start_date, end_date, plantel=norm_plantel)
+    crossover_data = await fetch_crossover_records(start_date, end_date, plantel=norm_plantel)
     logger.info(f"Exact crossover URL/params used: /api/crossover/plantel/{norm_plantel}?fecha_inicio={start_date.isoformat()}&fecha_fin={end_date.isoformat()}")
-    logger.info(f"Raw Crossover response row count: {len(raw_records)}")
     
     used_fallback = False
     unmapped_areas = []
+    
+    retardos_list = []
+    ausencias_list = []
+    sample_retardos = []
+    retardos_count = 0
+    ausencias_count = 0
+    status_field = "incidencia"
 
-    # 2. Fallback execution only if Crossover is empty/unsupported for this day
-    if not raw_records:
+    if crossover_data and "empleados" in crossover_data:
+        logger.info("Crossover API responded properly with structured payload.")
+        empleados = crossover_data.get("empleados", [])
+        kpis = crossover_data.get("kpis_agregados", {})
+        
+        retardos_count = kpis.get("rawRetardos", 0)
+        ausencias_count = kpis.get("rawFaltas", 0)
+        
+        for emp in empleados:
+            identidad = emp.get("identidad", {})
+            emp_name = identidad.get("nombre", "Desconocido")
+            emp_id = identidad.get("ingressioId", "N/A")
+            area_raw = identidad.get("plantel", norm_plantel)
+            
+            for day in emp.get("enrichedKardex", []):
+                t_date = day.get("target_date")
+                has_retardo = day.get("hasRetardo", False)
+                
+                rec = day.get("rec", {})
+                incidencia = str(rec.get("incidencia", "")).strip().lower()
+                
+                detail_obj = {
+                    "employee_name": emp_name,
+                    "employee_id": emp_id,
+                    "area_raw": area_raw,
+                    "plantel_normalized": norm_plantel,
+                    "date": t_date,
+                    "raw_status": incidencia.title() if incidencia else ("Retardo" if has_retardo else "Registro Normal"),
+                    "raw_record": day
+                }
+
+                if has_retardo:
+                    retardos_list.append(detail_obj)
+                    if len(sample_retardos) < 3:
+                        sample_retardos.append(detail_obj)
+                elif any(kw in incidencia for kw in ["falta", "ausencia", "injustificada", "no checo", "omision"]):
+                    ausencias_list.append(detail_obj)
+                    
+        # Update ausencias count manually if the endpoint didn't provide rawFaltas
+        if ausencias_count == 0 and len(ausencias_list) > 0:
+            ausencias_count = len(ausencias_list)
+
+    else:
+        # 2. Fallback execution only if Crossover is empty/unsupported
         logger.warning("Crossover payload empty or unavailable. Initiating strict Kardex fallback.")
         used_fallback = True
+        raw_records = []
         
         schema = await fetch_kardex_schema()
         logger.info(f"Fetched Kardex schema for fallback mapping (Total columns: {len(schema.keys()) if schema else 0})")
@@ -76,53 +125,51 @@ async def get_kardex_attendance_report(plantel: str, start_date: date, end_date:
 
         logger.info(f"Raw Fallback Kardex response row count: {len(raw_records)}")
 
-    # 3. Dynamic Status Field Discovery (Prevents inventing schemas)
-    status_field = "unknown"
-    if raw_records:
-        sample = raw_records[0]
-        for key in ["estatus", "incidencia", "concepto", "estado", "tipo", "status", "descripcion"]:
-            if key in sample:
-                status_field = key
-                break
-    
-    logger.info(f"Detected status/result field used to identify retardos: '{status_field}'")
-
-    retardos_list = []
-    ausencias_list = []
-    sample_retardos = []
-
-    # 4. Strict Filtering Logic
-    for rec in raw_records:
-        emp_name = _extract_employee_name(rec)
-        emp_id = _extract_employee_id(rec)
-        rec_date = _extract_date(rec)
-        
-        raw_status = str(rec.get(status_field, "")).strip().lower()
-        
-        # Fallback if the detected field is empty for this specific row
-        if not raw_status:
+        # 3. Dynamic Status Field Discovery (Prevents inventing schemas)
+        status_field = "unknown"
+        if raw_records:
+            sample = raw_records[0]
             for key in ["estatus", "incidencia", "concepto", "estado", "tipo", "status", "descripcion"]:
-                if key in rec and rec[key]:
-                    raw_status = str(rec[key]).strip().lower()
+                if key in sample:
+                    status_field = key
                     break
+        
+        logger.info(f"Detected status/result field used to identify retardos: '{status_field}'")
 
-        detail_obj = {
-            "employee_name": emp_name,
-            "employee_id": emp_id,
-            "area_raw": str(rec.get("area", "") or rec.get("departamento", "") or norm_plantel),
-            "plantel_normalized": norm_plantel,
-            "date": rec_date,
-            "raw_status": raw_status.title() if raw_status else "Registro Normal",
-            "raw_record": rec
-        }
+        # 4. Strict Filtering Logic for Fallback
+        for rec in raw_records:
+            emp_name = _extract_employee_name(rec)
+            emp_id = _extract_employee_id(rec)
+            rec_date = _extract_date(rec)
+            
+            raw_status = str(rec.get(status_field, "")).strip().lower()
+            
+            # Fallback if the detected field is empty for this specific row
+            if not raw_status:
+                for key in ["estatus", "incidencia", "concepto", "estado", "tipo", "status", "descripcion"]:
+                    if key in rec and rec[key]:
+                        raw_status = str(rec[key]).strip().lower()
+                        break
 
-        # Validate retardos intentionally, preventing regular attendances from counting as retardos
-        if any(kw in raw_status for kw in ["retardo", "retraso", "minuto", "tarde", "demora"]):
-            retardos_list.append(detail_obj)
-            if len(sample_retardos) < 3:
-                sample_retardos.append(detail_obj)
-        elif any(kw in raw_status for kw in ["falta", "ausencia", "injustificada", "no checo", "omision"]):
-            ausencias_list.append(detail_obj)
+            detail_obj = {
+                "employee_name": emp_name,
+                "employee_id": emp_id,
+                "area_raw": str(rec.get("area", "") or rec.get("departamento", "") or norm_plantel),
+                "plantel_normalized": norm_plantel,
+                "date": rec_date,
+                "raw_status": raw_status.title() if raw_status else "Registro Normal",
+                "raw_record": rec
+            }
+
+            if any(kw in raw_status for kw in ["retardo", "retraso", "minuto", "tarde", "demora"]):
+                retardos_list.append(detail_obj)
+                if len(sample_retardos) < 3:
+                    sample_retardos.append(detail_obj)
+            elif any(kw in raw_status for kw in ["falta", "ausencia", "injustificada", "no checo", "omision"]):
+                ausencias_list.append(detail_obj)
+
+        retardos_count = len(retardos_list)
+        ausencias_count = len(ausencias_list)
 
     logger.info(f"Filtered retardo count: {len(retardos_list)}")
     logger.info(f"Sample retardo rows: {sample_retardos}")
@@ -136,8 +183,8 @@ async def get_kardex_attendance_report(plantel: str, start_date: date, end_date:
             "end": end_date
         },
         "summary": {
-            "retardos_count": len(retardos_list),
-            "ausencias_count": len(ausencias_list)
+            "retardos_count": retardos_count,
+            "ausencias_count": ausencias_count
         },
         "retardos": retardos_list,
         "ausencias": ausencias_list,

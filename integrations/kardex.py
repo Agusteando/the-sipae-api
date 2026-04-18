@@ -63,7 +63,7 @@ async def fetch_kardex_records(start_date: date, end_date: date, area: str = Non
     return []
 
 
-async def fetch_crossover_records(start_date: date, end_date: date, plantel: str) -> List[Dict[str, Any]]:
+async def fetch_crossover_records(start_date: date, end_date: date, plantel: str) -> Dict[str, Any]:
     """
     Fetches employee crossover records dynamically from the target plantel API layer.
     Properly formats the exact crossover path parameter specification.
@@ -79,12 +79,10 @@ async def fetch_crossover_records(start_date: date, end_date: date, plantel: str
             resp = await client.get(url, params=params, timeout=20.0)
             if resp.status_code == 200:
                 data = resp.json()
-                if isinstance(data, list):
+                if isinstance(data, dict):
                     return data
-                elif isinstance(data, dict) and "data" in data:
-                    return data["data"]
             else:
                 logger.warning(f"Crossover API responded with status code: {resp.status_code}")
     except Exception as e:
         logger.error(f"Error fetching Crossover API records: {e}")
-    return []
+    return {}
