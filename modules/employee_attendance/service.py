@@ -11,6 +11,16 @@ from integrations.kardex import (
 
 logger = get_logger("service.employee_attendance")
 
+# Mapeo interno riguroso de códigos estándar a áreas específicas dentro de Kardex
+DB_CODE_TO_KARDEX_AREAS = {
+    "PT": ["14 - PT"],
+    "PM": ["4 - PM", "9 - Preesco Met", "7 - DM"],
+    "ST": ["2 - ST"],
+    "SM": ["5 - SM"],
+    "CT": ["3 - CT", "13 - IST"],
+    "CM": ["6 - CM", "8 - ISM"]
+}
+
 def _extract_employee_name(record: Dict[str, Any]) -> str:
     for key in ["nombre", "empleado", "name", "employee", "trabajador"]:
         if key in record and record[key]:
@@ -98,7 +108,7 @@ async def get_kardex_attendance_report(plantel: str, start_date: date, end_date:
             ausencias_count = len(ausencias_list)
 
     else:
-        # 2. Fallback execution only if Crossover is empty/unsupported
+        # 2. Fallback execution applying exact area mappings explicitly mapped to Kardex Values
         logger.warning("Crossover payload empty or unavailable. Initiating strict Kardex fallback.")
         used_fallback = True
         raw_records = []
@@ -108,14 +118,19 @@ async def get_kardex_attendance_report(plantel: str, start_date: date, end_date:
         
         areas = await fetch_kardex_unique_areas()
         
-        # Rigorous Plantel Area Mapping
         target_areas = []
-        for a in areas:
-            a_lower = str(a).lower()
-            if norm_plantel.lower() in a_lower or resolved_name.lower() in a_lower:
-                target_areas.append(a)
-            else:
-                unmapped_areas.append(a)
+        mapped_areas = DB_CODE_TO_KARDEX_AREAS.get(norm_plantel, [])
+        
+        # Rigorous Plantel Area Mapping assignment
+        if areas:
+            for a in areas:
+                if a in mapped_areas:
+                    target_areas.append(a)
+                else:
+                    unmapped_areas.append(a)
+        else:
+            # If unique areas fetch fails, bypass dynamic check and fallback to directly querying mapped expected areas
+            target_areas = mapped_areas
 
         logger.info(f"Fallback detected and mapped areas for {norm_plantel} ({resolved_name}): {target_areas}")
 
@@ -195,7 +210,8 @@ async def get_kardex_attendance_report(plantel: str, start_date: date, end_date:
                 "end_date": end_date.isoformat(),
                 "requested_plantel": norm_plantel,
                 "used_fallback": used_fallback,
-                "status_field_detected": status_field
+                "status_field_detected": status_field,
+                "mapped_kardex_areas": DB_CODE_TO_KARDEX_AREAS.get(norm_plantel, [])
             }
         }
     }
