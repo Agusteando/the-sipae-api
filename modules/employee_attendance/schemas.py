@@ -9,6 +9,9 @@ class EmployeeRecordDetail(BaseModel):
     plantel_normalized: str
     date: str
     raw_status: str
+    minutos_descontar: int = 0
+    hora_entrada_real: str = "Sin registro"
+    horario_asignado: str = "N/A"
     raw_record: Dict[str, Any]
 
 class SummaryCounts(BaseModel):
