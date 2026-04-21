@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Any
 from datetime import date
 
 class DateRangeModel(BaseModel):
@@ -18,6 +18,7 @@ class HuskyDailyRateResponse(BaseModel):
     scope: str
     date_range: DateRangeModel
     daily_datapoints: Dict[str, DailyDatapointModel]
+    meta: Optional[Dict[str, Any]] = None
 
 # ==========================================
 # RETARDOS (TARDIES) SCHEMAS
@@ -36,3 +37,4 @@ class PlantelRetardosResponse(BaseModel):
     date_range: DateRangeModel
     total_retardos: int
     retardos: List[RetardoDetailModel]
+    meta: Optional[Dict[str, Any]] = None

@@ -1,4 +1,3 @@
-# Raw HTML string safely moved out of application layer
 TEST_HUB_HTML = """
 <!DOCTYPE html>
 <html lang="es">
@@ -34,11 +33,18 @@ TEST_HUB_HTML = """
         .status-complete { background: rgba(46, 204, 113, 0.1); border-color: var(--success); color: var(--success); }
         .status-missing { background: rgba(231, 76, 60, 0.1); border-color: var(--accent); color: var(--accent); }
 
+        /* Banner Metadata */
+        .meta-banner { display: none; justify-content: space-between; align-items: center; background: rgba(52, 152, 219, 0.1); padding: 12px 20px; border-radius: 8px; margin: 0 auto 20px auto; border-left: 4px solid var(--info); max-width: 1300px;}
+        .btn-refresh { background: rgba(255, 255, 255, 0.05); border: 1px solid #444; color: #fff; padding: 6px 15px; border-radius: 6px; cursor: pointer; font-weight: bold; transition: 0.2s; display: flex; align-items: center; gap: 8px; font-size: 13px;}
+        .btn-refresh:hover:not(:disabled) { background: rgba(255, 255, 255, 0.1); border-color: #666; }
+        .btn-refresh:disabled { opacity: 0.5; cursor: not-allowed; }
+
         /* Tags */
         .tag-container { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-top: 15px; }
-        .tag { background: rgba(255,255,255,0.1); padding: 5px 12px; border-radius: 20px; font-size: 14px; font-weight: bold; border: 1px solid #555; }
+        .tag { background: rgba(255,255,255,0.1); padding: 5px 12px; border-radius: 20px; font-size: 13px; font-weight: bold; border: 1px solid #555; display: inline-block;}
         .tag.tag-red { border-color: var(--accent); color: var(--accent); background: rgba(255, 71, 87, 0.1); }
         .tag.tag-warn { border-color: var(--warning); color: var(--warning); background: rgba(241, 196, 15, 0.1); }
+        .tag.tag-green { border-color: var(--success); color: var(--success); background: rgba(46, 204, 113, 0.1); }
 
         /* Tables */
         table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 14px; }
@@ -90,15 +96,10 @@ TEST_HUB_HTML = """
             </select>
         </div>
 
-        <div id="matriculaContainer" style="display: none;">
-            <label>Matrícula:</label>
-            <input type="text" id="matriculaInput" placeholder="Ej: 12345">
-        </div>
-
         <div>
             <label>Alcance (Scope):</label>
             <select id="scopeSelector" onchange="handleScopeChange()">
-                <option value="today">Hoy (Default Global)</option>
+                <option value="today">Hoy (Caché Optimizado)</option>
                 <option value="range">Rango Personalizado</option>
                 <option value="month">Este Mes</option>
                 <option value="ciclo_escolar">Ciclo Escolar Actual</option>
@@ -116,7 +117,19 @@ TEST_HUB_HTML = """
             </div>
         </div>
 
-        <button onclick="fetchData()">⚡ Ejecutar Consulta</button>
+        <button onclick="fetchData(false)">⚡ Ejecutar Consulta</button>
+    </div>
+
+    <!-- SWR Meta Indicator Banner -->
+    <div id="metaBanner" class="meta-banner">
+        <div style="display:flex; align-items:center; gap: 15px;">
+            <span id="metaTimeText" style="font-size: 14px; font-weight: 500; color: #fff;"></span>
+            <span id="metaBadge" class="tag"></span>
+        </div>
+        <button id="btnForceRefresh" class="btn-refresh" onclick="fetchData(true)">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2v6h-6"></path><path d="M3 12a9 9 0 0 1 15-6.7L21 8"></path><path d="M3 22v-6h6"></path><path d="M21 12a9 9 0 0 1-15 6.7L3 16"></path></svg> 
+            Sincronizar Manualmente
+        </button>
     </div>
 
     <div class="dashboard-grid" id="mainDashboard">
@@ -294,10 +307,9 @@ TEST_HUB_HTML = """
         }
 
         function handleApiChange() {
-            // Se deshabilita el selector de matrícula dado que ahora retardos opera por Plantel
             document.getElementById('plantelContainer').style.display = 'block';
-            document.getElementById('matriculaContainer').style.display = 'none';
             clearDashboards();
+            document.getElementById('metaBanner').style.display = 'none';
         }
 
         function clearDashboards() {
@@ -307,7 +319,7 @@ TEST_HUB_HTML = """
             if(charts.attRange) charts.attRange.destroy();
         }
 
-        async function fetchData() {
+        async function fetchData(forceRefresh = false) {
             const api = document.getElementById('apiSelector').value;
             const scope = document.getElementById('scopeSelector').value;
             const plantel = document.getElementById('plantel').value;
@@ -329,12 +341,42 @@ TEST_HUB_HTML = """
             if (scope === 'range') {
                 url += `&start_date=${start}&end_date=${end}`;
             }
+            if (forceRefresh) {
+                url += `&force_refresh=true`;
+            }
             
+            const btnRefresh = document.getElementById('btnForceRefresh');
+            if (forceRefresh) {
+                btnRefresh.innerHTML = '⏳ Procesando Sincronización...';
+                btnRefresh.disabled = true;
+            }
+
             try {
                 const response = await fetch(url);
                 const data = await response.json();
                 currentGlobalData = data;
                 
+                // Manejo del bloque Metadata (SWR Caching)
+                const metaBanner = document.getElementById('metaBanner');
+                if (data.meta) {
+                    metaBanner.style.display = 'flex';
+                    const d = new Date(data.meta.cached_at);
+                    const timeString = d.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' });
+                    
+                    document.getElementById('metaTimeText').innerText = `Información al corte de las ${timeString} hrs`;
+                    
+                    const badge = document.getElementById('metaBadge');
+                    if (data.meta.is_cached) {
+                        badge.className = 'tag tag-warn';
+                        badge.innerText = '⚡ Modo Optimizado (Caché)';
+                    } else {
+                        badge.className = 'tag tag-green';
+                        badge.innerText = '🟢 Sincronizado en Vivo';
+                    }
+                } else {
+                    metaBanner.style.display = 'none';
+                }
+
                 document.getElementById('mainDashboard').style.display = 'grid';
                 document.getElementById('rawJson').innerText = JSON.stringify(data, null, 2);
 
@@ -354,10 +396,17 @@ TEST_HUB_HTML = """
                     renderEmployeeKardex(data);
                 }
             } catch (error) {
-                alert('Error en la conexión. Revisa la consola.');
+                alert('Error crítico de conexión o servidor. Revisa la consola.');
                 console.error(error);
+            } finally {
+                if (forceRefresh) {
+                    btnRefresh.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2v6h-6"></path><path d="M3 12a9 9 0 0 1 15-6.7L21 8"></path><path d="M3 22v-6h6"></path><path d="M21 12a9 9 0 0 1-15 6.7L3 16"></path></svg> Sincronizar Manualmente';
+                    btnRefresh.disabled = false;
+                }
             }
         }
+
+        // [... Las funciones renderHusky, renderAttendance, renderRetardos y renderEmployeeKardex permanecen intactas ...]
 
         function renderHusky(data) {
             const pop = data.expected_population;
@@ -527,13 +576,11 @@ TEST_HUB_HTML = """
         }
 
         function renderEmployeeKardex(data) {
-            // Render KPIs
             document.getElementById('kardexKpiContainer').innerHTML = `
                 <div class="kpi-box"><div class="val" style="color:var(--warning);">${data.summary.retardos_count}</div><div class="lbl">Retardos</div></div>
                 <div class="kpi-box"><div class="val" style="color:var(--accent);">${data.summary.ausencias_count}</div><div class="lbl">Ausencias / Faltas</div></div>
             `;
 
-            // Render Debug Metadata (Unmapped Areas)
             const dbgContainer = document.getElementById('kardexDebugContainer');
             const unmappedList = document.getElementById('unmappedAreasList');
             if (data.debug.unmapped_areas && data.debug.unmapped_areas.length > 0) {
@@ -543,7 +590,6 @@ TEST_HUB_HTML = """
                 dbgContainer.style.display = 'none';
             }
 
-            // Render Retardos Table
             const retBody = document.querySelector('#empRetardosTable tbody');
             if (data.retardos.length === 0) {
                 retBody.innerHTML = `<tr><td colspan="4" style="text-align:center; color:#888;">Sin registros.</td></tr>`;
@@ -558,7 +604,6 @@ TEST_HUB_HTML = """
                 `).join('');
             }
 
-            // Render Ausencias Table
             const ausBody = document.querySelector('#empAusenciasTable tbody');
             if (data.ausencias.length === 0) {
                 ausBody.innerHTML = `<tr><td colspan="4" style="text-align:center; color:#888;">Sin registros.</td></tr>`;

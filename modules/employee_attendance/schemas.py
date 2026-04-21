@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from typing import Dict, List, Any
+from typing import Dict, List, Any, Optional
 from datetime import date
 
 class EmployeeRecordDetail(BaseModel):
@@ -31,3 +31,4 @@ class EmployeeAttendanceResponse(BaseModel):
     retardos: List[EmployeeRecordDetail]
     ausencias: List[EmployeeRecordDetail]
     debug: DebugInfo
+    meta: Optional[Dict[str, Any]] = None

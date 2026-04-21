@@ -5,22 +5,23 @@ import calendar
 
 class DateScopeParams:
     """
-    Global Shared Dependency enforcing the platform-wide Date Contract.
-    Rule: All endpoints default to returning data for TODAY only.
-    Other scopes (range, month, ciclo_escolar) are ONLY activated when explicitly requested.
+    Dependencia global que estandariza los parámetros de alcance de fechas y caché.
+    Todos los endpoints asumen 'today' por defecto para maximizar el rendimiento.
     """
     def __init__(
         self,
         scope: Optional[str] = Query(None, description="Alcance de los datos: today, range, month, ciclo_escolar"),
         start_date: Optional[date] = Query(None, description="Fecha de inicio (solo si scope=range)"),
-        end_date: Optional[date] = Query(None, description="Fecha de fin (solo si scope=range)")
+        end_date: Optional[date] = Query(None, description="Fecha de fin (solo si scope=range)"),
+        force_refresh: bool = Query(False, description="Omitir el almacenamiento en caché y forzar una actualización síncrona.")
     ):
-        # Zero-regression fallback: If legacy clients send explicit dates without a scope, infer 'range'
+        # Compatibilidad hacia atrás: Si el cliente envía fechas explícitas sin alcance, inferir 'range'
         if not scope and (start_date or end_date):
             self.scope = "range"
         else:
             self.scope = (scope or "today").lower()
 
+        self.force_refresh = force_refresh
         today_dt = date.today()
 
         if self.scope == "today":
@@ -45,7 +46,7 @@ class DateScopeParams:
             self.end_date = date(start_year + 1, 8, 1)
             
         else:
-            # Fallback for invalid scope inputs to guarantee safety
+            # Prevención de fallos ante alcances inválidos
             self.scope = "today"
             self.start_date = today_dt
             self.end_date = today_dt

@@ -1,32 +1,42 @@
 from fastapi import FastAPI
 from fastapi.responses import RedirectResponse
 from fastapi.middleware.cors import CORSMiddleware
+from contextlib import asynccontextmanager
 
-# Centralized imports
+# Importaciones Centralizadas
 from core.config import settings
+from core.scheduler import start_scheduler
 from modules.testhub.router import router as testhub_router
 from modules.husky.router import router as husky_router
 from modules.attendance.router import router as attendance_router
 from modules.employee_attendance.router import router as employee_router
 
-app = FastAPI(title="The SIPAE API Hub", version="1.4.0")
+# ==========================================
+# LIFESPAN & SCHEDULER
+# ==========================================
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Arrancar pre-cómputo y tareas de caché en segundo plano al iniciar
+    start_scheduler()
+    yield
+    # Lógica de cierre futuro (si es necesario)
+
+app = FastAPI(title="The SIPAE API Hub", version="1.5.0", lifespan=lifespan)
 
 # ==========================================
 # CORS CONFIGURATION
 # ==========================================
-# Permite a los clientes web (como Nuxt en localhost:3000 o producción) 
-# consumir la API sin ser bloqueados por la política de seguridad del navegador.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Permite solicitudes desde cualquier origen
+    allow_origins=["*"],  
     allow_credentials=True,
-    allow_methods=["*"],  # Permite todos los métodos HTTP (GET, POST, OPTIONS, etc.)
-    allow_headers=["*"],  # Permite todos los headers (Authorization, Content-Type, etc.)
+    allow_methods=["*"],  
+    allow_headers=["*"],  
 )
 
 @app.get("/", include_in_schema=False)
 async def redirect_root_to_hub():
-    """Automatically redirect the base URL to our Test Hub."""
+    """Redirige automáticamente la raíz a nuestro Panel de Pruebas (Test Hub)."""
     return RedirectResponse(url="/test-hub")
 
 # ==========================================
