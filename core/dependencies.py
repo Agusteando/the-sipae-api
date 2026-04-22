@@ -1,6 +1,7 @@
 from fastapi import Query
 from typing import Optional
-from datetime import date
+from datetime import date, datetime
+from zoneinfo import ZoneInfo
 import calendar
 
 class DateScopeParams:
@@ -22,7 +23,10 @@ class DateScopeParams:
             self.scope = (scope or "today").lower()
 
         self.force_refresh = force_refresh
-        today_dt = date.today()
+        
+        # Resolución de fecha explícita en zona horaria local para evitar problemas de UTC
+        tz_mx = ZoneInfo("America/Mexico_City")
+        today_dt = datetime.now(tz_mx).date()
 
         if self.scope == "today":
             self.start_date = today_dt

@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Query, HTTPException, Depends
 from datetime import datetime
+from zoneinfo import ZoneInfo
 from core.dependencies import DateScopeParams
 from core.cache import get_cache, set_cache
 from .service import calculate_husky_daily_rate, get_plantel_retardos
@@ -14,6 +15,7 @@ async def get_husky_daily_rate(
 ):
     try:
         cache_key = f"husky_rate_{plantel}"
+        tz_mx = ZoneInfo("America/Mexico_City")
         
         # Estrategia de Caché SWR para métricas de hoy
         if scope_params.scope == "today" and not scope_params.force_refresh:
@@ -34,7 +36,7 @@ async def get_husky_daily_rate(
         if scope_params.scope == "today":
             set_cache(cache_key, data)
             
-        data["meta"] = {"is_cached": False, "cached_at": datetime.now().isoformat()}
+        data["meta"] = {"is_cached": False, "cached_at": datetime.now(tz_mx).isoformat()}
         return data
 
     except Exception as e:
@@ -48,6 +50,7 @@ async def fetch_plantel_retardos_endpoint(
 ):
     try:
         cache_key = f"husky_retardos_{plantel}"
+        tz_mx = ZoneInfo("America/Mexico_City")
         
         if scope_params.scope == "today" and not scope_params.force_refresh:
             cached = get_cache(cache_key)
@@ -66,7 +69,7 @@ async def fetch_plantel_retardos_endpoint(
         if scope_params.scope == "today":
             set_cache(cache_key, data)
             
-        data["meta"] = {"is_cached": False, "cached_at": datetime.now().isoformat()}
+        data["meta"] = {"is_cached": False, "cached_at": datetime.now(tz_mx).isoformat()}
         return data
 
     except Exception as e:

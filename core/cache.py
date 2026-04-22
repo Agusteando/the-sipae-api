@@ -1,4 +1,5 @@
 from datetime import datetime
+from zoneinfo import ZoneInfo
 from typing import Any, Dict, Optional
 
 # ==========================================
@@ -10,9 +11,10 @@ from typing import Any, Dict, Optional
 _GLOBAL_CACHE: Dict[str, Dict[str, Any]] = {}
 
 def set_cache(key: str, data: Any) -> None:
-    """Guarda un conjunto de datos en caché con su marca de tiempo exacta."""
+    """Guarda un conjunto de datos en caché con su marca de tiempo exacta resolviendo zona horaria."""
+    tz_mx = ZoneInfo("America/Mexico_City")
     _GLOBAL_CACHE[key] = {
-        "timestamp": datetime.now(),
+        "timestamp": datetime.now(tz_mx),
         "data": data
     }
 

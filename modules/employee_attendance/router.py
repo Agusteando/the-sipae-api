@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Query, HTTPException, Depends
 from datetime import datetime
+from zoneinfo import ZoneInfo
 from core.dependencies import DateScopeParams
 from core.cache import get_cache, set_cache
 from .service import get_kardex_attendance_report
@@ -14,6 +15,7 @@ async def get_kardex_report(
 ):
     try:
         cache_key = f"kardex_{plantel}"
+        tz_mx = ZoneInfo("America/Mexico_City")
         
         # Caché rápido en memoria para aliviar la API Externa de Kardex
         if scope_params.scope == "today" and not scope_params.force_refresh:
@@ -34,7 +36,7 @@ async def get_kardex_report(
         if scope_params.scope == "today":
             set_cache(cache_key, data)
             
-        data["meta"] = {"is_cached": False, "cached_at": datetime.now().isoformat()}
+        data["meta"] = {"is_cached": False, "cached_at": datetime.now(tz_mx).isoformat()}
         return data
 
     except Exception as e:

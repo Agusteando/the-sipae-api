@@ -1,5 +1,6 @@
 import asyncio
-from datetime import date
+from datetime import date, datetime
+from zoneinfo import ZoneInfo
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 from core.logger import get_logger
@@ -20,7 +21,10 @@ async def refresh_today_metrics():
     Alimenta la memoria caché para evitar bloqueos síncronos durante la petición de los usuarios.
     """
     logger.info("Iniciando actualización en segundo plano de métricas operativas (Caché).")
-    today = date.today()
+    
+    # Se garantiza que el cronograma trabaje con la zona horaria correcta
+    tz_mx = ZoneInfo("America/Mexico_City")
+    today = datetime.now(tz_mx).date()
     
     for plantel in PLANTEL_MAP.keys():
         try:
