@@ -30,35 +30,35 @@ METRIC_DEFINITIONS: Dict[str, Dict[str, str]] = {
         "unit": "percent",
         "value_field": "attendance_rate_percent",
         "source_date_field": "asistencia.fecha",
-        "activity_value_field": "captured_attendance_records_vs_expected_population_days",
+        "activity_value_field": "captured_attendance_records",
     },
     "husky": {
         "label": "Husky Pass scans",
         "unit": "percent",
         "value_field": "entrada_rate_percent",
         "source_date_field": "acceso.timestamp",
-        "activity_value_field": "entrada_scans_vs_expected_population_days",
+        "activity_value_field": "entrada_scan_records",
     },
     "sapf": {
         "label": "SAPF activity",
         "unit": "count",
         "value_field": "activity_count",
         "source_date_field": "fichas_atencion.fecha + seguimiento.fecha",
-        "activity_value_field": "sapf_events_per_100_expected_students",
+        "activity_value_field": "sapf_records",
     },
     "observaciones": {
         "label": "Observaciones activity",
         "unit": "count",
         "value_field": "submission_count",
         "source_date_field": "observaciones_form_submissions.submission_date",
-        "activity_value_field": "observaciones_per_100_expected_students",
+        "activity_value_field": "observaciones_records",
     },
     "planeaciones": {
         "label": "Planeaciones activity",
         "unit": "count",
         "value_field": "submission_count",
         "source_date_field": "planeaciones.created_at",
-        "activity_value_field": "planeaciones_per_100_expected_students",
+        "activity_value_field": "planeaciones_records",
     },
 }
 
@@ -323,85 +323,33 @@ def _baseline_block(samples: List[float]) -> Dict[str, Any]:
     }
 
 
-def _cohort_activity_baseline(samples: List[float]) -> Dict[str, Any]:
-    """Cross-plantel activity standard derived from normalized historical activity.
+def _activity_max_baseline(samples: List[float], scope: str) -> Dict[str, Any]:
+    """Activity standard for one plantel/metric based only on record existence.
 
-    The normal percentile model is preserved, but when many planteles have long
-    periods of zero activity, the active-only floor prevents zero from becoming
-    an acceptable standard for the cohort. This is still data-derived: it comes
-    only from observed historical activity across planteles.
+    The baseline is the maximum observed historical activity for that same
+    plantel and metric. Scores are a simple 0-100 index: actual records divided
+    by that historical max. This prevents activity from being mixed with the
+    performance baseline and keeps the meaning clean for dashboards.
     """
-    stats = _stats(samples)
-    active_samples = [float(v) for v in samples if isinstance(v, (int, float)) and math.isfinite(v) and v > 0]
-    active_stats = _stats(active_samples)
-
-    warning_floor = stats.get("p20")
-    critical_floor = stats.get("p10")
-    if active_stats.get("samples", 0) >= MIN_BASELINE_SAMPLES:
-        active_warning = active_stats.get("p20")
-        active_critical = active_stats.get("p10")
-        if warning_floor is None or warning_floor <= 0:
-            warning_floor = active_warning
-        if critical_floor is None or critical_floor <= 0:
-            critical_floor = active_critical
-
+    clean = [float(v) for v in samples if isinstance(v, (int, float)) and math.isfinite(v)]
+    max_value = max(clean) if clean else 0.0
     return {
-        **stats,
-        "expected": stats.get("median") if (stats.get("median") or 0) > 0 else active_stats.get("median"),
-        "warning_floor": warning_floor,
-        "critical_floor": critical_floor,
-        "basis": "cross_plantel_historical_activity_standard",
-        "minimum_samples": MIN_BASELINE_SAMPLES,
-        "active_samples": active_stats.get("samples", 0),
-        "active_expected": active_stats.get("median"),
-        "active_p10": active_stats.get("p10"),
-        "active_p20": active_stats.get("p20"),
-        "includes_zero_activity_samples": True,
+        "samples": len(clean),
+        "max": _round(max_value),
+        "expected": _round(max_value),
+        "warning_floor": None,
+        "critical_floor": None,
+        "basis": "plantel_metric_historical_max_record_activity",
+        "scope": scope,
+        "unit": "records",
+        "minimum_samples": 1,
+        "score_model": "actual_records_divided_by_historical_max_0_100",
     }
 
 
-def _activity_week_value(metric_key: str, aggregate: AggregatePoint, expected_population: int, weekday_count: int) -> Optional[float]:
-    population = float(expected_population or 0)
-    active_days = max(int(weekday_count or aggregate.days_considered or 1), 1)
-    if metric_key == "attendance":
-        if population <= 0:
-            return _round(aggregate.denominator)
-        return _round((aggregate.denominator / (population * active_days)) * 100, 3)
-    if metric_key == "husky":
-        if population <= 0:
-            return _round(aggregate.raw_value)
-        return _round((aggregate.raw_value / (population * active_days)) * 100, 3)
-    if population <= 0:
-        return _round(aggregate.raw_value)
-    return _round((aggregate.raw_value / population) * 100, 3)
-
-
-def _activity_day_value(metric_key: str, aggregate: AggregatePoint, expected_population: int) -> Optional[float]:
-    population = float(expected_population or 0)
-    if metric_key == "attendance":
-        if population <= 0:
-            return _round(aggregate.denominator)
-        return _round((aggregate.denominator / population) * 100, 3)
-    if metric_key == "husky":
-        if population <= 0:
-            return _round(aggregate.raw_value)
-        return _round((aggregate.raw_value / population) * 100, 3)
-    if population <= 0:
-        return _round(aggregate.raw_value)
-    return _round((aggregate.raw_value / population) * 100, 3)
-
-
-def _activity_unit(metric_key: str, expected_population: int) -> str:
-    if expected_population <= 0:
-        return "raw_count"
-    if metric_key in {"attendance", "husky"}:
-        return "percent_of_expected_population_days"
-    return "events_per_100_expected_students"
-
-
-def _attach_activity_payload(point: Dict[str, Any], actual_value: Optional[float], baseline: Dict[str, Any], unit: str) -> None:
-    if actual_value is None:
-        comparison = {
+def _score_activity_against_max(actual: Optional[float], baseline: Dict[str, Any]) -> Dict[str, Any]:
+    if actual is None or not isinstance(actual, (int, float)) or not math.isfinite(actual):
+        return {
             "score": None,
             "status": "unavailable",
             "severity": None,
@@ -409,22 +357,83 @@ def _attach_activity_payload(point: Dict[str, Any], actual_value: Optional[float
             "delta_to_expected": None,
             "reason": "activity_value_unavailable",
         }
-    else:
-        comparison = _score_against_baseline(float(actual_value), baseline)
 
+    maximum = float(baseline.get("max") or baseline.get("expected") or 0)
+    actual_value = max(0.0, float(actual))
+    if maximum <= 0:
+        score = 100.0 if actual_value > 0 else 0.0
+        return {
+            "score": _round(score, 1),
+            "status": "healthy" if actual_value > 0 else "critical",
+            "severity": 0.0 if actual_value > 0 else 1.0,
+            "ratio_to_expected": None,
+            "delta_to_expected": _round(actual_value),
+            "reason": "no_historical_activity_max",
+        }
+
+    score = max(0.0, min(100.0, (actual_value / maximum) * 100.0))
+    if score <= 0:
+        status = "critical"
+    elif score < 50:
+        status = "critical"
+    elif score < 80:
+        status = "warning"
+    else:
+        status = "healthy"
+
+    severity = 0.0
+    if status == "warning":
+        severity = (80.0 - score) / 30.0 * 0.35
+    elif status == "critical":
+        severity = 0.55 + ((50.0 - min(score, 50.0)) / 50.0 * 0.45)
+
+    return {
+        "score": _round(score, 1),
+        "status": status,
+        "severity": _round(severity, 3),
+        "ratio_to_expected": _round(actual_value / maximum, 3),
+        "delta_to_expected": _round(actual_value - maximum),
+        "reason": "record_activity_vs_plantel_metric_historical_max",
+    }
+
+
+
+def _activity_week_value(metric_key: str, aggregate: AggregatePoint, expected_population: int, weekday_count: int) -> Optional[float]:
+    # Activity is only record existence/count. No population normalization.
+    if metric_key == "attendance":
+        return _round(aggregate.denominator)
+    return _round(aggregate.raw_value)
+
+
+def _activity_day_value(metric_key: str, aggregate: AggregatePoint, expected_population: int) -> Optional[float]:
+    # Activity is only record existence/count. No population normalization.
+    if metric_key == "attendance":
+        return _round(aggregate.denominator)
+    return _round(aggregate.raw_value)
+
+
+def _activity_unit(metric_key: str, expected_population: int) -> str:
+    return "records"
+
+
+def _attach_activity_payload(point: Dict[str, Any], actual_value: Optional[float], baseline: Dict[str, Any], unit: str) -> None:
+    comparison = _score_activity_against_max(actual_value, baseline)
     point["activity"] = {
         "actual": actual_value,
         "unit": unit,
         "baseline": baseline,
         "expected": baseline.get("expected"),
+        "historical_max": baseline.get("max"),
         "score": comparison["score"],
         "status": comparison["status"],
         "severity": comparison["severity"],
         "ratio_to_expected": comparison["ratio_to_expected"],
         "delta_to_expected": comparison["delta_to_expected"],
         "reason": comparison["reason"],
-        "comparison_model": "cross_plantel_activity_standard",
+        "comparison_model": "plantel_metric_historical_max_record_activity",
+        "score_range": "0-100",
     }
+
 
 
 def _aggregate_week(daily: Dict[date, DailyPoint], week: WeekBucket, kind: str) -> AggregatePoint:
@@ -666,13 +675,13 @@ def _build_metric_payload(
         point["activity"] = {
             "actual": activity_value,
             "unit": _activity_unit(metric_key, expected_population),
-            "comparison_model": "pending_cross_plantel_activity_standard",
+            "comparison_model": "plantel_metric_historical_max_record_activity",
         }
 
     today_payload["activity"] = {
         "actual": _activity_day_value(metric_key, today_actual, expected_population),
         "unit": _activity_unit(metric_key, expected_population),
-        "comparison_model": "pending_cross_plantel_activity_standard",
+        "comparison_model": "plantel_metric_historical_max_record_activity",
     }
 
     available_week_scores = [point["score"] for point in weeks_payload if point.get("score") is not None]
@@ -688,7 +697,7 @@ def _build_metric_payload(
         "value_field": definition["value_field"],
         "source_date_field": definition["source_date_field"],
         "comparison_model": "historical_percentile_bands",
-        "activity_model": "cross_plantel_historical_activity_standard",
+        "activity_model": "plantel_metric_historical_max_record_activity",
         "activity_unit": _activity_unit(metric_key, expected_population),
         "weekly_baseline": weekly_baseline,
         "today_baseline": today_baseline,
@@ -920,44 +929,37 @@ async def _map_with_limit(items: List[str], limit: int, worker):
 
 
 def _apply_cross_plantel_activity_standards(plantel_payloads: List[Dict[str, Any]]) -> Dict[str, Any]:
-    cohort: Dict[str, Dict[str, Any]] = {}
+    """Attach the activity sub-metric without mixing it with performance.
 
-    for metric_key in METRIC_DEFINITIONS.keys():
-        weekly_samples: List[float] = []
-        today_samples: List[float] = []
-        unit = None
-        for plantel in plantel_payloads:
-            metric = (plantel.get("metrics") or {}).get(metric_key)
-            if not metric:
-                continue
-            unit = unit or metric.get("activity_unit")
-            weekly_samples.extend(metric.get("_activity_history_weekly") or [])
-            today_samples.extend(metric.get("_activity_history_today") or [])
-
-        weekly_standard = _cohort_activity_baseline(weekly_samples)
-        today_standard = _cohort_activity_baseline(today_samples)
-        weekly_standard["unit"] = unit
-        today_standard["unit"] = unit
-
-        cohort[metric_key] = {
-            "weekly": weekly_standard,
-            "today": today_standard,
-        }
+    Despite the historical function name, the current model is plantel-local:
+    each metric's activity score is actual record count / that plantel metric's
+    historical maximum, returned as a clean 0-100 score.
+    """
+    standards: Dict[str, Any] = {}
 
     for plantel in plantel_payloads:
+        plantel_code = str(plantel.get("code") or plantel.get("requested_code") or "")
+        standards[plantel_code] = {}
         metrics = plantel.get("metrics") or {}
+
         for metric_key, metric in metrics.items():
-            standards = cohort.get(metric_key)
-            if not standards:
-                continue
-            unit = metric.get("activity_unit") or standards["weekly"].get("unit") or "activity_index"
+            weekly_baseline = _activity_max_baseline(metric.get("_activity_history_weekly") or [], "weekly")
+            today_baseline = _activity_max_baseline(metric.get("_activity_history_today") or [], "today_same_weekday")
+            unit = "records"
+
+            standards[plantel_code][metric_key] = {
+                "weekly": weekly_baseline,
+                "today": today_baseline,
+            }
+
             for point in metric.get("weekly", []):
                 actual = (point.get("activity") or {}).get("actual")
-                _attach_activity_payload(point, actual, standards["weekly"], unit)
+                _attach_activity_payload(point, actual, weekly_baseline, unit)
+
             today = metric.get("today")
             if today:
                 actual = (today.get("activity") or {}).get("actual")
-                _attach_activity_payload(today, actual, standards["today"], unit)
+                _attach_activity_payload(today, actual, today_baseline, unit)
 
             weekly_activity_scores = [
                 (point.get("activity") or {}).get("score")
@@ -975,10 +977,11 @@ def _apply_cross_plantel_activity_standards(plantel_payloads: List[Dict[str, Any
                 "score": _round(current_activity_score, 1),
                 "status": current_activity_status,
                 "average_weekly_score": _round(sum(weekly_activity_scores) / len(weekly_activity_scores), 1) if weekly_activity_scores else None,
-                "weekly_standard": standards["weekly"],
-                "today_standard": standards["today"],
+                "weekly_standard": weekly_baseline,
+                "today_standard": today_baseline,
                 "unit": unit,
-                "comparison_model": "cross_plantel_historical_activity_standard",
+                "comparison_model": "plantel_metric_historical_max_record_activity",
+                "score_range": "0-100",
                 "role": "activity_sub_metric",
             }
             metric.pop("_activity_history_weekly", None)
@@ -1001,10 +1004,13 @@ def _apply_cross_plantel_activity_standards(plantel_payloads: List[Dict[str, Any
         plantel["activity"] = {
             "score": _round(sum(activity_scores) / len(activity_scores), 1) if activity_scores else None,
             "status": activity_status,
-            "role": "cross_plantel_activity_sub_metric",
+            "role": "record_activity_sub_metric",
+            "comparison_model": "plantel_metric_historical_max_record_activity",
+            "score_range": "0-100",
         }
 
-    return cohort
+    return standards
+
 
 
 def normalize_plantel_list(planteles: Optional[str]) -> List[str]:
@@ -1097,15 +1103,15 @@ async def get_global_baseline_report(
             "fixed_performance_thresholds": False,
             "metric_performance_is_preserved": True,
             "activity_sub_metric": {
-                "basis": "normalized historical activity compared across planteles",
-                "purpose": "prevents low/no historical activity from grading itself as healthy",
+                "basis": "record existence scored 0-100 against each plantel metric historical max",
+                "purpose": "keeps activity separate from metric performance and measures record presence only",
                 "role": "sub_metric_per_metric_not_replacement",
                 "normalization": {
-                    "attendance": "captured attendance records / expected population days",
-                    "husky": "entrada scans / expected population days",
-                    "sapf": "events per 100 expected students",
-                    "observaciones": "submissions per 100 expected students",
-                    "planeaciones": "submissions per 100 expected students"
+                    "attendance": "captured attendance records / historical max captured attendance records",
+                    "husky": "entrada scan records / historical max entrada scan records",
+                    "sapf": "SAPF records / historical max SAPF records",
+                    "observaciones": "records / historical max records",
+                    "planeaciones": "records / historical max records"
                 }
             },
         },
