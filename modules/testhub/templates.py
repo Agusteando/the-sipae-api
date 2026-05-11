@@ -95,8 +95,8 @@ TEST_HUB_HTML = """
                 <option value="PM">Primaria Metepec (PM)</option>
                 <option value="ST">Secundaria Toluca (ST)</option>
                 <option value="SM">Secundaria Metepec (SM)</option>
-                <option value="CT">ISSSTE Toluca (CT)</option>
-                <option value="CM">ISSSTE Metepec (CM)</option>
+                <option value="PREET">Preescolar Toluca (PREET)</option>
+                <option value="PREEM">Preescolar Metepec (PREEM)</option>
             </select>
         </div>
 

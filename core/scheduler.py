@@ -4,7 +4,7 @@ from zoneinfo import ZoneInfo
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 from core.logger import get_logger
-from core.constants import PLANTEL_MAP
+from core.constants import ACTIVE_PLANTEL_CODES
 from core.cache import set_cache
 
 # Importación de Servicios de Agregación Pesada
@@ -28,7 +28,7 @@ async def refresh_today_metrics():
     tz_mx = ZoneInfo("America/Mexico_City")
     today = datetime.now(tz_mx).date()
     
-    for plantel in PLANTEL_MAP.keys():
+    for plantel in ACTIVE_PLANTEL_CODES:
         try:
             # 1. Husky Pass - Tasa de Captura
             husky_rate = await calculate_husky_daily_rate(plantel, today, today, "today")
