@@ -13,6 +13,7 @@ from modules.attendance.service import get_attendance_detail_report
 from modules.employee_attendance.service import get_kardex_attendance_report
 from modules.sapf.service import get_sapf_monthly_report, get_sapf_motivos_report
 from modules.academic.service import get_observaciones_report, get_planeaciones_report
+from modules.baselines.service import get_global_baseline_report
 
 logger = get_logger("scheduler")
 scheduler = AsyncIOScheduler()
@@ -69,6 +70,17 @@ async def refresh_today_metrics():
         
     logger.info("Ciclo de actualización de caché completado con éxito.")
 
+async def refresh_global_baselines():
+    """Pre-calcula el baseline histórico global sin bloquear las cargas del dashboard."""
+    logger.info("Iniciando actualización en segundo plano de baselines históricos globales.")
+    try:
+        data = await get_global_baseline_report()
+        today_key = datetime.now(ZoneInfo("America/Mexico_City")).date().isoformat()
+        set_cache(f"baseline_global_ACTIVE_months:3_{today_key}_3_9", data)
+        logger.info("Baselines históricos globales actualizados con éxito.")
+    except Exception as e:
+        logger.error(f"Fallo al pre-calcular baselines históricos globales: {str(e)}")
+
 def start_scheduler():
     """Registra y arranca el cronograma de ejecución de trabajos automáticos."""
     # Se ejecuta cada 4 minutos (Balance ideal entre frescura y rendimiento)
@@ -79,7 +91,15 @@ def start_scheduler():
         id='refresh_metrics_job', 
         replace_existing=True
     )
+    scheduler.add_job(
+        refresh_global_baselines,
+        'interval',
+        minutes=45,
+        id='refresh_global_baselines_job',
+        replace_existing=True
+    )
     scheduler.start()
     
     # Detona una primera ejecución asíncrona al arrancar el servidor (Cold Boot pre-warm)
     asyncio.create_task(refresh_today_metrics())
+    asyncio.create_task(refresh_global_baselines())
