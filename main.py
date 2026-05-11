@@ -10,6 +10,8 @@ from modules.testhub.router import router as testhub_router
 from modules.husky.router import router as husky_router
 from modules.attendance.router import router as attendance_router
 from modules.employee_attendance.router import router as employee_router
+from modules.sapf.router import router as sapf_router
+from modules.academic.router import router as academic_router
 
 # ==========================================
 # LIFESPAN & SCHEDULER
@@ -46,6 +48,8 @@ app.include_router(testhub_router)
 app.include_router(husky_router)
 app.include_router(attendance_router)
 app.include_router(employee_router)
+app.include_router(sapf_router)
+app.include_router(academic_router)
 
 if __name__ == "__main__":
     import uvicorn

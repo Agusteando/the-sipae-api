@@ -81,6 +81,10 @@ TEST_HUB_HTML = """
                 <option value="husky">Alumnos - Husky Pass Tasa de Captura</option>
                 <option value="retardos">Alumnos - Husky Pass Retardos (Plantel)</option>
                 <option value="emp-kardex">Empleados - Asistencia y Retardos (Kardex)</option>
+                <option value="sapf-monthly">SAPF - Fichas de Atención (Mensual por Área)</option>
+                <option value="sapf-motivos">SAPF - Fichas de Atención (Motivos)</option>
+                <option value="academic-obs">Académico - Observaciones de Clase</option>
+                <option value="academic-plan">Académico - Planeaciones</option>
             </select>
         </div>
 
@@ -281,6 +285,85 @@ TEST_HUB_HTML = """
             </div>
         </div>
 
+        <!-- SAPF MONTHLY VIEW -->
+        <div id="viewSapfMonthly" class="view-layer">
+            <div class="card full-col">
+                <h3>📂 Tendencia Mensual por Área (SAPF)</h3>
+                <div id="sapfAreasContainer" style="display:flex; flex-direction:column; gap:20px;"></div>
+            </div>
+        </div>
+
+        <!-- SAPF MOTIVOS VIEW -->
+        <div id="viewSapfMotivos" class="view-layer">
+            <div class="card full-col">
+                <h3>⚠️ Incidencias por Motivo (SAPF)</h3>
+                <div class="table-container">
+                    <table id="sapfMotivosTable">
+                        <thead>
+                            <tr>
+                                <th>Área</th>
+                                <th>Motivo</th>
+                                <th>Conteo</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- ACADEMIC OBSERVACIONES VIEW -->
+        <div id="viewAcademicObs" class="view-layer">
+            <div class="card">
+                <h3>📈 Tendencia de Observaciones de Clase</h3>
+                <div class="kpi-row" id="obsKpiContainer"></div>
+                <div class="chart-container-relative">
+                    <canvas id="obsBarChart"></canvas>
+                </div>
+            </div>
+            <div class="card">
+                <h3>🗣️ Retroalimentación de Estrategias</h3>
+                <div class="table-container" style="max-height: 400px;">
+                    <table id="obsCommentsTable">
+                        <thead>
+                            <tr>
+                                <th>Docente</th>
+                                <th>Fecha</th>
+                                <th>Comentario / Estrategia</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- ACADEMIC PLANEACIONES VIEW -->
+        <div id="viewAcademicPlan" class="view-layer">
+            <div class="card">
+                <h3>📈 Tendencia de Planeaciones Entregadas</h3>
+                <div class="kpi-row" id="planKpiContainer"></div>
+                <div class="chart-container-relative">
+                    <canvas id="planBarChart"></canvas>
+                </div>
+            </div>
+            <div class="card">
+                <h3>📝 Feedback Coordinación</h3>
+                <div class="table-container" style="max-height: 400px;">
+                    <table id="planCommentsTable">
+                        <thead>
+                            <tr>
+                                <th>Docente</th>
+                                <th>Fecha</th>
+                                <th>Retroalimentación</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
         <!-- RAW JSON LOG -->
         <div class="card full-col">
             <h3>⚙️ Carga de Datos en Crudo (JSON)</h3>
@@ -293,7 +376,7 @@ TEST_HUB_HTML = """
         document.getElementById('startDate').valueAsDate = new Date();
         document.getElementById('endDate').valueAsDate = new Date();
 
-        let charts = { gauge: null, bar: null, attRange: null };
+        let charts = { gauge: null, bar: null, attRange: null, obsBar: null, planBar: null };
         let currentGlobalData = null; 
 
         function handleScopeChange() {
@@ -317,6 +400,8 @@ TEST_HUB_HTML = """
             if(charts.gauge) charts.gauge.destroy();
             if(charts.bar) charts.bar.destroy();
             if(charts.attRange) charts.attRange.destroy();
+            if(charts.obsBar) charts.obsBar.destroy();
+            if(charts.planBar) charts.planBar.destroy();
         }
 
         async function fetchData(forceRefresh = false) {
@@ -336,6 +421,14 @@ TEST_HUB_HTML = """
                 url = `/api/v1/husky/retardos?plantel=${plantel}&scope=${scope}`;
             } else if (api === 'emp-kardex') {
                 url = `/api/v1/employee-attendance/kardex-report?plantel=${plantel}&scope=${scope}`;
+            } else if (api === 'sapf-monthly') {
+                url = `/api/v1/sapf/monthly-summary?plantel=${plantel}&scope=${scope}`;
+            } else if (api === 'sapf-motivos') {
+                url = `/api/v1/sapf/motivos-summary?plantel=${plantel}&scope=${scope}`;
+            } else if (api === 'academic-obs') {
+                url = `/api/v1/academic/observaciones?plantel=${plantel}&scope=${scope}`;
+            } else if (api === 'academic-plan') {
+                url = `/api/v1/academic/planeaciones?plantel=${plantel}&scope=${scope}`;
             }
 
             if (scope === 'range') {
@@ -394,6 +487,18 @@ TEST_HUB_HTML = """
                 } else if (api === 'emp-kardex') {
                     document.getElementById('viewEmployeeKardex').classList.add('active');
                     renderEmployeeKardex(data);
+                } else if (api === 'sapf-monthly') {
+                    document.getElementById('viewSapfMonthly').classList.add('active');
+                    renderSapfMonthly(data);
+                } else if (api === 'sapf-motivos') {
+                    document.getElementById('viewSapfMotivos').classList.add('active');
+                    renderSapfMotivos(data);
+                } else if (api === 'academic-obs') {
+                    document.getElementById('viewAcademicObs').classList.add('active');
+                    renderAcademicObs(data);
+                } else if (api === 'academic-plan') {
+                    document.getElementById('viewAcademicPlan').classList.add('active');
+                    renderAcademicPlan(data);
                 }
             } catch (error) {
                 alert('Error crítico de conexión o servidor. Revisa la consola.');
@@ -405,8 +510,6 @@ TEST_HUB_HTML = """
                 }
             }
         }
-
-        // [... Las funciones renderHusky, renderAttendance, renderRetardos y renderEmployeeKardex permanecen intactas ...]
 
         function renderHusky(data) {
             const pop = data.expected_population;
@@ -614,6 +717,118 @@ TEST_HUB_HTML = """
                         <td><b>${a.employee_name}</b></td>
                         <td>${a.date}</td>
                         <td>${a.raw_status}</td>
+                    </tr>
+                `).join('');
+            }
+        }
+
+        function renderSapfMonthly(data) {
+            const container = document.getElementById('sapfAreasContainer');
+            if (data.data.length === 0) {
+                container.innerHTML = `<p style="text-align:center; color:#888;">No hay fichas de atención en este rango.</p>`;
+                return;
+            }
+
+            container.innerHTML = data.data.map(areaObj => `
+                <div style="background: rgba(255,255,255,0.05); padding: 15px; border-radius: 8px; border: 1px solid #444;">
+                    <h4 style="margin-top:0; color: var(--info); border-bottom: 1px solid #555; padding-bottom: 8px;">Área: ${areaObj.area} <span style="float:right; color:#fff; background:#333; padding:2px 8px; border-radius:12px; font-size:12px;">Total: ${areaObj.total_conteo}</span></h4>
+                    <div style="display:flex; gap:10px; flex-wrap:wrap; margin-top:10px;">
+                        ${areaObj.monthly_data.map(m => `
+                            <div style="background:#1e1e2f; padding:10px; border-radius:6px; min-width:80px; text-align:center; border: 1px solid #333;">
+                                <div style="font-size:12px; color:#aaa;">${m.period}</div>
+                                <div style="font-size:18px; font-weight:bold; color:var(--success);">${m.conteo}</div>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function renderSapfMotivos(data) {
+            const tBody = document.querySelector('#sapfMotivosTable tbody');
+            if (data.motivos.length === 0) {
+                tBody.innerHTML = `<tr><td colspan="3" style="text-align:center; color:#888;">No hay motivos registrados en este rango.</td></tr>`;
+                return;
+            }
+
+            tBody.innerHTML = data.motivos.map(m => `
+                <tr>
+                    <td><span class="tag tag-warn">${m.area}</span></td>
+                    <td><b>${m.motivo}</b></td>
+                    <td style="color:var(--accent); font-weight:bold; font-size:16px;">${m.conteo}</td>
+                </tr>
+            `).join('');
+        }
+
+        function renderAcademicObs(data) {
+            document.getElementById('obsKpiContainer').innerHTML = `
+                <div class="kpi-box"><div class="val" style="color:var(--info);">${data.summary.total_observaciones}</div><div class="lbl">Total Realizadas</div></div>
+                <div class="kpi-box"><div class="val" style="color:var(--success);">${data.summary.observaciones_con_comentarios}</div><div class="lbl">Con Estrategia Documentada</div></div>
+            `;
+
+            const dates = data.daily_trend.map(d => d.date);
+            const totals = data.daily_trend.map(d => d.total);
+            const withComments = data.daily_trend.map(d => d.with_comments);
+
+            const ctx = document.getElementById('obsBarChart').getContext('2d');
+            charts.obsBar = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: dates,
+                    datasets: [
+                        { label: 'Total Observaciones', data: totals, backgroundColor: '#3498db' },
+                        { label: 'Con Estrategia', data: withComments, backgroundColor: '#2ecc71' }
+                    ]
+                },
+                options: { responsive: true, maintainAspectRatio: false, scales: { y: { grid: { color: '#444' }, ticks: { color: '#ccc'} }, x: { grid: { display: false }, ticks: { color: '#ccc'} } }, plugins: { legend: { labels: { color: '#fff' } } } }
+            });
+
+            const tbody = document.querySelector('#obsCommentsTable tbody');
+            if (data.feedback_list.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="3" style="text-align:center; color:#888;">No hay comentarios registrados en este rango.</td></tr>`;
+            } else {
+                tbody.innerHTML = data.feedback_list.map(f => `
+                    <tr>
+                        <td style="white-space: nowrap;"><span class="tag">${f.docente}</span></td>
+                        <td style="white-space: nowrap; color:#aaa;">${f.date}</td>
+                        <td>${f.comment}</td>
+                    </tr>
+                `).join('');
+            }
+        }
+
+        function renderAcademicPlan(data) {
+            document.getElementById('planKpiContainer').innerHTML = `
+                <div class="kpi-box"><div class="val" style="color:var(--info);">${data.summary.total_planeaciones}</div><div class="lbl">Total Recibidas</div></div>
+                <div class="kpi-box"><div class="val" style="color:var(--success);">${data.summary.planeaciones_con_feedback}</div><div class="lbl">Retroalimentadas</div></div>
+            `;
+
+            const dates = data.daily_trend.map(d => d.date);
+            const totals = data.daily_trend.map(d => d.total);
+            const withFeedback = data.daily_trend.map(d => d.with_feedback);
+
+            const ctx = document.getElementById('planBarChart').getContext('2d');
+            charts.planBar = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: dates,
+                    datasets: [
+                        { label: 'Total Recibidas', data: totals, backgroundColor: '#9b59b6' },
+                        { label: 'Con Retroalimentación', data: withFeedback, backgroundColor: '#f1c40f' }
+                    ]
+                },
+                options: { responsive: true, maintainAspectRatio: false, scales: { y: { grid: { color: '#444' }, ticks: { color: '#ccc'} }, x: { grid: { display: false }, ticks: { color: '#ccc'} } }, plugins: { legend: { labels: { color: '#fff' } } } }
+            });
+
+            const tbody = document.querySelector('#planCommentsTable tbody');
+            if (data.feedback_list.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="3" style="text-align:center; color:#888;">No hay retroalimentación registrada en este rango.</td></tr>`;
+            } else {
+                tbody.innerHTML = data.feedback_list.map(f => `
+                    <tr>
+                        <td style="white-space: nowrap;"><span class="tag tag-warn">${f.docente}</span></td>
+                        <td style="white-space: nowrap; color:#aaa;">${f.date}</td>
+                        <td>${f.comment}</td>
                     </tr>
                 `).join('');
             }

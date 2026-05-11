@@ -11,6 +11,8 @@ from core.cache import set_cache
 from modules.husky.service import calculate_husky_daily_rate, get_plantel_retardos
 from modules.attendance.service import get_attendance_detail_report
 from modules.employee_attendance.service import get_kardex_attendance_report
+from modules.sapf.service import get_sapf_monthly_report, get_sapf_motivos_report
+from modules.academic.service import get_observaciones_report, get_planeaciones_report
 
 logger = get_logger("scheduler")
 scheduler = AsyncIOScheduler()
@@ -44,6 +46,20 @@ async def refresh_today_metrics():
             await asyncio.sleep(0.5) 
             kardex = await get_kardex_attendance_report(plantel, today, today, "today")
             set_cache(f"kardex_{plantel}", kardex)
+            
+            # 5. SAPF - Reportes Mensuales y Motivos
+            sapf_monthly = await get_sapf_monthly_report(plantel, today, today, "today")
+            set_cache(f"sapf_monthly_{plantel}_today", sapf_monthly)
+            
+            sapf_motivos = await get_sapf_motivos_report(plantel, today, today, "today")
+            set_cache(f"sapf_motivos_{plantel}_today", sapf_motivos)
+
+            # 6. Monitoreo Académico - Observaciones y Planeaciones
+            obs_report = await get_observaciones_report(plantel, today, today, "today")
+            set_cache(f"academic_obs_{plantel}_today", obs_report)
+
+            plan_report = await get_planeaciones_report(plantel, today, today, "today")
+            set_cache(f"academic_plan_{plantel}_today", plan_report)
             
         except Exception as e:
             logger.error(f"Fallo al pre-calcular métricas para el plantel {plantel}: {str(e)}")
