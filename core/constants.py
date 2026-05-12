@@ -72,59 +72,56 @@ PLANTEL_MAP = {
         "sapf_data_campuses": ["ST"],
     },
 
-    # PREET is the public/formal plantel. CT remains only as a legacy storage
-    # key for subsystems that still store Preescolar Toluca that way.
     "PREET": {
-        "db_code": "CT",
-        "db_codes": ["CT"],
+        "db_code": "PREET",
+        "db_codes": ["PREET"],
         "sheets_code": "PREET",
         "sheets_codes": ["PREET"],
         "name": "PREET",
         "display_name": "Preescolar Toluca (PREET)",
         "academic_filters": [{"nivel": "Preescolar", "campus": "Toluca"}],
-        "sapf_map_campus": "CT",
-        "sapf_data_campuses": ["CT"],
+        "sapf_map_campus": "PREET",
+        "sapf_data_campuses": ["PREET"],
     },
     "CT": {
         "alias_of": "PREET",
-        "db_code": "CT",
-        "db_codes": ["CT"],
+        "db_code": "PREET",
+        "db_codes": ["PREET"],
         "sheets_code": "PREET",
         "sheets_codes": ["PREET"],
         "name": "PREET",
         "display_name": "Preescolar Toluca (PREET)",
         "academic_filters": [{"nivel": "Preescolar", "campus": "Toluca"}],
-        "sapf_map_campus": "CT",
-        "sapf_data_campuses": ["CT"],
+        "sapf_map_campus": "PREET",
+        "sapf_data_campuses": ["PREET"],
     },
 
-    # PREEM is the public/formal plantel. CM remains only as a legacy storage
-    # key; SAPF can also have related records under DM and PR.
     "PREEM": {
-        "db_code": "CM",
-        "db_codes": ["CM"],
+        "db_code": "PREEM",
+        "db_codes": ["PREEM"],
         "sheets_code": "PREEM",
         "sheets_codes": ["PREEM"],
         "name": "PREEM",
         "display_name": "Preescolar Metepec (PREEM)",
         "academic_filters": [{"nivel": "Preescolar", "campus": "Metepec"}],
-        "sapf_map_campus": "CM",
-        "sapf_data_campuses": ["CM", "DM", "PR"],
+        "sapf_map_campus": "PREEM",
+        "sapf_data_campuses": ["PREEM"],
     },
     "CM": {
         "alias_of": "PREEM",
-        "db_code": "CM",
-        "db_codes": ["CM"],
+        "db_code": "PREEM",
+        "db_codes": ["PREEM"],
         "sheets_code": "PREEM",
         "sheets_codes": ["PREEM"],
         "name": "PREEM",
         "display_name": "Preescolar Metepec (PREEM)",
         "academic_filters": [{"nivel": "Preescolar", "campus": "Metepec"}],
-        "sapf_map_campus": "CM",
-        "sapf_data_campuses": ["CM", "DM", "PR"],
+        "sapf_map_campus": "PREEM",
+        "sapf_data_campuses": ["PREEM"],
     },
 
-    # Other legacy aliases that can appear in upstream tools.
+    # Other plantels that can appear in upstream tools. They remain standalone
+    # and are never merged into PREEM.
     "DM": {
         "db_code": "DM",
         "db_codes": ["DM"],
@@ -132,7 +129,7 @@ PLANTEL_MAP = {
         "sheets_codes": ["DM"],
         "name": "Desarrollo Metepec",
         "academic_filters": [],
-        "sapf_map_campus": "CM",
+        "sapf_map_campus": "DM",
         "sapf_data_campuses": ["DM"],
     },
     "PR": {
@@ -142,7 +139,7 @@ PLANTEL_MAP = {
         "sheets_codes": ["PR"],
         "name": "Preescolar / PR",
         "academic_filters": [],
-        "sapf_map_campus": "CM",
+        "sapf_map_campus": "PR",
         "sapf_data_campuses": ["PR"],
     },
 
@@ -159,6 +156,5 @@ PLANTEL_MAP = {
 }
 
 
-# Public plantels used by cache pre-warming and global comparisons. Aliases such
-# as CT/CM remain accepted by endpoints but are not precomputed twice.
+# Public plantels used by cache pre-warming and global comparisons.
 ACTIVE_PLANTEL_CODES = ["PM", "PT", "SM", "ST", "PREET", "PREEM"]

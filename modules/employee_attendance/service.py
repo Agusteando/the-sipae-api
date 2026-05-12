@@ -17,8 +17,8 @@ DB_CODE_TO_KARDEX_AREAS = {
     "PM": ["4 - PM", "9 - Preesco Met", "7 - DM"],
     "ST": ["2 - ST"],
     "SM": ["5 - SM"],
-    "CT": ["3 - CT", "13 - IST"],
-    "CM": ["6 - CM", "8 - ISM"]
+    "PREET": ["PREET"],
+    "PREEM": ["PREEM"]
 }
 
 def _get_val_case_insensitive(record: Dict[str, Any], possible_keys: List[str]) -> Any:
