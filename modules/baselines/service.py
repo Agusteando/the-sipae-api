@@ -327,8 +327,8 @@ def _activity_max_baseline(samples: List[float], scope: str) -> Dict[str, Any]:
     """Activity standard for one plantel/metric based only on record existence.
 
     The baseline is the maximum observed historical activity for that same
-    plantel and metric. Scores are a simple 0-100 index: actual records divided
-    by that historical max. This prevents activity from being mixed with the
+    plantel and metric. Scores are a clean activity level: zero records stays 0; any positive
+    activity is represented from 1-100 by dividing actual records by that historical max. This prevents activity from being mixed with the
     performance baseline and keeps the meaning clean for dashboards.
     """
     clean = [float(v) for v in samples if isinstance(v, (int, float)) and math.isfinite(v)]
@@ -343,7 +343,7 @@ def _activity_max_baseline(samples: List[float], scope: str) -> Dict[str, Any]:
         "scope": scope,
         "unit": "records",
         "minimum_samples": 1,
-        "score_model": "actual_records_divided_by_historical_max_0_100",
+        "score_model": "zero_records_0_positive_records_1_100_against_historical_max",
     }
 
 
@@ -372,6 +372,8 @@ def _score_activity_against_max(actual: Optional[float], baseline: Dict[str, Any
         }
 
     score = max(0.0, min(100.0, (actual_value / maximum) * 100.0))
+    if actual_value > 0 and score < 1.0:
+        score = 1.0
     if score <= 0:
         status = "critical"
     elif score < 50:
@@ -431,7 +433,7 @@ def _attach_activity_payload(point: Dict[str, Any], actual_value: Optional[float
         "delta_to_expected": comparison["delta_to_expected"],
         "reason": comparison["reason"],
         "comparison_model": "plantel_metric_historical_max_record_activity",
-        "score_range": "0-100",
+        "score_range": "0 for no records, 1-100 for positive activity",
     }
 
 
@@ -933,7 +935,7 @@ def _apply_cross_plantel_activity_standards(plantel_payloads: List[Dict[str, Any
 
     Despite the historical function name, the current model is plantel-local:
     each metric's activity score is actual record count / that plantel metric's
-    historical maximum, returned as a clean 0-100 score.
+    historical maximum, returned as a clean activity score: 0 for no records, 1-100 for positive activity.
     """
     standards: Dict[str, Any] = {}
 
@@ -981,7 +983,7 @@ def _apply_cross_plantel_activity_standards(plantel_payloads: List[Dict[str, Any
                 "today_standard": today_baseline,
                 "unit": unit,
                 "comparison_model": "plantel_metric_historical_max_record_activity",
-                "score_range": "0-100",
+                "score_range": "0 for no records, 1-100 for positive activity",
                 "role": "activity_sub_metric",
             }
             metric.pop("_activity_history_weekly", None)
@@ -1006,7 +1008,7 @@ def _apply_cross_plantel_activity_standards(plantel_payloads: List[Dict[str, Any
             "status": activity_status,
             "role": "record_activity_sub_metric",
             "comparison_model": "plantel_metric_historical_max_record_activity",
-            "score_range": "0-100",
+            "score_range": "0 for no records, 1-100 for positive activity",
         }
 
     return standards
@@ -1103,7 +1105,7 @@ async def get_global_baseline_report(
             "fixed_performance_thresholds": False,
             "metric_performance_is_preserved": True,
             "activity_sub_metric": {
-                "basis": "record existence scored 0-100 against each plantel metric historical max",
+                "basis": "record existence scored as activity level: 0 for no records, 1-100 against each plantel metric historical max",
                 "purpose": "keeps activity separate from metric performance and measures record presence only",
                 "role": "sub_metric_per_metric_not_replacement",
                 "normalization": {
