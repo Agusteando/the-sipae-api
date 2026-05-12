@@ -72,24 +72,25 @@ PLANTEL_MAP = {
         "sapf_data_campuses": ["ST"],
     },
 
-    # Legacy CT is still the operational code for PREET in most subsystems.
-    "CT": {
+    # PREET is the public/formal plantel. CT remains only as a legacy storage
+    # key for subsystems that still store Preescolar Toluca that way.
+    "PREET": {
         "db_code": "CT",
         "db_codes": ["CT"],
-        "sheets_code": "CT",
-        "sheets_codes": ["CT"],
+        "sheets_code": "PREET",
+        "sheets_codes": ["PREET"],
         "name": "PREET",
         "display_name": "Preescolar Toluca (PREET)",
         "academic_filters": [{"nivel": "Preescolar", "campus": "Toluca"}],
         "sapf_map_campus": "CT",
         "sapf_data_campuses": ["CT"],
     },
-    "PREET": {
-        "alias_of": "CT",
+    "CT": {
+        "alias_of": "PREET",
         "db_code": "CT",
         "db_codes": ["CT"],
-        "sheets_code": "CT",
-        "sheets_codes": ["CT"],
+        "sheets_code": "PREET",
+        "sheets_codes": ["PREET"],
         "name": "PREET",
         "display_name": "Preescolar Toluca (PREET)",
         "academic_filters": [{"nivel": "Preescolar", "campus": "Toluca"}],
@@ -97,25 +98,25 @@ PLANTEL_MAP = {
         "sapf_data_campuses": ["CT"],
     },
 
-    # PREEM is less consistent across apps. CM remains the default operational
-    # code, while SAPF can have records under CM, DM and PR.
-    "CM": {
+    # PREEM is the public/formal plantel. CM remains only as a legacy storage
+    # key; SAPF can also have related records under DM and PR.
+    "PREEM": {
         "db_code": "CM",
         "db_codes": ["CM"],
-        "sheets_code": "CM",
-        "sheets_codes": ["CM"],
+        "sheets_code": "PREEM",
+        "sheets_codes": ["PREEM"],
         "name": "PREEM",
         "display_name": "Preescolar Metepec (PREEM)",
         "academic_filters": [{"nivel": "Preescolar", "campus": "Metepec"}],
         "sapf_map_campus": "CM",
         "sapf_data_campuses": ["CM", "DM", "PR"],
     },
-    "PREEM": {
-        "alias_of": "CM",
+    "CM": {
+        "alias_of": "PREEM",
         "db_code": "CM",
         "db_codes": ["CM"],
-        "sheets_code": "CM",
-        "sheets_codes": ["CM"],
+        "sheets_code": "PREEM",
+        "sheets_codes": ["PREEM"],
         "name": "PREEM",
         "display_name": "Preescolar Metepec (PREEM)",
         "academic_filters": [{"nivel": "Preescolar", "campus": "Metepec"}],

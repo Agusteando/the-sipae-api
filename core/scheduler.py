@@ -83,18 +83,18 @@ async def refresh_global_baselines():
 
 def start_scheduler():
     """Registra y arranca el cronograma de ejecución de trabajos automáticos."""
-    # Se ejecuta cada 4 minutos (Balance ideal entre frescura y rendimiento)
+    # Se ejecuta con una cadencia conservadora para no saturar integraciones externas.
     scheduler.add_job(
         refresh_today_metrics, 
         'interval', 
-        minutes=4, 
+        minutes=10, 
         id='refresh_metrics_job', 
         replace_existing=True
     )
     scheduler.add_job(
         refresh_global_baselines,
         'interval',
-        minutes=45,
+        minutes=60,
         id='refresh_global_baselines_job',
         replace_existing=True
     )
