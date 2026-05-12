@@ -75,6 +75,7 @@ PLANTEL_MAP = {
     "PREET": {
         "db_code": "PREET",
         "db_codes": ["PREET"],
+        "husky_db_codes": ["PREET", "CT"],
         "sheets_code": "PREET",
         "sheets_codes": ["PREET"],
         "name": "PREET",
@@ -87,6 +88,7 @@ PLANTEL_MAP = {
         "alias_of": "PREET",
         "db_code": "PREET",
         "db_codes": ["PREET"],
+        "husky_db_codes": ["PREET", "CT"],
         "sheets_code": "PREET",
         "sheets_codes": ["PREET"],
         "name": "PREET",

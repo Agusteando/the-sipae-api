@@ -1,6 +1,6 @@
 import aiomysql
 from datetime import date
-from typing import Dict, List
+from typing import Dict, Iterable, List, Tuple
 
 from core.database import get_attendance_db_connection, get_husky_db_connection
 from modules.academic.repository import _build_academic_where
@@ -29,9 +29,32 @@ async def fetch_attendance_daily_activity(db_code: str, start_date: date, end_da
         conn.close()
 
 
-async def fetch_husky_daily_activity(db_code: str, start_date: date, end_date: date) -> List[Dict]:
+def _normalize_husky_codes(db_codes: Iterable[str] | str) -> List[str]:
+    if isinstance(db_codes, str):
+        raw_codes = [db_codes]
+    else:
+        raw_codes = list(db_codes or [])
+
+    seen = set()
+    codes: List[str] = []
+    for code in raw_codes:
+        clean = str(code or "").strip().upper()
+        if clean and clean not in seen:
+            seen.add(clean)
+            codes.append(clean)
+    return codes or [""]
+
+
+def _husky_plantel_clause(alias: str, db_codes: Iterable[str] | str) -> Tuple[str, List[str]]:
+    codes = _normalize_husky_codes(db_codes)
+    clause = " OR ".join([f"{alias}.plantel LIKE %s" for _ in codes])
+    return f"({clause})", [f"{code}%" for code in codes]
+
+
+async def fetch_husky_daily_activity(db_codes: Iterable[str] | str, start_date: date, end_date: date) -> List[Dict]:
     """Daily Husky Pass scan activity used for historical baselines."""
-    query = """
+    plantel_clause, plantel_params = _husky_plantel_clause("B", db_codes)
+    query = f"""
         SELECT
             DATE(A.timestamp) AS date_val,
             A.type AS tipo_accion,
@@ -39,7 +62,7 @@ async def fetch_husky_daily_activity(db_code: str, start_date: date, end_date: d
         FROM acceso A
         LEFT JOIN personas_autorizadas pa ON pa.id = A.ss_id
         LEFT JOIN users B ON pa.user_id = B.id
-        WHERE B.plantel LIKE %s
+        WHERE {plantel_clause}
           AND DATE(A.timestamp) BETWEEN %s AND %s
         GROUP BY DATE(A.timestamp), A.type
         ORDER BY date_val ASC
@@ -47,7 +70,7 @@ async def fetch_husky_daily_activity(db_code: str, start_date: date, end_date: d
     conn = await get_husky_db_connection()
     try:
         async with conn.cursor(aiomysql.DictCursor) as cur:
-            await cur.execute(query, (f"{db_code}%", start_date, end_date))
+            await cur.execute(query, (*plantel_params, start_date, end_date))
             return await cur.fetchall()
     finally:
         conn.close()

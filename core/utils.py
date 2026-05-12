@@ -40,6 +40,7 @@ def resolve_plantel(plantel_code: str) -> Dict[str, Any]:
     db_codes = _dedupe(mapping.get("db_codes") or [db_code])
     sheets_codes = _dedupe(mapping.get("sheets_codes") or [sheets_code])
     sapf_data_campuses = _dedupe(mapping.get("sapf_data_campuses") or [db_code])
+    husky_db_codes = _dedupe(mapping.get("husky_db_codes") or db_codes)
 
     return {
         "plantel_requested": requested,
@@ -54,4 +55,5 @@ def resolve_plantel(plantel_code: str) -> Dict[str, Any]:
         "academic_filters": mapping.get("academic_filters", []),
         "sapf_map_campus": mapping.get("sapf_map_campus", db_code),
         "sapf_data_campuses": sapf_data_campuses,
+        "husky_db_codes": husky_db_codes,
     }

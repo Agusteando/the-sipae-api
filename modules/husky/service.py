@@ -14,7 +14,7 @@ async def calculate_husky_daily_rate(plantel: str, start_date: date, end_date: d
     plantel_info = resolve_plantel(plantel)
     total_population = await fetch_expected_population(plantel_info["sheets_code"])
     
-    results = await get_daily_scans(plantel_info["db_code"], start_date, end_date)
+    results = await get_daily_scans(plantel_info["husky_db_codes"], start_date, end_date)
 
     daily_data = {}
     for row in results:
@@ -46,6 +46,7 @@ async def get_plantel_retardos(plantel: str, start_date: date, end_date: date, s
     """
     plantel_info = resolve_plantel(plantel)
     db_code = plantel_info["db_code"]
+    husky_db_codes = plantel_info["husky_db_codes"]
     
     # Apply strict rules for threshold mappings based on normalized plantel
     if db_code in ['PM', 'PT']:
@@ -58,9 +59,9 @@ async def get_plantel_retardos(plantel: str, start_date: date, end_date: date, s
     logger.info(f"Requested Plantel: {plantel}")
     logger.info(f"Normalized Plantel (db_code): {db_code}")
     logger.info(f"Tardiness Threshold Applied: > {threshold_time}")
-    logger.info(f"SQL Parameters: db_code={db_code}%, start_date={start_date}, end_date={end_date}, threshold_time={threshold_time}")
+    logger.info(f"SQL Parameters: husky_db_codes={husky_db_codes}, start_date={start_date}, end_date={end_date}, threshold_time={threshold_time}")
 
-    records = await fetch_plantel_retardos(db_code, start_date, end_date, threshold_time)
+    records = await fetch_plantel_retardos(husky_db_codes, start_date, end_date, threshold_time)
     
     logger.info(f"Total rows returned after threshold filtering: {len(records)}")
     

@@ -931,8 +931,8 @@ async def _build_plantel_baselines(
     ) = await asyncio.gather(
         fetch_attendance_daily_activity(plantel_info["db_code"], history_start, history_end),
         fetch_attendance_daily_activity(plantel_info["db_code"], comparison_start, comparison_end),
-        fetch_husky_daily_activity(plantel_info["db_code"], history_start, history_end),
-        fetch_husky_daily_activity(plantel_info["db_code"], comparison_start, comparison_end),
+        fetch_husky_daily_activity(plantel_info["husky_db_codes"], history_start, history_end),
+        fetch_husky_daily_activity(plantel_info["husky_db_codes"], comparison_start, comparison_end),
         fetch_sapf_daily_activity(plantel_info["sapf_data_campuses"], history_start, history_end),
         fetch_sapf_daily_activity(plantel_info["sapf_data_campuses"], comparison_start, comparison_end),
         fetch_observaciones_daily_activity(plantel_info["academic_filters"], history_start, history_end),
