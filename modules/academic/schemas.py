@@ -48,3 +48,86 @@ class PlaneacionesResponse(BaseModel):
     daily_trend: List[PlaneacionDailyTrend]
     feedback_list: List[FeedbackItem]
     meta: Optional[Dict[str, Any]] = None
+
+
+class ObservacionDocenteStatusItem(BaseModel):
+    docente: str
+    username: Optional[str] = None
+    email: Optional[str] = None
+    campus: Optional[str] = None
+    nivel: Optional[str] = None
+    last_observed_at: str
+    latest_observers: List[str]
+    total_observaciones_ultimos_30_dias: int
+
+
+class DocenteMenosObservadoItem(BaseModel):
+    docente: str
+    username: Optional[str] = None
+    email: Optional[str] = None
+    campus: Optional[str] = None
+    nivel: Optional[str] = None
+    total_observaciones_ciclo: int
+
+
+class CicloEscolarModel(BaseModel):
+    label: str
+    date_range: DateRangeModel
+
+
+class ObservacionesDocentesSummary(BaseModel):
+    total_docentes_observados: int
+    window_days: int
+
+
+class ObservacionesDocentesResponse(BaseModel):
+    plantel_requested: str
+    resolved_name: str
+    scope: str
+    date_range: DateRangeModel
+    ciclo_escolar: CicloEscolarModel
+    summary: ObservacionesDocentesSummary
+    docentes: List[ObservacionDocenteStatusItem]
+    docente_menos_observado: Optional[DocenteMenosObservadoItem] = None
+    meta: Optional[Dict[str, Any]] = None
+
+
+class ActiveWindowModel(BaseModel):
+    start: date
+    end: date
+    days: int
+
+
+class PlaneacionesPendientesSummary(BaseModel):
+    total_planeaciones_pendientes: int
+    docentes_activos: int
+
+
+class PlaneacionPendienteItem(BaseModel):
+    id: int
+    docente: str
+    username: Optional[str] = None
+    email: Optional[str] = None
+    week: Optional[str] = None
+    ciclo: Optional[str] = None
+    created_at: str
+    weekEnd: Optional[str] = None
+    nivel: Optional[str] = None
+    campus: Optional[str] = None
+    revisa: Optional[str] = None
+    revisa2: Optional[str] = None
+    revisa3: Optional[str] = None
+    feedback: Optional[str] = None
+    feedback2: Optional[str] = None
+    feedback3: Optional[str] = None
+
+
+class PlaneacionesPendientesResponse(BaseModel):
+    plantel_requested: str
+    resolved_name: str
+    scope: str
+    date_range: DateRangeModel
+    active_window: ActiveWindowModel
+    summary: PlaneacionesPendientesSummary
+    planeaciones_pendientes: List[PlaneacionPendienteItem]
+    meta: Optional[Dict[str, Any]] = None

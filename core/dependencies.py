@@ -4,6 +4,24 @@ from datetime import date, datetime
 from zoneinfo import ZoneInfo
 import calendar
 
+def get_current_school_year_range(reference_date: Optional[date] = None) -> tuple[date, date]:
+    """
+    Returns the current ciclo escolar boundaries using the same August-based
+    convention already used by the API's date scopes.
+    """
+    if reference_date is None:
+        tz_mx = ZoneInfo("America/Mexico_City")
+        reference_date = datetime.now(tz_mx).date()
+
+    start_year = reference_date.year - 1 if reference_date.month < 8 else reference_date.year
+    return date(start_year, 8, 1), date(start_year + 1, 8, 1)
+
+
+def get_school_year_label(reference_date: Optional[date] = None) -> str:
+    start_date, end_date = get_current_school_year_range(reference_date)
+    return f"{start_date.year}-{end_date.year}"
+
+
 class DateScopeParams:
     """
     Dependencia global que estandariza los parámetros de alcance de fechas y caché.
@@ -42,12 +60,7 @@ class DateScopeParams:
             self.end_date = today_dt.replace(day=last_day)
             
         elif self.scope == "ciclo_escolar":
-            if today_dt.month < 8:
-                start_year = today_dt.year - 1
-            else:
-                start_year = today_dt.year
-            self.start_date = date(start_year, 8, 1)
-            self.end_date = date(start_year + 1, 8, 1)
+            self.start_date, self.end_date = get_current_school_year_range(today_dt)
             
         else:
             # Prevención de fallos ante alcances inválidos
