@@ -1,6 +1,6 @@
 import asyncio
 from datetime import datetime, timedelta
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 from zoneinfo import ZoneInfo
 
 import httpx
@@ -127,16 +127,25 @@ async def fetch_expected_population(sheets_code: str) -> int:
     return len(valid_students)
 
 
-async def fetch_expected_groups(sheets_code: str) -> List[Dict[str, str]]:
-    """Fetch unique expected grade-group combinations from the external Bot API."""
+async def fetch_expected_groups(sheets_code: str) -> List[Dict[str, Any]]:
+    """Fetch expected grade-group combinations with active student counts.
+
+    Attendance gap insights need the number of students affected when a group
+    does not submit attendance. The upstream base-simple payload is student-level,
+    so the count can be derived without another external dependency.
+    """
     code = _normalize_sheets_code(sheets_code)
     data = await _fetch_base_simple(code)
 
-    unique_groups = set()
+    group_counts: Dict[Tuple[str, str], int] = {}
     for item in data:
         grade = item.get("Grado")
         group = item.get("Grupo")
         if grade and group:
-            unique_groups.add((str(grade).strip(), str(group).strip()))
+            key = (str(grade).strip(), str(group).strip())
+            group_counts[key] = group_counts.get(key, 0) + 1
 
-    return [{"grado": grade, "grupo": group} for grade, group in sorted(unique_groups)]
+    return [
+        {"grado": grade, "grupo": group, "expected_students": count}
+        for (grade, group), count in sorted(group_counts.items())
+    ]

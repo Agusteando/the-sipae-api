@@ -17,7 +17,11 @@ async def get_attendance_detail_report(plantel: str, start_date: date, end_date:
     is_daily = (start_date == end_date)
 
     expected_groups_list = await fetch_expected_groups(plantel_info["sheets_code"])
-    expected_set = {(g["grado"], g["grupo"]) for g in expected_groups_list}
+    expected_students_by_group = {
+        (g["grado"], g["grupo"]): int(g.get("expected_students") or 0)
+        for g in expected_groups_list
+    }
+    expected_set = set(expected_students_by_group.keys())
     total_expected = len(expected_set)
 
     stats_results, absents_results = await fetch_attendance_data(
@@ -30,7 +34,7 @@ async def get_attendance_detail_report(plantel: str, start_date: date, end_date:
         daily_points[str(current_date)] = {
             "summary": { "total_students": 0, "asistencia": 0, "ausencia": 0, "ausencia2": 0, "presencial": 0, "virt": 0, "girls": 0, "boys": 0 },
             "groups": [],
-            "missing_groups_data": { "is_complete": False, "expected_groups_count": total_expected, "completed_groups_count": 0, "missing_groups_count": 0, "completion_percent": 0.0, "missing_groups": [] },
+            "missing_groups_data": { "is_complete": False, "expected_groups_count": total_expected, "completed_groups_count": 0, "missing_groups_count": 0, "completion_percent": 0.0, "expected_students_count": 0, "missing_groups": [] },
             "absent_students": [],
             "internal_actual_set": set()
         }
@@ -79,7 +83,16 @@ async def get_attendance_detail_report(plantel: str, start_date: date, end_date:
     for d_str, dt_obj in daily_points.items():
         actual_set = dt_obj["internal_actual_set"]
         missing_set = expected_set - actual_set
-        
+        missing_groups = [
+            {
+                "grado": g,
+                "grupo": gr,
+                "expected_students": expected_students_by_group.get((g, gr), 0),
+            }
+            for g, gr in sorted(list(missing_set))
+        ]
+        expected_students_count = sum(group["expected_students"] for group in missing_groups)
+
         total_miss = len(missing_set)
         total_comp = total_expected - total_miss
         is_comp = (total_miss == 0) and (total_expected > 0)
@@ -91,7 +104,8 @@ async def get_attendance_detail_report(plantel: str, start_date: date, end_date:
             "completed_groups_count": total_comp,
             "missing_groups_count": total_miss,
             "completion_percent": pct,
-            "missing_groups": [{"grado": g, "grupo": gr} for g, gr in sorted(list(missing_set))]
+            "expected_students_count": expected_students_count,
+            "missing_groups": missing_groups
         }
         del dt_obj["internal_actual_set"]
         dt_obj["groups"] = sorted(dt_obj["groups"], key=lambda x: (x["grado"], x["grupo"]))
