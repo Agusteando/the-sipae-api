@@ -10,6 +10,7 @@ from fastapi import APIRouter, Body, Header, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 
 from core.config import settings
+from core.logger import get_logger
 from core.constants import ACTIVE_PLANTEL_CODES
 
 from .repository import get_message, get_message_by_click_token, get_message_by_open_token, list_messages, list_runs, record_event
@@ -17,6 +18,7 @@ from .service import render_preview, run_daily_health_reports, send_test_report,
 from .templates import HEALTH_REPORTS_UI_HTML
 
 router = APIRouter(tags=["Health Reports"])
+logger = get_logger("health_reports.router")
 
 
 def _clean_token(value: Optional[str]) -> str:
@@ -70,9 +72,26 @@ def _ip_hash(request: Request) -> str:
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:64]
 
 
+def _safe_error_detail(action: str, exc: Exception) -> dict:
+    return {
+        "message": f"{action} failed after admin token validation.",
+        "error": str(exc),
+        "type": exc.__class__.__name__,
+    }
+
+def _raise_post_auth_error(action: str, exc: Exception) -> None:
+    if isinstance(exc, HTTPException):
+        raise exc
+    logger.exception("%s failed after admin token validation", action)
+    raise HTTPException(status_code=500, detail=_safe_error_detail(action, exc))
+
+
 @router.get("/health-reports", response_class=HTMLResponse, include_in_schema=False)
 async def health_reports_ui():
-    return HEALTH_REPORTS_UI_HTML
+    return HTMLResponse(
+        HEALTH_REPORTS_UI_HTML,
+        headers={"Cache-Control": "no-store, no-cache, max-age=0, must-revalidate"},
+    )
 
 
 @router.get("/api/v1/health-reports/auth-status")
@@ -92,6 +111,21 @@ async def health_reports_auth_status(
     }
 
 
+@router.get("/api/v1/health-reports/config-status")
+async def health_reports_config_status(
+    request: Request,
+    x_health_reports_admin_token: Optional[str] = Header(None),
+):
+    _require_admin(request, x_health_reports_admin_token)
+    return {
+        "sipae_db_configured": bool(settings.db_sipae_host and settings.db_sipae_user and settings.db_sipae_name),
+        "gmail_sender_configured": bool(settings.health_reports_gmail_sender),
+        "google_service_account_configured": bool(settings.google_service_account_email and settings.google_private_key),
+        "public_base_url_configured": bool(settings.health_reports_public_base_url),
+        "test_recipient_configured": bool(settings.health_reports_test_recipient),
+    }
+
+
 @router.get("/api/v1/health-reports/preview")
 async def preview_health_report(
     request: Request,
@@ -100,21 +134,25 @@ async def preview_health_report(
     x_health_reports_admin_token: Optional[str] = Header(None),
 ):
     _require_admin(request, x_health_reports_admin_token)
-    plantel_code = _normalize_plantel(plantel)
-    report_date = _parse_date(date_value)
-    result = await render_preview(plantel_code, report_date)
-    model = result["model"]
-    return {
-        "plantel": plantel_code,
-        "date": str(report_date),
-        "to": result["to"],
-        "cc": result["cc"],
-        "subject": model["subject"],
-        "severity": model["severity"],
-        "worst_metric": model["worst_metric"],
-        "model": model,
-        "html": result["html"],
-    }
+    try:
+        plantel_code = _normalize_plantel(plantel)
+        report_date = _parse_date(date_value)
+        result = await render_preview(plantel_code, report_date)
+        model = result["model"]
+        return {
+            "plantel": plantel_code,
+            "date": str(report_date),
+            "to": result["to"],
+            "cc": result["cc"],
+            "subject": model["subject"],
+            "severity": model["severity"],
+            "worst_metric": model["worst_metric"],
+            "model": model,
+            "html": result["html"],
+            "resolver_error": result.get("resolver_error"),
+        }
+    except Exception as exc:
+        _raise_post_auth_error("preview", exc)
 
 
 @router.post("/api/v1/health-reports/send-test")
@@ -124,20 +162,24 @@ async def send_test_health_report(
     x_health_reports_admin_token: Optional[str] = Header(None),
 ):
     _require_admin(request, x_health_reports_admin_token)
-    plantel_code = _normalize_plantel(payload.get("plantel"))
-    report_date = _parse_date(payload.get("date"))
-    test_email = str(payload.get("test_email") or settings.health_reports_test_recipient or "").strip().lower()
-    if not test_email or "@" not in test_email:
-        raise HTTPException(status_code=400, detail="Provide test_email or HEALTH_REPORTS_TEST_RECIPIENT.")
-    result = await send_test_report(plantel_code, report_date, test_email)
-    message = result["message"]
-    return {
-        "message_id": message.get("id"),
-        "status": message.get("status"),
-        "error": message.get("error"),
-        "subject": result["model"]["subject"],
-        "html": result["html"],
-    }
+    try:
+        plantel_code = _normalize_plantel(payload.get("plantel"))
+        report_date = _parse_date(payload.get("date"))
+        test_email = str(payload.get("test_email") or settings.health_reports_test_recipient or "").strip().lower()
+        if not test_email or "@" not in test_email:
+            raise HTTPException(status_code=400, detail="Provide test_email or HEALTH_REPORTS_TEST_RECIPIENT.")
+        result = await send_test_report(plantel_code, report_date, test_email)
+        message = result["message"]
+        return {
+            "message_id": message.get("id"),
+            "status": message.get("status"),
+            "error": message.get("error"),
+            "resolver_error": result.get("resolver_error"),
+            "subject": result["model"]["subject"],
+            "html": result["html"],
+        }
+    except Exception as exc:
+        _raise_post_auth_error("send-test", exc)
 
 
 @router.post("/api/v1/health-reports/send-now")
@@ -147,11 +189,14 @@ async def send_now_health_reports(
     x_health_reports_admin_token: Optional[str] = Header(None),
 ):
     _require_admin(request, x_health_reports_admin_token)
-    report_date = _parse_date(payload.get("date"))
-    plantel = payload.get("plantel")
-    plantel_code = _normalize_plantel(plantel) if plantel else None
-    send = bool(payload.get("send", True))
-    return await run_daily_health_reports(report_date=report_date, send=send, plantel=plantel_code)
+    try:
+        report_date = _parse_date(payload.get("date"))
+        plantel = payload.get("plantel")
+        plantel_code = _normalize_plantel(plantel) if plantel else None
+        send = bool(payload.get("send", True))
+        return await run_daily_health_reports(report_date=report_date, send=send, plantel=plantel_code)
+    except Exception as exc:
+        _raise_post_auth_error("send-now", exc)
 
 
 @router.post("/api/v1/health-reports/sync-read-status")
@@ -161,8 +206,11 @@ async def sync_health_report_read_status(
     x_health_reports_admin_token: Optional[str] = Header(None),
 ):
     _require_admin(request, x_health_reports_admin_token)
-    limit = int(payload.get("limit") or 100)
-    return await sync_read_status(limit=limit)
+    try:
+        limit = int(payload.get("limit") or 100)
+        return await sync_read_status(limit=limit)
+    except Exception as exc:
+        _raise_post_auth_error("sync-read-status", exc)
 
 
 @router.get("/api/v1/health-reports/runs")

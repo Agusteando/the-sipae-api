@@ -1,1 +1,1 @@
-Fix health report admin token handling and refine review dashboard UI
+Fix health report test-send diagnostics and prevent UI from mislabeling post-auth failures as token errors

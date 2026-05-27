@@ -1,4 +1,5 @@
 import json
+import secrets
 from datetime import date, datetime
 from typing import Any, Dict, List, Optional
 from zoneinfo import ZoneInfo
@@ -230,7 +231,11 @@ def _subject_for(plantel_code: str, card: Dict[str, Any]) -> str:
 async def build_report_model(plantel_code: str, report_date: date, principal_email: str, manager_email: Optional[str] = None, cc_emails: Optional[List[str]] = None) -> Dict[str, Any]:
     plantel_info = resolve_plantel(plantel_code)
     collected = await collect_plantel_health(plantel_code, report_date)
-    prior_unread = await find_unread_prior_report(principal_email, plantel_code, report_date)
+    try:
+        prior_unread = await find_unread_prior_report(principal_email, plantel_code, report_date)
+    except Exception as exc:
+        logger.warning("No se pudo consultar lectura previa de reportes para %s/%s: %s", principal_email, plantel_code, exc)
+        prior_unread = None
 
     cards = [
         _build_attendance_card(collected["attendance"]),
@@ -272,15 +277,23 @@ def _public_url(path: str) -> str:
 
 
 async def render_preview(plantel_code: str, report_date: date) -> Dict[str, Any]:
-    recipients = await fetch_principal_report_recipients()
+    resolver_error = None
+    try:
+        recipients = await fetch_principal_report_recipients()
+    except Exception as exc:
+        logger.warning("No se pudo resolver destinatarios SIPAE para preview %s: %s", plantel_code, exc)
+        resolver_error = str(exc)
+        recipients = []
     record = next((r for r in recipients if r["plantel_code"] == plantel_code), None) or {
         "principal_email": settings.health_reports_test_recipient or "preview@casitaiedis.edu.mx",
         "manager_email": None,
         "cc_emails": [],
     }
     model = await build_report_model(plantel_code, report_date, record["principal_email"], record.get("manager_email"), record.get("cc_emails") or [])
+    if resolver_error:
+        model["resolver_warning"] = f"No se pudieron resolver destinatarios SIPAE: {resolver_error}"
     html = render_report_html(model)
-    return {"model": model, "html": html, "to": record["principal_email"], "cc": record.get("cc_emails") or []}
+    return {"model": model, "html": html, "to": record["principal_email"], "cc": record.get("cc_emails") or [], "resolver_error": resolver_error}
 
 
 async def create_and_optionally_send(
@@ -294,32 +307,54 @@ async def create_and_optionally_send(
     send: bool,
     test_email: Optional[str] = None,
     include_cc: bool = True,
+    allow_unlogged: bool = False,
 ) -> Dict[str, Any]:
     actual_to = test_email or principal_email
     actual_cc = cc_emails if include_cc and not test_email else []
     model = await build_report_model(plantel_code, report_date, principal_email, manager_email, cc_emails)
     html_without_tracking = render_report_html(model)
-    message = await save_message(
-        run_id=run_id,
-        report_date=report_date,
-        plantel_code=plantel_code,
-        resolved_name=model["resolved_name"],
-        principal_email=actual_to,
-        manager_email=manager_email if not test_email else None,
-        cc_emails=actual_cc,
-        subject=model["subject"],
-        html_body=html_without_tracking,
-        text_summary=model["top_insight"].get("body") or model["subject"],
-        model=model,
-        worst_metric=model["worst_metric"],
-        severity=model["severity"],
-    )
-    open_url = _public_url(f"/api/v1/health-reports/events/open/{message['open_token']}.png")
-    click_url = _public_url(f"/api/v1/health-reports/events/click/{message['click_token']}?url={_dashboard_url(plantel_code)}") or _dashboard_url(plantel_code)
+    db_log_error = None
+    try:
+        message = await save_message(
+            run_id=run_id,
+            report_date=report_date,
+            plantel_code=plantel_code,
+            resolved_name=model["resolved_name"],
+            principal_email=actual_to,
+            manager_email=manager_email if not test_email else None,
+            cc_emails=actual_cc,
+            subject=model["subject"],
+            html_body=html_without_tracking,
+            text_summary=model["top_insight"].get("body") or model["subject"],
+            model=model,
+            worst_metric=model["worst_metric"],
+            severity=model["severity"],
+        )
+    except Exception as exc:
+        if not allow_unlogged:
+            raise
+        db_log_error = str(exc)
+        logger.warning("Send-test continuará sin bitácora SIPAE DB para %s/%s: %s", plantel_code, actual_to, exc)
+        message = {
+            "id": None,
+            "status": "generated_without_log",
+            "error": f"No se pudo guardar bitácora en SIPAE DB: {db_log_error}",
+            "rfc_message_id": f"<sipae-health-test-{secrets.token_hex(16)}@the-sipae-api.casitaapps.com>",
+            "open_token": "",
+            "click_token": "",
+        }
+
+    if message.get("open_token") and message.get("click_token"):
+        open_url = _public_url(f"/api/v1/health-reports/events/open/{message['open_token']}.png")
+        click_url = _public_url(f"/api/v1/health-reports/events/click/{message['click_token']}?url={_dashboard_url(plantel_code)}") or _dashboard_url(plantel_code)
+    else:
+        open_url = ""
+        click_url = _dashboard_url(plantel_code)
     html = render_report_html(model, open_url=open_url, click_url=click_url)
 
-    # Store the final tracked HTML body.
-    await update_message_html(message["id"], html)
+    # Store the final tracked HTML body when persistent logging is available.
+    if message.get("id"):
+        await update_message_html(message["id"], html)
     message["html_body"] = html
 
     if send:
@@ -332,20 +367,30 @@ async def create_and_optionally_send(
                 text_body=model["top_insight"].get("body") or model["subject"],
                 rfc_message_id=message["rfc_message_id"],
             )
-            await mark_message_sent(message["id"], result.get("gmail_message_id"), result.get("gmail_thread_id"))
-            message["status"] = "sent"
+            if message.get("id"):
+                await mark_message_sent(message["id"], result.get("gmail_message_id"), result.get("gmail_thread_id"))
+            message["status"] = "sent" if not db_log_error else "sent_without_log"
+            if db_log_error:
+                message["error"] = f"Correo enviado, pero no se pudo registrar en SIPAE DB: {db_log_error}"
             message.update(result)
         except Exception as exc:
-            await mark_message_failed(message["id"], str(exc))
+            if message.get("id"):
+                await mark_message_failed(message["id"], str(exc))
             message["status"] = "failed"
             message["error"] = str(exc)
     return {"message": message, "model": model, "html": html}
 
 
 async def send_test_report(plantel_code: str, report_date: date, test_email: str) -> Dict[str, Any]:
-    recipients = await fetch_principal_report_recipients()
+    resolver_error = None
+    try:
+        recipients = await fetch_principal_report_recipients()
+    except Exception as exc:
+        logger.warning("No se pudo resolver destinatarios SIPAE para send-test %s: %s", plantel_code, exc)
+        resolver_error = str(exc)
+        recipients = []
     record = next((r for r in recipients if r["plantel_code"] == plantel_code), None) or {}
-    return await create_and_optionally_send(
+    result = await create_and_optionally_send(
         run_id=None,
         report_date=report_date,
         plantel_code=plantel_code,
@@ -355,7 +400,11 @@ async def send_test_report(plantel_code: str, report_date: date, test_email: str
         send=True,
         test_email=test_email,
         include_cc=False,
+        allow_unlogged=True,
     )
+    if resolver_error:
+        result["resolver_error"] = resolver_error
+    return result
 
 
 async def run_daily_health_reports(report_date: Optional[date] = None, send: bool = True, plantel: Optional[str] = None) -> Dict[str, Any]:

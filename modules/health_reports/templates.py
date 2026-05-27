@@ -180,24 +180,54 @@ function cleanToken(){return ($('token').value || '').trim().replace(/^Bearer\s+
 function hdr(){return {'Content-Type':'application/json','X-Health-Reports-Admin-Token':cleanToken(),'Authorization':'Bearer '+cleanToken()}}
 function setStatus(t){$('status').textContent=t||''}
 function updateAuthState(kind,text){$('authState').className='tokenstate '+kind;$('authState').textContent=text}
-async function parseResponse(r){const j=await r.json().catch(()=>({detail:'Respuesta inválida del servidor'})); if(!r.ok){throw new Error(j.detail || ('HTTP '+r.status));} return j}
+function detailToText(detail){
+  if(!detail) return '';
+  if(typeof detail === 'string') return detail;
+  if(typeof detail === 'object'){
+    const parts=[];
+    if(detail.message) parts.push(detail.message);
+    if(detail.type) parts.push('Tipo: '+detail.type);
+    if(detail.error) parts.push('Error: '+detail.error);
+    return parts.length ? parts.join(' · ') : JSON.stringify(detail);
+  }
+  return String(detail);
+}
+async function parseResponse(r){
+  const raw = await r.text();
+  let j={};
+  try{j = raw ? JSON.parse(raw) : {}}catch(_){j={detail:raw || 'Respuesta inválida del servidor'}}
+  if(!r.ok){
+    const err = new Error(detailToText(j.detail) || ('HTTP '+r.status));
+    err.status = r.status; err.body = j; err.url = r.url;
+    throw err;
+  }
+  return j;
+}
+function handleError(e, context){
+  const authFail = e && e.status === 403;
+  updateAuthState(authFail ? 'bad' : 'ok', authFail ? 'Token inválido' : 'Token validado');
+  const status = e && e.status ? `HTTP ${e.status}` : 'Error';
+  const url = e && e.url ? ` · ${e.url}` : '';
+  setStatus(`${context}: ${status} · ${e.message || e}${url}`);
+  $('meta').textContent = JSON.stringify({context, status:e.status, error:e.message, body:e.body, url:e.url}, null, 2);
+}
 async function checkAuth(){
   setStatus('Verificando token contra el API en ejecución...');
-  try{const r=await fetch('/api/v1/health-reports/auth-status',{headers:hdr()}); const j=await parseResponse(r); updateAuthState(j.valid?'ok':(j.configured?'bad':'warn'), j.valid?'Token válido':(j.configured?'Token inválido':'Token no configurado')); $('meta').textContent=JSON.stringify(j,null,2); setStatus(j.valid?'Token válido.':`Token no válido. Configurado: ${j.configured}, recibido: ${j.received}, fuente: ${j.source}`); return j.valid;}catch(e){updateAuthState('bad','Error auth');setStatus(e.message);return false;}
+  try{const r=await fetch('/api/v1/health-reports/auth-status',{headers:hdr()}); const j=await parseResponse(r); updateAuthState(j.valid?'ok':(j.configured?'bad':'warn'), j.valid?'Token válido':(j.configured?'Token inválido':'Token no configurado')); let config=null; if(j.valid){try{const cr=await fetch('/api/v1/health-reports/config-status',{headers:hdr()}); config=await parseResponse(cr);}catch(_){}} $('meta').textContent=JSON.stringify({auth:j,config},null,2); setStatus(j.valid?'Token válido.':`Token no válido. Configurado: ${j.configured}, recibido: ${j.received}, fuente: ${j.source}`); return j.valid;}catch(e){handleError(e,'auth-status');return false;}
 }
 async function preview(){
   setStatus('Generando preview...');
   const p=$('plantel').value, d=$('date').value;
-  try{const r=await fetch(`/api/v1/health-reports/preview?plantel=${encodeURIComponent(p)}&date=${encodeURIComponent(d)}`,{headers:hdr()}); const j=await parseResponse(r); $('frame').srcdoc=j.html; $('previewTitle').textContent=j.subject; $('meta').textContent=JSON.stringify({to:j.to,cc:j.cc,severity:j.severity,worst_metric:j.worst_metric},null,2); updateAuthState('ok','Token válido'); setStatus('Preview listo.');}catch(e){updateAuthState('bad','Token/error');setStatus(e.message)}
+  try{const r=await fetch(`/api/v1/health-reports/preview?plantel=${encodeURIComponent(p)}&date=${encodeURIComponent(d)}`,{headers:hdr()}); const j=await parseResponse(r); $('frame').srcdoc=j.html; $('previewTitle').textContent=j.subject; $('meta').textContent=JSON.stringify({to:j.to,cc:j.cc,severity:j.severity,worst_metric:j.worst_metric,resolver_error:j.resolver_error},null,2); updateAuthState('ok','Token válido'); setStatus(j.resolver_error ? `Preview listo con aviso: ${j.resolver_error}` : 'Preview listo.');}catch(e){handleError(e,'preview')}
 }
 async function sendTest(){
   const email=$('testEmail').value.trim(); if(!email){setStatus('Escribe un email de prueba.');return}
   setStatus('Enviando prueba...'); const body={plantel:$('plantel').value,date:$('date').value,test_email:email};
-  try{const r=await fetch('/api/v1/health-reports/send-test',{method:'POST',headers:hdr(),body:JSON.stringify(body)}); const j=await parseResponse(r); updateAuthState('ok','Token válido'); setStatus(`Prueba procesada: ${j.status || 'sin estado'} ${j.message_id ? '#'+j.message_id : ''}`); if(j.html){$('frame').srcdoc=j.html; $('previewTitle').textContent=j.subject; $('meta').textContent=JSON.stringify({message_id:j.message_id,status:j.status,error:j.error},null,2);} await loadMessages(false);}catch(e){updateAuthState('bad','Token/error');setStatus(e.message)}
+  try{const r=await fetch('/api/v1/health-reports/send-test',{method:'POST',headers:hdr(),body:JSON.stringify(body)}); const j=await parseResponse(r); updateAuthState('ok','Token válido'); const extra = j.error ? ` · ${j.error}` : (j.resolver_error ? ` · Aviso destinatarios: ${j.resolver_error}` : ''); setStatus(`Prueba procesada: ${j.status || 'sin estado'} ${j.message_id ? '#'+j.message_id : ''}${extra}`); if(j.html){$('frame').srcdoc=j.html; $('previewTitle').textContent=j.subject; $('meta').textContent=JSON.stringify({message_id:j.message_id,status:j.status,error:j.error,resolver_error:j.resolver_error},null,2);} await loadMessages(false);}catch(e){handleError(e,'send-test')}
 }
 async function loadMessages(showStatus=true){
   if(showStatus)setStatus('Cargando historial...'); const d=$('date').value,p=$('plantel').value;
-  try{const r=await fetch(`/api/v1/health-reports/messages?date=${encodeURIComponent(d)}&plantel=${encodeURIComponent(p)}&limit=80`,{headers:hdr()}); const j=await parseResponse(r); updateAuthState('ok','Token válido'); renderMessages(j.messages || []); if(showStatus)setStatus(`${j.messages.length} mensajes.`);}catch(e){updateAuthState('bad','Token/error');setStatus(e.message)}
+  try{const r=await fetch(`/api/v1/health-reports/messages?date=${encodeURIComponent(d)}&plantel=${encodeURIComponent(p)}&limit=80`,{headers:hdr()}); const j=await parseResponse(r); updateAuthState('ok','Token válido'); renderMessages(j.messages || []); if(showStatus)setStatus(`${j.messages.length} mensajes.`);}catch(e){handleError(e,'historial')}
 }
 function renderMessages(messages){
   $('messages').innerHTML='';
@@ -208,11 +238,11 @@ function renderMessages(messages){
 }
 async function loadHtml(id){
   setStatus('Abriendo HTML enviado...');
-  try{const r=await fetch(`/api/v1/health-reports/messages/${id}/html`,{headers:hdr()}); const j=await parseResponse(r); $('frame').srcdoc=j.html; $('previewTitle').textContent=j.subject; $('meta').textContent=JSON.stringify(j.meta,null,2); setStatus('Mensaje cargado.')}catch(e){setStatus(e.message)}
+  try{const r=await fetch(`/api/v1/health-reports/messages/${id}/html`,{headers:hdr()}); const j=await parseResponse(r); $('frame').srcdoc=j.html; $('previewTitle').textContent=j.subject; $('meta').textContent=JSON.stringify(j.meta,null,2); setStatus('Mensaje cargado.')}catch(e){handleError(e,'html-message')}
 }
 async function syncRead(){
   setStatus('Sincronizando lectura vía Gmail...');
-  try{const r=await fetch('/api/v1/health-reports/sync-read-status',{method:'POST',headers:hdr(),body:'{}'}); const j=await parseResponse(r); updateAuthState('ok','Token válido'); setStatus(`Revisados: ${j.checked}, actualizados: ${j.updated}`); await loadMessages(false);}catch(e){updateAuthState('bad','Token/error');setStatus(e.message)}
+  try{const r=await fetch('/api/v1/health-reports/sync-read-status',{method:'POST',headers:hdr(),body:'{}'}); const j=await parseResponse(r); updateAuthState('ok','Token válido'); setStatus(`Revisados: ${j.checked}, actualizados: ${j.updated}`); await loadMessages(false);}catch(e){handleError(e,'sync-read-status')}
 }
 function copyMeta(){navigator.clipboard.writeText($('meta').textContent || '{}'); setStatus('Meta copiada.')}
 function escapeHtml(s){return String(s||'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]))}
