@@ -1,1 +1,1 @@
-feat(api): expose affected student counts for attendance gaps
+feat(api): expose academic coverage summaries for principals

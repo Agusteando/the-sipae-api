@@ -75,8 +75,23 @@ class CicloEscolarModel(BaseModel):
     date_range: DateRangeModel
 
 
+class DocenteSinObservacionItem(BaseModel):
+    docente: str
+    username: Optional[str] = None
+    email: Optional[str] = None
+    campus: Optional[str] = None
+    nivel: Optional[str] = None
+    last_observed_at: Optional[str] = None
+    days_since_last_observation: Optional[int] = None
+    total_observaciones_ciclo: int
+    status: str
+
+
 class ObservacionesDocentesSummary(BaseModel):
     total_docentes_observados: int
+    total_docentes_activos: int
+    total_docentes_sin_observacion_30_dias: int
+    total_docentes_nunca_observados_ciclo: int
     window_days: int
 
 
@@ -88,6 +103,7 @@ class ObservacionesDocentesResponse(BaseModel):
     ciclo_escolar: CicloEscolarModel
     summary: ObservacionesDocentesSummary
     docentes: List[ObservacionDocenteStatusItem]
+    docentes_sin_observacion: List[DocenteSinObservacionItem]
     docente_menos_observado: Optional[DocenteMenosObservadoItem] = None
     meta: Optional[Dict[str, Any]] = None
 
@@ -101,6 +117,7 @@ class ActiveWindowModel(BaseModel):
 class PlaneacionesPendientesSummary(BaseModel):
     total_planeaciones_pendientes: int
     docentes_activos: int
+    docentes_con_planeaciones_pendientes: int
 
 
 class PlaneacionPendienteItem(BaseModel):

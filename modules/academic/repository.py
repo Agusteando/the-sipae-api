@@ -243,6 +243,62 @@ async def get_least_observed_teacher(
         conn.close()
 
 
+async def get_observation_coverage_by_teacher(
+    academic_filters: List[Dict[str, str]],
+    school_year_start: date,
+    school_year_end: date,
+) -> list:
+    """
+    Full teacher coverage for the current school year. Returns every active
+    non-coordinator teacher in the academic plantel with the last observed date,
+    including teachers with zero observations in the cycle.
+    """
+    user_where_clause, user_where_params = _build_academic_where(academic_filters, "u")
+    obs_where_clause, obs_where_params = _build_academic_where(academic_filters, "obs")
+    query = f"""
+        SELECT
+            u.username AS docente,
+            u.username,
+            u.email,
+            u.campus,
+            u.nivel,
+            MAX(obs.submission_date) AS last_observed_at,
+            COUNT(obs.id) AS total_observaciones_ciclo
+        FROM usuarios u
+        LEFT JOIN observaciones_form_submissions obs
+               ON obs.docente = u.username
+              AND {obs_where_clause}
+              AND obs.submission_date >= %s
+              AND obs.submission_date < DATE_ADD(%s, INTERVAL 1 DAY)
+        WHERE {user_where_clause}
+          AND u.username IS NOT NULL
+          AND TRIM(u.username) <> ''
+          AND COALESCE(u.coordinador, 0) = 0
+          AND COALESCE(u.banned, 0) = 0
+          AND (u.ISSSTE IS NULL OR u.ISSSTE = 0)
+        GROUP BY u.username, u.email, u.campus, u.nivel
+        ORDER BY
+            CASE WHEN MAX(obs.submission_date) IS NULL THEN 0 ELSE 1 END ASC,
+            MAX(obs.submission_date) ASC,
+            u.username ASC
+    """
+    conn = await get_attendance_db_connection()
+    try:
+        async with conn.cursor(aiomysql.DictCursor) as cur:
+            await cur.execute(
+                query,
+                (
+                    *obs_where_params,
+                    school_year_start,
+                    school_year_end,
+                    *user_where_params,
+                ),
+            )
+            return await cur.fetchall()
+    finally:
+        conn.close()
+
+
 # ==========================================
 # PLANEACIONES - PENDIENTES DE REVISIÓN
 # ==========================================

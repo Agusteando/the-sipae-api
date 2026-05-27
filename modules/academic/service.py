@@ -9,10 +9,25 @@ from .repository import (
     get_observaciones_stats, get_observaciones_comments,
     get_planeaciones_stats, get_planeaciones_comments,
     get_observaciones_teacher_status, get_least_observed_teacher,
-    count_recent_active_planeacion_docentes, get_pending_review_planeaciones,
+    get_observation_coverage_by_teacher, count_recent_active_planeacion_docentes, get_pending_review_planeaciones,
 )
 
 logger = get_logger("service.academic")
+
+
+def _coerce_date(value):
+    if not value:
+        return None
+    if hasattr(value, "date"):
+        return value.date()
+    try:
+        return datetime.fromisoformat(str(value)[:19]).date()
+    except Exception:
+        try:
+            return datetime.strptime(str(value)[:10], "%Y-%m-%d").date()
+        except Exception:
+            return None
+
 
 
 async def get_observaciones_report(plantel: str, start_date: date, end_date: date, scope: str) -> dict:
@@ -155,6 +170,11 @@ async def get_observaciones_docentes_report(plantel: str) -> dict:
     )
 
     teacher_rows = await get_observaciones_teacher_status(academic_filters, lookback_start, today)
+    coverage_rows = await get_observation_coverage_by_teacher(
+        academic_filters,
+        school_year_start,
+        school_year_end,
+    )
     least_observed_row = await get_least_observed_teacher(
         academic_filters,
         school_year_start,
@@ -180,6 +200,34 @@ async def get_observaciones_docentes_report(plantel: str) -> dict:
             "total_observaciones_ultimos_30_dias": int(row.get("total_observaciones") or 0),
         })
 
+    docentes_sin_observacion = []
+    docentes_nunca_observados_ciclo = 0
+    for row in coverage_rows:
+        docente = str(row.get("docente") or "").strip()
+        if not docente:
+            continue
+
+        last_observed_date = _coerce_date(row.get("last_observed_at"))
+        total_cycle = int(row.get("total_observaciones_ciclo") or 0)
+        if last_observed_date is None:
+            docentes_nunca_observados_ciclo += 1
+
+        if last_observed_date is not None and last_observed_date >= lookback_start:
+            continue
+
+        days_without_observation = (today - last_observed_date).days if last_observed_date else None
+        docentes_sin_observacion.append({
+            "docente": docente,
+            "username": str(row.get("username") or docente).strip() or None,
+            "email": row.get("email"),
+            "campus": row.get("campus"),
+            "nivel": row.get("nivel"),
+            "last_observed_at": str(row.get("last_observed_at")) if row.get("last_observed_at") else None,
+            "days_since_last_observation": days_without_observation,
+            "total_observaciones_ciclo": total_cycle,
+            "status": "nunca_observado_ciclo" if last_observed_date is None else "sin_observacion_30_dias",
+        })
+
     docente_menos_observado = None
     if least_observed_row:
         docente_menos_observado = {
@@ -202,9 +250,13 @@ async def get_observaciones_docentes_report(plantel: str) -> dict:
         },
         "summary": {
             "total_docentes_observados": len(docentes),
+            "total_docentes_activos": len(coverage_rows),
+            "total_docentes_sin_observacion_30_dias": len(docentes_sin_observacion),
+            "total_docentes_nunca_observados_ciclo": docentes_nunca_observados_ciclo,
             "window_days": 30,
         },
         "docentes": docentes,
+        "docentes_sin_observacion": docentes_sin_observacion,
         "docente_menos_observado": docente_menos_observado,
     }
 
@@ -271,6 +323,8 @@ async def get_planeaciones_pendientes_report(
             "feedback3": row.get("feedback3"),
         })
 
+    docentes_con_pendientes = len({p["docente"] for p in planeaciones if p.get("docente")})
+
     return {
         "plantel_requested": plantel_info["plantel_requested"],
         "resolved_name": plantel_info["resolved_name"],
@@ -284,6 +338,7 @@ async def get_planeaciones_pendientes_report(
         "summary": {
             "total_planeaciones_pendientes": len(planeaciones),
             "docentes_activos": active_docentes_count,
+            "docentes_con_planeaciones_pendientes": docentes_con_pendientes,
         },
         "planeaciones_pendientes": planeaciones,
     }
