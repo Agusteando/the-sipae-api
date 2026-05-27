@@ -137,8 +137,11 @@ async def get_observaciones_teacher_status(
     academic_filters: List[Dict[str, str]],
     start_date: date,
     end_date: date,
+    active_start_date: date,
+    active_end_date: date,
 ) -> list:
     where_clause, where_params = _build_academic_where(academic_filters, "obs")
+    active_user_where_clause, active_user_where_params = _build_academic_where(academic_filters, "recent_u")
     query = f"""
         SELECT
             latest.docente,
@@ -163,6 +166,23 @@ async def get_observaciones_teacher_status(
                 DATE(MAX(obs.submission_date)) AS last_observation_date,
                 COUNT(*) AS total_observaciones
             FROM observaciones_form_submissions obs
+            JOIN (
+                SELECT DISTINCT recent.docente
+                FROM planeaciones recent
+                JOIN usuarios recent_u
+                  ON recent_u.username = recent.docente
+                WHERE {active_user_where_clause}
+                  AND recent.created_at >= %s
+                  AND recent.created_at < DATE_ADD(%s, INTERVAL 1 DAY)
+                  AND recent.flagged = 0
+                  AND recent.week IS NOT NULL
+                  AND recent.docente IS NOT NULL
+                  AND TRIM(recent.docente) <> ''
+                  AND COALESCE(recent_u.coordinador, 0) = 0
+                  AND COALESCE(recent_u.banned, 0) = 0
+                  AND (recent_u.ISSSTE IS NULL OR recent_u.ISSSTE = 0)
+            ) active_docentes
+              ON active_docentes.docente = obs.docente
             WHERE {where_clause}
               AND obs.submission_date >= %s
               AND obs.submission_date < DATE_ADD(%s, INTERVAL 1 DAY)
@@ -189,7 +209,17 @@ async def get_observaciones_teacher_status(
     conn = await get_attendance_db_connection()
     try:
         async with conn.cursor(aiomysql.DictCursor) as cur:
-            await cur.execute(query, (*where_params, start_date, end_date))
+            await cur.execute(
+                query,
+                (
+                    *active_user_where_params,
+                    active_start_date,
+                    active_end_date,
+                    *where_params,
+                    start_date,
+                    end_date,
+                ),
+            )
             return await cur.fetchall()
     finally:
         conn.close()
@@ -199,9 +229,12 @@ async def get_least_observed_teacher(
     academic_filters: List[Dict[str, str]],
     school_year_start: date,
     school_year_end: date,
+    active_start_date: date,
+    active_end_date: date,
 ) -> Optional[Dict]:
     user_where_clause, user_where_params = _build_academic_where(academic_filters, "u")
     obs_where_clause, obs_where_params = _build_academic_where(academic_filters, "obs")
+    active_user_where_clause, active_user_where_params = _build_academic_where(academic_filters, "recent_u")
     query = f"""
         SELECT
             u.username AS docente,
@@ -211,6 +244,23 @@ async def get_least_observed_teacher(
             u.nivel,
             COUNT(obs.id) AS total_observaciones
         FROM usuarios u
+        JOIN (
+            SELECT DISTINCT recent.docente
+            FROM planeaciones recent
+            JOIN usuarios recent_u
+              ON recent_u.username = recent.docente
+            WHERE {active_user_where_clause}
+              AND recent.created_at >= %s
+              AND recent.created_at < DATE_ADD(%s, INTERVAL 1 DAY)
+              AND recent.flagged = 0
+              AND recent.week IS NOT NULL
+              AND recent.docente IS NOT NULL
+              AND TRIM(recent.docente) <> ''
+              AND COALESCE(recent_u.coordinador, 0) = 0
+              AND COALESCE(recent_u.banned, 0) = 0
+              AND (recent_u.ISSSTE IS NULL OR recent_u.ISSSTE = 0)
+        ) active_docentes
+          ON active_docentes.docente = u.username
         LEFT JOIN observaciones_form_submissions obs
                ON obs.docente = u.username
               AND {obs_where_clause}
@@ -232,6 +282,9 @@ async def get_least_observed_teacher(
             await cur.execute(
                 query,
                 (
+                    *active_user_where_params,
+                    active_start_date,
+                    active_end_date,
                     *obs_where_params,
                     school_year_start,
                     school_year_end,
@@ -247,14 +300,16 @@ async def get_observation_coverage_by_teacher(
     academic_filters: List[Dict[str, str]],
     school_year_start: date,
     school_year_end: date,
+    active_start_date: date,
+    active_end_date: date,
 ) -> list:
     """
-    Full teacher coverage for the current school year. Returns every active
-    non-coordinator teacher in the academic plantel with the last observed date,
-    including teachers with zero observations in the cycle.
+    Full teacher coverage for the current school year limited to docentes who are
+    academically active via planeaciones in the last 21 days.
     """
     user_where_clause, user_where_params = _build_academic_where(academic_filters, "u")
     obs_where_clause, obs_where_params = _build_academic_where(academic_filters, "obs")
+    active_user_where_clause, active_user_where_params = _build_academic_where(academic_filters, "recent_u")
     query = f"""
         SELECT
             u.username AS docente,
@@ -265,6 +320,23 @@ async def get_observation_coverage_by_teacher(
             MAX(obs.submission_date) AS last_observed_at,
             COUNT(obs.id) AS total_observaciones_ciclo
         FROM usuarios u
+        JOIN (
+            SELECT DISTINCT recent.docente
+            FROM planeaciones recent
+            JOIN usuarios recent_u
+              ON recent_u.username = recent.docente
+            WHERE {active_user_where_clause}
+              AND recent.created_at >= %s
+              AND recent.created_at < DATE_ADD(%s, INTERVAL 1 DAY)
+              AND recent.flagged = 0
+              AND recent.week IS NOT NULL
+              AND recent.docente IS NOT NULL
+              AND TRIM(recent.docente) <> ''
+              AND COALESCE(recent_u.coordinador, 0) = 0
+              AND COALESCE(recent_u.banned, 0) = 0
+              AND (recent_u.ISSSTE IS NULL OR recent_u.ISSSTE = 0)
+        ) active_docentes
+          ON active_docentes.docente = u.username
         LEFT JOIN observaciones_form_submissions obs
                ON obs.docente = u.username
               AND {obs_where_clause}
@@ -288,6 +360,9 @@ async def get_observation_coverage_by_teacher(
             await cur.execute(
                 query,
                 (
+                    *active_user_where_params,
+                    active_start_date,
+                    active_end_date,
                     *obs_where_params,
                     school_year_start,
                     school_year_end,

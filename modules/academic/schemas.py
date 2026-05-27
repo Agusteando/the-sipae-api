@@ -93,6 +93,7 @@ class ObservacionesDocentesSummary(BaseModel):
     total_docentes_sin_observacion_30_dias: int
     total_docentes_nunca_observados_ciclo: int
     window_days: int
+    active_window_days: int
 
 
 class ObservacionesDocentesResponse(BaseModel):

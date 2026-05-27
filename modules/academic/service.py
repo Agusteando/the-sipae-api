@@ -156,6 +156,7 @@ async def get_observaciones_docentes_report(plantel: str) -> dict:
     tz_mx = ZoneInfo("America/Mexico_City")
     today = datetime.now(tz_mx).date()
     lookback_start = today - timedelta(days=29)
+    active_start_date = today - timedelta(days=20)
     school_year_start, school_year_end = get_current_school_year_range(today)
 
     plantel_info = resolve_plantel(plantel)
@@ -169,16 +170,26 @@ async def get_observaciones_docentes_report(plantel: str) -> dict:
         academic_filters,
     )
 
-    teacher_rows = await get_observaciones_teacher_status(academic_filters, lookback_start, today)
+    teacher_rows = await get_observaciones_teacher_status(
+        academic_filters,
+        lookback_start,
+        today,
+        active_start_date,
+        today,
+    )
     coverage_rows = await get_observation_coverage_by_teacher(
         academic_filters,
         school_year_start,
         school_year_end,
+        active_start_date,
+        today,
     )
     least_observed_row = await get_least_observed_teacher(
         academic_filters,
         school_year_start,
         school_year_end,
+        active_start_date,
+        today,
     )
 
     docentes = []
@@ -254,6 +265,7 @@ async def get_observaciones_docentes_report(plantel: str) -> dict:
             "total_docentes_sin_observacion_30_dias": len(docentes_sin_observacion),
             "total_docentes_nunca_observados_ciclo": docentes_nunca_observados_ciclo,
             "window_days": 30,
+            "active_window_days": 21,
         },
         "docentes": docentes,
         "docentes_sin_observacion": docentes_sin_observacion,
