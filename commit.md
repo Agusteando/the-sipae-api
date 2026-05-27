@@ -1,1 +1,1 @@
-Remove health report admin token gate and redesign review console for single-viewport operation
+Add real health report sends, schedule controls, recipient preview, manual SQL schema, and clearer observation copy

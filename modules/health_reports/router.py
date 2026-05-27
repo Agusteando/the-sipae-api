@@ -13,8 +13,9 @@ from core.config import settings
 from core.logger import get_logger
 from core.constants import ACTIVE_PLANTEL_CODES
 
-from .repository import get_message, get_message_by_click_token, get_message_by_open_token, list_messages, list_runs, record_event
+from .repository import fetch_principal_report_recipients, get_message, get_message_by_click_token, get_message_by_open_token, list_messages, list_runs, record_event
 from .service import render_preview, run_daily_health_reports, send_test_report, sync_read_status, today_mx
+from core.scheduler import scheduler_status, update_health_reports_schedule
 from .templates import HEALTH_REPORTS_UI_HTML
 
 router = APIRouter(tags=["Health Reports"])
@@ -119,6 +120,38 @@ async def health_reports_config_status(
         "public_base_url_configured": bool(settings.health_reports_public_base_url),
         "test_recipient_configured": bool(settings.health_reports_test_recipient),
     }
+
+
+@router.get("/api/v1/health-reports/recipients")
+async def health_report_recipients(
+    request: Request,
+    plantel: Optional[str] = Query(None),
+):
+    try:
+        plantel_code = _normalize_plantel(plantel) if plantel else None
+        rows = await fetch_principal_report_recipients()
+        rows = [row for row in rows if row.get("plantel_code") in ACTIVE_PLANTEL_CODES]
+        if plantel_code:
+            rows = [row for row in rows if row.get("plantel_code") == plantel_code]
+        return {"recipients": rows}
+    except Exception as exc:
+        _raise_post_auth_error("recipients", exc)
+
+
+@router.get("/api/v1/health-reports/schedule")
+async def get_health_reports_schedule(request: Request):
+    return scheduler_status()
+
+
+@router.post("/api/v1/health-reports/schedule")
+async def update_health_reports_schedule_endpoint(
+    request: Request,
+    payload: dict = Body(default={}),
+):
+    try:
+        return update_health_reports_schedule(payload)
+    except Exception as exc:
+        _raise_post_auth_error("schedule", exc)
 
 
 @router.get("/api/v1/health-reports/preview")

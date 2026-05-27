@@ -158,8 +158,6 @@ def _build_observaciones_card(data: Dict[str, Any]) -> Dict[str, Any]:
     if data.get("error"):
         return {"key": "observaciones", "title": "Observaciones", "status": "warning", "headline": "Sin lectura completa", "summary": data.get("error"), "count": 0, "details": []}
     summary = data.get("summary") or {}
-    total_active = _safe_int(summary.get("total_docentes_activos"))
-    observed = _safe_int(summary.get("total_docentes_observados"))
     pending = _safe_int(summary.get("total_docentes_sin_observacion_30_dias"))
     status = "critical" if pending > 0 else "fulfilled"
     details = []
@@ -170,7 +168,8 @@ def _build_observaciones_card(data: Dict[str, Any]) -> Dict[str, Any]:
             "sub": teacher.get("nivel") or teacher.get("campus") or "Docente activo",
             "value": "Sin ciclo" if days is None else f"{days} días",
         })
-    return {"key": "observaciones", "title": "Observaciones", "status": status, "headline": f"{pending} docentes requieren observación", "summary": f"Docentes activos por planeaciones en últimos 21 días: {total_active}. Observados en 30 días: {observed}.", "count": pending, "details": details}
+    summary_text = "Docentes que no han sido supervisados recientemente. Si alguno ya fue dado de baja, hacer caso omiso de ese caso y actualizar el registro correspondiente."
+    return {"key": "observaciones", "title": "Observaciones", "status": status, "headline": f"{pending} docentes no han sido supervisados", "summary": summary_text, "count": pending, "details": details}
 
 
 def _build_planeaciones_card(data: Dict[str, Any]) -> Dict[str, Any]:
@@ -216,7 +215,7 @@ def _subject_for(plantel_code: str, card: Dict[str, Any]) -> str:
     if key == "attendance" and card.get("status") == "critical":
         return f"{plantel_code}: {count} estudiantes perdieron continuidad de asistencia hoy"
     if key == "observaciones" and card.get("status") == "critical":
-        return f"{plantel_code}: {count} docentes activos sin observación reciente"
+        return f"{plantel_code}: {count} docentes sin supervisión reciente"
     if key == "planeaciones" and card.get("status") == "critical":
         return f"{plantel_code}: {count} planeaciones sin revisar esta semana"
     if key == "kardex" and card.get("status") != "fulfilled":

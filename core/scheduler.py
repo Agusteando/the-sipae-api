@@ -16,6 +16,7 @@ from modules.sapf.service import get_sapf_monthly_report, get_sapf_motivos_repor
 from modules.academic.service import get_observaciones_report, get_planeaciones_report
 from modules.baselines.service import get_global_baseline_report
 from modules.health_reports.service import run_daily_health_reports
+from modules.health_reports.schedule_config import get_schedule_config, save_schedule_config, cron_day_of_week
 
 logger = get_logger("scheduler")
 scheduler = AsyncIOScheduler()
@@ -92,6 +93,41 @@ async def send_scheduled_health_reports():
     except Exception as e:
         logger.error(f"Fallo al enviar reportes de cierre SIPAE: {str(e)}")
 
+
+def configure_health_reports_schedule(config=None):
+    """Create, update or remove the scheduled health-report job at runtime."""
+    config = config or get_schedule_config()
+    job_id = 'send_health_reports_job'
+    if scheduler.get_job(job_id):
+        scheduler.remove_job(job_id)
+    if config.get('enabled'):
+        scheduler.add_job(
+            send_scheduled_health_reports,
+            'cron',
+            day_of_week=cron_day_of_week(config.get('days') or []),
+            hour=int(config.get('hour', 15)),
+            minute=int(config.get('minute', 55)),
+            timezone=config.get('timezone') or 'America/Mexico_City',
+            id=job_id,
+            replace_existing=True,
+        )
+    return scheduler_status()
+
+
+def update_health_reports_schedule(payload):
+    config = save_schedule_config(payload or {})
+    return configure_health_reports_schedule(config)
+
+
+def scheduler_status():
+    config = get_schedule_config()
+    job = scheduler.get_job('send_health_reports_job')
+    return {
+        'config': config,
+        'active': bool(job),
+        'next_run_time': job.next_run_time.isoformat() if job and job.next_run_time else None,
+    }
+
 def start_scheduler():
     """Registra y arranca el cronograma de ejecución de trabajos automáticos."""
     # Se ejecuta con una cadencia conservadora para no saturar integraciones externas.
@@ -109,17 +145,7 @@ def start_scheduler():
         id='refresh_global_baselines_job',
         replace_existing=True
     )
-    if settings.health_reports_enabled:
-        scheduler.add_job(
-            send_scheduled_health_reports,
-            'cron',
-            day_of_week='mon-fri',
-            hour=settings.health_reports_send_hour,
-            minute=settings.health_reports_send_minute,
-            timezone=settings.health_reports_timezone,
-            id='send_health_reports_job',
-            replace_existing=True
-        )
+    configure_health_reports_schedule(get_schedule_config())
     scheduler.start()
     
     # Detona una primera ejecución asíncrona al arrancar el servidor (Cold Boot pre-warm)
