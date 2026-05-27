@@ -1,1 +1,1 @@
-Fix health report dependency list and keep generated archive out of source tree
+Fix health report admin token handling and refine review dashboard UI

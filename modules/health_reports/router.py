@@ -1,5 +1,7 @@
 import base64
 import hashlib
+import os
+import secrets
 from datetime import date
 from typing import Optional
 from urllib.parse import unquote
@@ -17,11 +19,33 @@ from .templates import HEALTH_REPORTS_UI_HTML
 router = APIRouter(tags=["Health Reports"])
 
 
-def _require_admin(token: Optional[str]) -> None:
-    expected = settings.health_reports_admin_token
+def _clean_token(value: Optional[str]) -> str:
+    token = str(value or "").strip()
+    if token.lower().startswith("bearer "):
+        token = token[7:].strip()
+    return token.strip('"').strip("'").strip()
+
+
+def _configured_admin_token() -> str:
+    # Prefer the raw process environment so PM2/deployment secrets cannot be
+    # shadowed by a stale parsed settings instance. Fall back to pydantic's
+    # .env-loaded setting for local development.
+    return _clean_token(os.getenv("HEALTH_REPORTS_ADMIN_TOKEN") or settings.health_reports_admin_token)
+
+
+def _request_admin_token(request: Request, token: Optional[str] = None) -> str:
+    header_value = token or request.headers.get("x-health-reports-admin-token") or request.headers.get("authorization")
+    return _clean_token(header_value)
+
+
+def _require_admin(request: Request, token: Optional[str] = None) -> None:
+    expected = _configured_admin_token()
+    received = _request_admin_token(request, token)
     if not expected:
-        raise HTTPException(status_code=503, detail="HEALTH_REPORTS_ADMIN_TOKEN is not configured.")
-    if token != expected:
+        raise HTTPException(status_code=503, detail="HEALTH_REPORTS_ADMIN_TOKEN is not configured in the running API process.")
+    if not received:
+        raise HTTPException(status_code=403, detail="Missing health reports admin token.")
+    if not secrets.compare_digest(received, expected):
         raise HTTPException(status_code=403, detail="Invalid health reports admin token.")
 
 
@@ -51,13 +75,31 @@ async def health_reports_ui():
     return HEALTH_REPORTS_UI_HTML
 
 
+@router.get("/api/v1/health-reports/auth-status")
+async def health_reports_auth_status(
+    request: Request,
+    x_health_reports_admin_token: Optional[str] = Header(None),
+):
+    expected = _configured_admin_token()
+    received = _request_admin_token(request, x_health_reports_admin_token)
+    return {
+        "configured": bool(expected),
+        "valid": bool(expected and received and secrets.compare_digest(received, expected)),
+        "received": bool(received),
+        "source": "process_env" if os.getenv("HEALTH_REPORTS_ADMIN_TOKEN") else "settings_env_file" if settings.health_reports_admin_token else "missing",
+        "expected_length": len(expected),
+        "received_length": len(received),
+    }
+
+
 @router.get("/api/v1/health-reports/preview")
 async def preview_health_report(
+    request: Request,
     plantel: str = Query(...),
     date_value: Optional[str] = Query(None, alias="date"),
     x_health_reports_admin_token: Optional[str] = Header(None),
 ):
-    _require_admin(x_health_reports_admin_token)
+    _require_admin(request, x_health_reports_admin_token)
     plantel_code = _normalize_plantel(plantel)
     report_date = _parse_date(date_value)
     result = await render_preview(plantel_code, report_date)
@@ -77,10 +119,11 @@ async def preview_health_report(
 
 @router.post("/api/v1/health-reports/send-test")
 async def send_test_health_report(
+    request: Request,
     payload: dict = Body(...),
     x_health_reports_admin_token: Optional[str] = Header(None),
 ):
-    _require_admin(x_health_reports_admin_token)
+    _require_admin(request, x_health_reports_admin_token)
     plantel_code = _normalize_plantel(payload.get("plantel"))
     report_date = _parse_date(payload.get("date"))
     test_email = str(payload.get("test_email") or settings.health_reports_test_recipient or "").strip().lower()
@@ -99,10 +142,11 @@ async def send_test_health_report(
 
 @router.post("/api/v1/health-reports/send-now")
 async def send_now_health_reports(
+    request: Request,
     payload: dict = Body(default={}),
     x_health_reports_admin_token: Optional[str] = Header(None),
 ):
-    _require_admin(x_health_reports_admin_token)
+    _require_admin(request, x_health_reports_admin_token)
     report_date = _parse_date(payload.get("date"))
     plantel = payload.get("plantel")
     plantel_code = _normalize_plantel(plantel) if plantel else None
@@ -112,32 +156,35 @@ async def send_now_health_reports(
 
 @router.post("/api/v1/health-reports/sync-read-status")
 async def sync_health_report_read_status(
+    request: Request,
     payload: dict = Body(default={}),
     x_health_reports_admin_token: Optional[str] = Header(None),
 ):
-    _require_admin(x_health_reports_admin_token)
+    _require_admin(request, x_health_reports_admin_token)
     limit = int(payload.get("limit") or 100)
     return await sync_read_status(limit=limit)
 
 
 @router.get("/api/v1/health-reports/runs")
 async def health_report_runs(
+    request: Request,
     limit: int = Query(30, ge=1, le=200),
     x_health_reports_admin_token: Optional[str] = Header(None),
 ):
-    _require_admin(x_health_reports_admin_token)
+    _require_admin(request, x_health_reports_admin_token)
     rows = await list_runs(limit=limit)
     return {"runs": rows}
 
 
 @router.get("/api/v1/health-reports/messages")
 async def health_report_messages(
+    request: Request,
     limit: int = Query(100, ge=1, le=300),
     date_value: Optional[str] = Query(None, alias="date"),
     plantel: Optional[str] = Query(None),
     x_health_reports_admin_token: Optional[str] = Header(None),
 ):
-    _require_admin(x_health_reports_admin_token)
+    _require_admin(request, x_health_reports_admin_token)
     report_date = _parse_date(date_value) if date_value else None
     plantel_code = _normalize_plantel(plantel) if plantel else None
     rows = await list_messages(limit=limit, report_date=report_date, plantel=plantel_code)
@@ -165,10 +212,11 @@ async def health_report_messages(
 
 @router.get("/api/v1/health-reports/messages/{message_id}/html")
 async def health_report_message_html(
+    request: Request,
     message_id: int,
     x_health_reports_admin_token: Optional[str] = Header(None),
 ):
-    _require_admin(x_health_reports_admin_token)
+    _require_admin(request, x_health_reports_admin_token)
     message = await get_message(message_id)
     if not message:
         raise HTTPException(status_code=404, detail="Message not found.")

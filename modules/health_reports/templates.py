@@ -115,69 +115,107 @@ HEALTH_REPORTS_UI_HTML = """<!doctype html>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Reportes SIPAE</title>
   <style>
-    :root{--bg:#020617;--panel:#0f172a;--line:#1f2937;--text:#f8fafc;--muted:#94a3b8;--blue:#2563eb;--rose:#fb7185;--green:#22c55e;--amber:#f59e0b}
-    *{box-sizing:border-box} body{margin:0;background:var(--bg);color:var(--text);font-family:Inter,system-ui,Segoe UI,Arial,sans-serif;padding:28px}
-    h1{font-size:42px;line-height:42px;letter-spacing:-.07em;margin:0 0 8px} p{color:var(--muted)}
-    .bar,.card{background:rgba(15,23,42,.9);border:1px solid var(--line);border-radius:24px;padding:18px;margin-bottom:18px}.bar{display:flex;gap:12px;flex-wrap:wrap;align-items:end}
-    label{display:block;font-size:11px;text-transform:uppercase;letter-spacing:.14em;color:var(--muted);font-weight:900;margin-bottom:6px}
-    input,select{background:#020617;border:1px solid #334155;color:var(--text);border-radius:12px;padding:11px 12px;font-weight:700;min-width:160px}
-    button{background:var(--blue);color:white;border:0;border-radius:14px;padding:12px 16px;font-weight:900;letter-spacing:.08em;text-transform:uppercase;cursor:pointer}button.secondary{background:#1e293b}button.warn{background:var(--amber);color:#111827}
-    .grid{display:grid;grid-template-columns:360px 1fr;gap:18px}.list{max-height:640px;overflow:auto}.row{border-bottom:1px solid var(--line);padding:12px 0;cursor:pointer}.row:hover{background:rgba(255,255,255,.03)}
-    .pill{display:inline-block;border-radius:99px;padding:4px 8px;font-size:10px;font-weight:900;text-transform:uppercase;letter-spacing:.1em}.critical{background:#3b0a18;color:var(--rose);border:1px solid var(--rose)}.warning{background:#2b1d07;color:#fbbf24;border:1px solid var(--amber)}.fulfilled{background:#06251a;color:#86efac;border:1px solid var(--green)}
-    iframe{width:100%;height:760px;border:1px solid var(--line);border-radius:20px;background:white}.muted{color:var(--muted);font-size:13px}.mono{font-family:ui-monospace,Menlo,monospace;font-size:12px;color:#cbd5e1;white-space:pre-wrap}.status{min-height:22px;color:#cbd5e1;font-weight:700}
-    @media(max-width:960px){.grid{grid-template-columns:1fr}iframe{height:640px}}
+    :root{--bg:#050816;--panel:#0f172a;--panel2:#111827;--line:#233044;--text:#f8fafc;--muted:#94a3b8;--blue:#2563eb;--blue2:#60a5fa;--rose:#fb7185;--green:#22c55e;--amber:#f59e0b;--violet:#8b5cf6}
+    *{box-sizing:border-box} body{margin:0;background:radial-gradient(circle at 20% 0%,rgba(37,99,235,.22),transparent 34%),radial-gradient(circle at 82% 4%,rgba(139,92,246,.18),transparent 30%),var(--bg);color:var(--text);font-family:Inter,ui-sans-serif,system-ui,Segoe UI,Arial,sans-serif;min-height:100vh;padding:28px}
+    .shell{max-width:1440px;margin:0 auto}.hero{display:flex;justify-content:space-between;gap:24px;align-items:flex-end;margin-bottom:22px}.eyebrow{color:var(--blue2);font-size:11px;font-weight:950;letter-spacing:.22em;text-transform:uppercase;margin-bottom:10px}h1{font-size:52px;line-height:48px;letter-spacing:-.08em;margin:0}p{color:var(--muted);font-weight:650;line-height:1.55}.hero p{max-width:720px;margin:12px 0 0}.health{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;min-width:460px}.stat{background:rgba(15,23,42,.74);border:1px solid rgba(148,163,184,.16);border-radius:22px;padding:14px}.stat b{display:block;font-size:24px;letter-spacing:-.05em}.stat span{display:block;margin-top:4px;color:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:.14em;font-weight:900}
+    .panel{background:rgba(15,23,42,.82);border:1px solid rgba(148,163,184,.16);box-shadow:0 28px 90px rgba(0,0,0,.26);border-radius:30px}.toolbar{padding:18px;display:grid;grid-template-columns:1.4fr repeat(3,minmax(150px,.5fr)) auto auto auto auto;gap:12px;align-items:end;margin-bottom:18px}.field label{display:block;font-size:10px;text-transform:uppercase;letter-spacing:.16em;color:var(--muted);font-weight:950;margin:0 0 7px}input,select{width:100%;background:#020617;border:1px solid #334155;color:var(--text);border-radius:15px;padding:13px 13px;font-weight:800;outline:none}input:focus,select:focus{border-color:var(--blue2);box-shadow:0 0 0 3px rgba(96,165,250,.14)}button{background:var(--blue);color:white;border:0;border-radius:16px;padding:14px 16px;font-weight:950;letter-spacing:.1em;text-transform:uppercase;cursor:pointer;white-space:nowrap}button:hover{filter:brightness(1.08)}button.secondary{background:#1e293b}button.warn{background:var(--amber);color:#111827}button.danger{background:#be123c;color:white}.tokenstate{padding:11px 13px;border-radius:14px;font-size:12px;font-weight:900;border:1px solid var(--line);background:#020617;color:var(--muted)}.tokenstate.ok{color:#86efac;border-color:#22c55e;background:#06251a}.tokenstate.bad{color:#fecaca;border-color:#fb7185;background:#3b0a18}.tokenstate.warn{color:#fde68a;border-color:#f59e0b;background:#2b1d07}
+    .status{min-height:46px;border-radius:18px;background:rgba(15,23,42,.78);border:1px solid rgba(148,163,184,.14);padding:14px 18px;color:#cbd5e1;font-weight:800;margin-bottom:18px}.layout{display:grid;grid-template-columns:410px 1fr;gap:18px}.card{background:rgba(15,23,42,.86);border:1px solid rgba(148,163,184,.16);border-radius:30px;padding:18px}.card h2{margin:0 0 14px;font-size:18px;letter-spacing:-.03em}.messages{height:780px;overflow:auto;padding-right:4px}.row{border:1px solid transparent;border-bottom-color:rgba(148,163,184,.13);padding:14px 12px;cursor:pointer;border-radius:18px}.row:hover{background:rgba(255,255,255,.035);border-color:rgba(148,163,184,.15)}.rowtitle{font-weight:950;margin-top:9px;line-height:1.25}.rowmeta{color:var(--muted);font-size:12px;font-weight:750;margin-top:7px;line-height:1.45}.pill{display:inline-block;border-radius:99px;padding:5px 8px;font-size:10px;font-weight:950;text-transform:uppercase;letter-spacing:.1em}.critical{background:#3b0a18;color:var(--rose);border:1px solid var(--rose)}.warning{background:#2b1d07;color:#fbbf24;border:1px solid var(--amber)}.fulfilled{background:#06251a;color:#86efac;border:1px solid var(--green)}.failed{background:#3b0a18;color:var(--rose);border:1px solid var(--rose)}.sent{background:#0b2347;color:#93c5fd;border:1px solid #3b82f6}.generated{background:#1e1b4b;color:#c4b5fd;border:1px solid var(--violet)}
+    .previewhead{display:flex;gap:16px;align-items:start;justify-content:space-between;margin-bottom:12px}.subject{font-size:20px;font-weight:950;letter-spacing:-.04em;line-height:1.15}.meta{font-family:ui-monospace,Menlo,monospace;font-size:12px;color:#cbd5e1;white-space:pre-wrap;background:#020617;border:1px solid #1f2937;border-radius:18px;padding:12px;margin-top:12px;max-height:210px;overflow:auto}iframe{width:100%;height:720px;border:1px solid var(--line);border-radius:22px;background:white}.split{display:grid;grid-template-columns:1fr 1fr;gap:10px}.hint{color:#94a3b8;font-size:12px;font-weight:700;margin-top:8px}.empty{padding:26px;border:1px dashed #334155;border-radius:20px;text-align:center;color:#94a3b8;font-weight:800}.smallactions{display:flex;gap:8px;flex-wrap:wrap}
+    @media(max-width:1180px){.toolbar{grid-template-columns:1fr 1fr}.layout{grid-template-columns:1fr}.messages{height:380px}.hero{display:block}.health{margin-top:18px;min-width:0}}@media(max-width:720px){body{padding:16px}.toolbar{grid-template-columns:1fr}.health{grid-template-columns:1fr 1fr}h1{font-size:42px;line-height:40px}}
   </style>
 </head>
 <body>
-  <h1>Reportes SIPAE</h1>
-  <p>Previsualiza el correo de cierre por plantel, envía pruebas, revisa historial y señales de lectura.</p>
-  <div class="bar">
-    <div><label>Token admin</label><input id="token" type="password" placeholder="HEALTH_REPORTS_ADMIN_TOKEN"></div>
-    <div><label>Plantel</label><select id="plantel"><option>PT</option><option>PM</option><option>ST</option><option>SM</option><option>PREET</option><option>PREEM</option></select></div>
-    <div><label>Fecha</label><input id="date" type="date"></div>
-    <div><label>Email de prueba</label><input id="testEmail" type="email" placeholder="tu@casitaiedis.edu.mx"></div>
-    <button onclick="preview()">Preview</button>
-    <button class="warn" onclick="sendTest()">Enviar prueba</button>
-    <button class="secondary" onclick="loadMessages()">Historial</button>
-    <button class="secondary" onclick="syncRead()">Sincronizar lectura</button>
-  </div>
-  <div class="status" id="status"></div>
-  <div class="grid">
-    <div class="card list"><h2>Mensajes</h2><div id="messages"></div></div>
-    <div class="card"><h2 id="previewTitle">Preview</h2><iframe id="frame"></iframe><div class="mono" id="meta"></div></div>
+  <div class="shell">
+    <section class="hero">
+      <div>
+        <div class="eyebrow">Automatización de cierre institucional</div>
+        <h1>Reportes SIPAE</h1>
+        <p>Previsualiza exactamente qué correo recibirá cada plantel, envía una prueba controlada, revisa historial y sincroniza señales de lectura sin exponer datos internos.</p>
+      </div>
+      <div class="health">
+        <div class="stat"><b id="statMsgs">—</b><span>mensajes</span></div>
+        <div class="stat"><b id="statSent">—</b><span>enviados</span></div>
+        <div class="stat"><b id="statOpened">—</b><span>aperturas</span></div>
+        <div class="stat"><b id="statClicked">—</b><span>clicks</span></div>
+      </div>
+    </section>
+
+    <section class="panel toolbar">
+      <div class="field"><label>Token admin</label><input id="token" type="password" placeholder="HEALTH_REPORTS_ADMIN_TOKEN" autocomplete="off"></div>
+      <div class="field"><label>Plantel</label><select id="plantel"><option>PT</option><option>PM</option><option>ST</option><option>SM</option><option>PREET</option><option>PREEM</option></select></div>
+      <div class="field"><label>Fecha</label><input id="date" type="date"></div>
+      <div class="field"><label>Email de prueba</label><input id="testEmail" type="email" placeholder="tu@casitaiedis.edu.mx"></div>
+      <button onclick="preview()">Preview</button>
+      <button class="warn" onclick="sendTest()">Enviar prueba</button>
+      <button class="secondary" onclick="loadMessages()">Historial</button>
+      <button class="secondary" onclick="syncRead()">Sincronizar</button>
+    </section>
+
+    <div class="status" id="status">Listo. El token se guarda sólo en este navegador.</div>
+
+    <section class="layout">
+      <aside class="card">
+        <div class="previewhead">
+          <div><h2>Mensajes generados</h2><div class="hint">Selecciona un registro para abrir el HTML enviado.</div></div>
+          <div id="authState" class="tokenstate warn">Token no verificado</div>
+        </div>
+        <div id="messages" class="messages"><div class="empty">Carga el historial para revisar mensajes anteriores.</div></div>
+      </aside>
+      <main class="card">
+        <div class="previewhead">
+          <div><h2>Preview de correo</h2><div class="subject" id="previewTitle">Sin preview generado</div></div>
+          <div class="smallactions"><button class="secondary" onclick="checkAuth()">Probar token</button><button class="secondary" onclick="copyMeta()">Copiar meta</button></div>
+        </div>
+        <iframe id="frame"></iframe>
+        <div class="meta" id="meta">{}</div>
+      </main>
+    </section>
   </div>
 <script>
-const today = new Date().toISOString().slice(0,10); document.getElementById('date').value = today;
-const hdr = () => ({'Content-Type':'application/json','X-Health-Reports-Admin-Token':document.getElementById('token').value});
-function setStatus(t){document.getElementById('status').textContent=t||''}
+const $ = (id) => document.getElementById(id);
+const today = new Date().toISOString().slice(0,10); $('date').value = today;
+const storedToken = localStorage.getItem('healthReportsAdminToken') || ''; $('token').value = storedToken;
+$('token').addEventListener('input', () => { localStorage.setItem('healthReportsAdminToken', cleanToken()); updateAuthState('warn','Token sin verificar'); });
+function cleanToken(){return ($('token').value || '').trim().replace(/^Bearer\s+/i,'').replace(/^['\"]|['\"]$/g,'').trim()}
+function hdr(){return {'Content-Type':'application/json','X-Health-Reports-Admin-Token':cleanToken(),'Authorization':'Bearer '+cleanToken()}}
+function setStatus(t){$('status').textContent=t||''}
+function updateAuthState(kind,text){$('authState').className='tokenstate '+kind;$('authState').textContent=text}
+async function parseResponse(r){const j=await r.json().catch(()=>({detail:'Respuesta inválida del servidor'})); if(!r.ok){throw new Error(j.detail || ('HTTP '+r.status));} return j}
+async function checkAuth(){
+  setStatus('Verificando token contra el API en ejecución...');
+  try{const r=await fetch('/api/v1/health-reports/auth-status',{headers:hdr()}); const j=await parseResponse(r); updateAuthState(j.valid?'ok':(j.configured?'bad':'warn'), j.valid?'Token válido':(j.configured?'Token inválido':'Token no configurado')); $('meta').textContent=JSON.stringify(j,null,2); setStatus(j.valid?'Token válido.':`Token no válido. Configurado: ${j.configured}, recibido: ${j.received}, fuente: ${j.source}`); return j.valid;}catch(e){updateAuthState('bad','Error auth');setStatus(e.message);return false;}
+}
 async function preview(){
   setStatus('Generando preview...');
-  const p=document.getElementById('plantel').value, d=document.getElementById('date').value;
-  const r=await fetch(`/api/v1/health-reports/preview?plantel=${p}&date=${d}`,{headers:hdr()});
-  const j=await r.json(); if(!r.ok){setStatus(j.detail||'Error');return}
-  document.getElementById('frame').srcdoc=j.html; document.getElementById('previewTitle').textContent=j.subject;
-  document.getElementById('meta').textContent=JSON.stringify({to:j.to,cc:j.cc,severity:j.severity,worst_metric:j.worst_metric},null,2); setStatus('Preview listo.');
+  const p=$('plantel').value, d=$('date').value;
+  try{const r=await fetch(`/api/v1/health-reports/preview?plantel=${encodeURIComponent(p)}&date=${encodeURIComponent(d)}`,{headers:hdr()}); const j=await parseResponse(r); $('frame').srcdoc=j.html; $('previewTitle').textContent=j.subject; $('meta').textContent=JSON.stringify({to:j.to,cc:j.cc,severity:j.severity,worst_metric:j.worst_metric},null,2); updateAuthState('ok','Token válido'); setStatus('Preview listo.');}catch(e){updateAuthState('bad','Token/error');setStatus(e.message)}
 }
 async function sendTest(){
-  setStatus('Enviando prueba...'); const body={plantel:document.getElementById('plantel').value,date:document.getElementById('date').value,test_email:document.getElementById('testEmail').value};
-  const r=await fetch('/api/v1/health-reports/send-test',{method:'POST',headers:hdr(),body:JSON.stringify(body)}); const j=await r.json();
-  setStatus(r.ok?`Prueba enviada: ${j.message_id||''}`:(j.detail||'Error'));
-  if(j.html){document.getElementById('frame').srcdoc=j.html; document.getElementById('previewTitle').textContent=j.subject;}
+  const email=$('testEmail').value.trim(); if(!email){setStatus('Escribe un email de prueba.');return}
+  setStatus('Enviando prueba...'); const body={plantel:$('plantel').value,date:$('date').value,test_email:email};
+  try{const r=await fetch('/api/v1/health-reports/send-test',{method:'POST',headers:hdr(),body:JSON.stringify(body)}); const j=await parseResponse(r); updateAuthState('ok','Token válido'); setStatus(`Prueba procesada: ${j.status || 'sin estado'} ${j.message_id ? '#'+j.message_id : ''}`); if(j.html){$('frame').srcdoc=j.html; $('previewTitle').textContent=j.subject; $('meta').textContent=JSON.stringify({message_id:j.message_id,status:j.status,error:j.error},null,2);} await loadMessages(false);}catch(e){updateAuthState('bad','Token/error');setStatus(e.message)}
 }
-async function loadMessages(){
-  setStatus('Cargando historial...'); const d=document.getElementById('date').value,p=document.getElementById('plantel').value;
-  const r=await fetch(`/api/v1/health-reports/messages?date=${d}&plantel=${p}&limit=80`,{headers:hdr()}); const j=await r.json();
-  if(!r.ok){setStatus(j.detail||'Error');return} document.getElementById('messages').innerHTML='';
-  j.messages.forEach(m=>{const div=document.createElement('div');div.className='row';div.onclick=()=>loadHtml(m.id);div.innerHTML=`<span class="pill ${m.severity}">${m.severity}</span><div style="font-weight:900;margin-top:8px">${m.subject}</div><div class="muted">${m.recipient} · ${m.status} · opens ${m.open_count} · clicks ${m.click_count}</div>`;document.getElementById('messages').appendChild(div)});
-  setStatus(`${j.messages.length} mensajes.`);
+async function loadMessages(showStatus=true){
+  if(showStatus)setStatus('Cargando historial...'); const d=$('date').value,p=$('plantel').value;
+  try{const r=await fetch(`/api/v1/health-reports/messages?date=${encodeURIComponent(d)}&plantel=${encodeURIComponent(p)}&limit=80`,{headers:hdr()}); const j=await parseResponse(r); updateAuthState('ok','Token válido'); renderMessages(j.messages || []); if(showStatus)setStatus(`${j.messages.length} mensajes.`);}catch(e){updateAuthState('bad','Token/error');setStatus(e.message)}
+}
+function renderMessages(messages){
+  $('messages').innerHTML='';
+  if(!messages.length){$('messages').innerHTML='<div class="empty">No hay mensajes para este filtro.</div>'}
+  let sent=0,opened=0,clicked=0;
+  messages.forEach(m=>{sent += m.status==='sent'?1:0; opened += Number(m.open_count||0)>0?1:0; clicked += Number(m.click_count||0)>0?1:0; const div=document.createElement('div');div.className='row';div.onclick=()=>loadHtml(m.id);div.innerHTML=`<span class="pill ${m.severity||'fulfilled'}">${m.severity||'sin severidad'}</span> <span class="pill ${m.status||'generated'}">${m.status||'generated'}</span><div class="rowtitle">${escapeHtml(m.subject||'Sin asunto')}</div><div class="rowmeta">${escapeHtml(m.recipient||'')} · gerente: ${escapeHtml(m.manager||'—')}</div><div class="rowmeta">opens ${m.open_count||0} · clicks ${m.click_count||0} · ${m.sent_at||'sin envío'}</div>`;$('messages').appendChild(div)});
+  $('statMsgs').textContent=messages.length;$('statSent').textContent=sent;$('statOpened').textContent=opened;$('statClicked').textContent=clicked;
 }
 async function loadHtml(id){
-  const r=await fetch(`/api/v1/health-reports/messages/${id}/html`,{headers:hdr()}); const j=await r.json(); if(!r.ok){setStatus(j.detail||'Error');return}
-  document.getElementById('frame').srcdoc=j.html; document.getElementById('previewTitle').textContent=j.subject; document.getElementById('meta').textContent=JSON.stringify(j.meta,null,2);
+  setStatus('Abriendo HTML enviado...');
+  try{const r=await fetch(`/api/v1/health-reports/messages/${id}/html`,{headers:hdr()}); const j=await parseResponse(r); $('frame').srcdoc=j.html; $('previewTitle').textContent=j.subject; $('meta').textContent=JSON.stringify(j.meta,null,2); setStatus('Mensaje cargado.')}catch(e){setStatus(e.message)}
 }
 async function syncRead(){
-  setStatus('Sincronizando lectura via Gmail...'); const r=await fetch('/api/v1/health-reports/sync-read-status',{method:'POST',headers:hdr(),body:'{}'}); const j=await r.json(); setStatus(r.ok?`Revisados: ${j.checked}, actualizados: ${j.updated}`:(j.detail||'Error'));
+  setStatus('Sincronizando lectura vía Gmail...');
+  try{const r=await fetch('/api/v1/health-reports/sync-read-status',{method:'POST',headers:hdr(),body:'{}'}); const j=await parseResponse(r); updateAuthState('ok','Token válido'); setStatus(`Revisados: ${j.checked}, actualizados: ${j.updated}`); await loadMessages(false);}catch(e){updateAuthState('bad','Token/error');setStatus(e.message)}
 }
-preview();
+function copyMeta(){navigator.clipboard.writeText($('meta').textContent || '{}'); setStatus('Meta copiada.')}
+function escapeHtml(s){return String(s||'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]))}
+checkAuth().then(()=>preview());
 </script>
 </body></html>"""
