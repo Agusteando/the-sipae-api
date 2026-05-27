@@ -41,14 +41,9 @@ def _request_admin_token(request: Request, token: Optional[str] = None) -> str:
 
 
 def _require_admin(request: Request, token: Optional[str] = None) -> None:
-    expected = _configured_admin_token()
-    received = _request_admin_token(request, token)
-    if not expected:
-        raise HTTPException(status_code=503, detail="HEALTH_REPORTS_ADMIN_TOKEN is not configured in the running API process.")
-    if not received:
-        raise HTTPException(status_code=403, detail="Missing health reports admin token.")
-    if not secrets.compare_digest(received, expected):
-        raise HTTPException(status_code=403, detail="Invalid health reports admin token.")
+    # Health Reports admin token checks were intentionally disabled.
+    # The dashboard runs as an internal operational console behind the API host.
+    return None
 
 
 def _parse_date(value: Optional[str]) -> date:
@@ -74,7 +69,7 @@ def _ip_hash(request: Request) -> str:
 
 def _safe_error_detail(action: str, exc: Exception) -> dict:
     return {
-        "message": f"{action} failed after admin token validation.",
+        "message": f"{action} failed after request validation.",
         "error": str(exc),
         "type": exc.__class__.__name__,
     }
@@ -82,7 +77,7 @@ def _safe_error_detail(action: str, exc: Exception) -> dict:
 def _raise_post_auth_error(action: str, exc: Exception) -> None:
     if isinstance(exc, HTTPException):
         raise exc
-    logger.exception("%s failed after admin token validation", action)
+    logger.exception("%s failed after request validation", action)
     raise HTTPException(status_code=500, detail=_safe_error_detail(action, exc))
 
 
@@ -103,9 +98,10 @@ async def health_reports_auth_status(
     received = _request_admin_token(request, x_health_reports_admin_token)
     return {
         "configured": bool(expected),
-        "valid": bool(expected and received and secrets.compare_digest(received, expected)),
+        "valid": True,
+        "required": False,
         "received": bool(received),
-        "source": "process_env" if os.getenv("HEALTH_REPORTS_ADMIN_TOKEN") else "settings_env_file" if settings.health_reports_admin_token else "missing",
+        "source": "disabled",
         "expected_length": len(expected),
         "received_length": len(received),
     }
@@ -116,7 +112,6 @@ async def health_reports_config_status(
     request: Request,
     x_health_reports_admin_token: Optional[str] = Header(None),
 ):
-    _require_admin(request, x_health_reports_admin_token)
     return {
         "sipae_db_configured": bool(settings.db_sipae_host and settings.db_sipae_user and settings.db_sipae_name),
         "gmail_sender_configured": bool(settings.health_reports_gmail_sender),
@@ -133,7 +128,6 @@ async def preview_health_report(
     date_value: Optional[str] = Query(None, alias="date"),
     x_health_reports_admin_token: Optional[str] = Header(None),
 ):
-    _require_admin(request, x_health_reports_admin_token)
     try:
         plantel_code = _normalize_plantel(plantel)
         report_date = _parse_date(date_value)
@@ -161,7 +155,6 @@ async def send_test_health_report(
     payload: dict = Body(...),
     x_health_reports_admin_token: Optional[str] = Header(None),
 ):
-    _require_admin(request, x_health_reports_admin_token)
     try:
         plantel_code = _normalize_plantel(payload.get("plantel"))
         report_date = _parse_date(payload.get("date"))
@@ -188,7 +181,6 @@ async def send_now_health_reports(
     payload: dict = Body(default={}),
     x_health_reports_admin_token: Optional[str] = Header(None),
 ):
-    _require_admin(request, x_health_reports_admin_token)
     try:
         report_date = _parse_date(payload.get("date"))
         plantel = payload.get("plantel")
@@ -205,7 +197,6 @@ async def sync_health_report_read_status(
     payload: dict = Body(default={}),
     x_health_reports_admin_token: Optional[str] = Header(None),
 ):
-    _require_admin(request, x_health_reports_admin_token)
     try:
         limit = int(payload.get("limit") or 100)
         return await sync_read_status(limit=limit)
@@ -219,7 +210,6 @@ async def health_report_runs(
     limit: int = Query(30, ge=1, le=200),
     x_health_reports_admin_token: Optional[str] = Header(None),
 ):
-    _require_admin(request, x_health_reports_admin_token)
     rows = await list_runs(limit=limit)
     return {"runs": rows}
 
@@ -232,7 +222,6 @@ async def health_report_messages(
     plantel: Optional[str] = Query(None),
     x_health_reports_admin_token: Optional[str] = Header(None),
 ):
-    _require_admin(request, x_health_reports_admin_token)
     report_date = _parse_date(date_value) if date_value else None
     plantel_code = _normalize_plantel(plantel) if plantel else None
     rows = await list_messages(limit=limit, report_date=report_date, plantel=plantel_code)
@@ -264,7 +253,6 @@ async def health_report_message_html(
     message_id: int,
     x_health_reports_admin_token: Optional[str] = Header(None),
 ):
-    _require_admin(request, x_health_reports_admin_token)
     message = await get_message(message_id)
     if not message:
         raise HTTPException(status_code=404, detail="Message not found.")

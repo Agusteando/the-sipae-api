@@ -1,1 +1,1 @@
-Fix health report test-send diagnostics and prevent UI from mislabeling post-auth failures as token errors
+Remove health report admin token gate and redesign review console for single-viewport operation
