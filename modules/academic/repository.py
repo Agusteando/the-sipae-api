@@ -142,6 +142,7 @@ async def get_observaciones_teacher_status(
 ) -> list:
     where_clause, where_params = _build_academic_where(academic_filters, "obs")
     active_user_where_clause, active_user_where_params = _build_academic_where(academic_filters, "recent_u")
+    active_plan_where_clause, active_plan_where_params = _build_academic_where(academic_filters, "recent")
     query = f"""
         SELECT
             latest.docente,
@@ -172,6 +173,7 @@ async def get_observaciones_teacher_status(
                 JOIN usuarios recent_u
                   ON recent_u.username = recent.docente
                 WHERE {active_user_where_clause}
+                  AND {active_plan_where_clause}
                   AND recent.created_at >= %s
                   AND recent.created_at < DATE_ADD(%s, INTERVAL 1 DAY)
                   AND recent.flagged = 0
@@ -213,6 +215,7 @@ async def get_observaciones_teacher_status(
                 query,
                 (
                     *active_user_where_params,
+                    *active_plan_where_params,
                     active_start_date,
                     active_end_date,
                     *where_params,
@@ -235,6 +238,7 @@ async def get_least_observed_teacher(
     user_where_clause, user_where_params = _build_academic_where(academic_filters, "u")
     obs_where_clause, obs_where_params = _build_academic_where(academic_filters, "obs")
     active_user_where_clause, active_user_where_params = _build_academic_where(academic_filters, "recent_u")
+    active_plan_where_clause, active_plan_where_params = _build_academic_where(academic_filters, "recent")
     query = f"""
         SELECT
             u.username AS docente,
@@ -250,6 +254,7 @@ async def get_least_observed_teacher(
             JOIN usuarios recent_u
               ON recent_u.username = recent.docente
             WHERE {active_user_where_clause}
+              AND {active_plan_where_clause}
               AND recent.created_at >= %s
               AND recent.created_at < DATE_ADD(%s, INTERVAL 1 DAY)
               AND recent.flagged = 0
@@ -283,6 +288,7 @@ async def get_least_observed_teacher(
                 query,
                 (
                     *active_user_where_params,
+                    *active_plan_where_params,
                     active_start_date,
                     active_end_date,
                     *obs_where_params,
@@ -310,6 +316,7 @@ async def get_observation_coverage_by_teacher(
     user_where_clause, user_where_params = _build_academic_where(academic_filters, "u")
     obs_where_clause, obs_where_params = _build_academic_where(academic_filters, "obs")
     active_user_where_clause, active_user_where_params = _build_academic_where(academic_filters, "recent_u")
+    active_plan_where_clause, active_plan_where_params = _build_academic_where(academic_filters, "recent")
     query = f"""
         SELECT
             u.username AS docente,
@@ -326,6 +333,7 @@ async def get_observation_coverage_by_teacher(
             JOIN usuarios recent_u
               ON recent_u.username = recent.docente
             WHERE {active_user_where_clause}
+              AND {active_plan_where_clause}
               AND recent.created_at >= %s
               AND recent.created_at < DATE_ADD(%s, INTERVAL 1 DAY)
               AND recent.flagged = 0
@@ -361,6 +369,7 @@ async def get_observation_coverage_by_teacher(
                 query,
                 (
                     *active_user_where_params,
+                    *active_plan_where_params,
                     active_start_date,
                     active_end_date,
                     *obs_where_params,
@@ -383,12 +392,14 @@ async def count_recent_active_planeacion_docentes(
     recent_end_date: date,
 ) -> int:
     user_where_clause, user_where_params = _build_academic_where(academic_filters, "u")
+    plan_where_clause, plan_where_params = _build_academic_where(academic_filters, "p")
     query = f"""
         SELECT COUNT(DISTINCT p.docente) AS total
         FROM planeaciones p
         JOIN usuarios u
           ON u.username = p.docente
         WHERE {user_where_clause}
+          AND {plan_where_clause}
           AND p.created_at >= %s
           AND p.created_at < DATE_ADD(%s, INTERVAL 1 DAY)
           AND p.flagged = 0
@@ -402,7 +413,7 @@ async def count_recent_active_planeacion_docentes(
     conn = await get_attendance_db_connection()
     try:
         async with conn.cursor(aiomysql.DictCursor) as cur:
-            await cur.execute(query, (*user_where_params, recent_start_date, recent_end_date))
+            await cur.execute(query, (*user_where_params, *plan_where_params, recent_start_date, recent_end_date))
             row = await cur.fetchone()
             return int((row or {}).get("total") or 0)
     finally:
@@ -417,7 +428,9 @@ async def get_pending_review_planeaciones(
     recent_end_date: date,
 ) -> list:
     active_user_where_clause, active_user_where_params = _build_academic_where(academic_filters, "recent_u")
+    active_plan_where_clause, active_plan_where_params = _build_academic_where(academic_filters, "recent")
     outer_user_where_clause, outer_user_where_params = _build_academic_where(academic_filters, "u")
+    outer_plan_where_clause, outer_plan_where_params = _build_academic_where(academic_filters, "p")
     query = f"""
         SELECT
             p.id,
@@ -445,6 +458,7 @@ async def get_pending_review_planeaciones(
             JOIN usuarios recent_u
               ON recent_u.username = recent.docente
             WHERE {active_user_where_clause}
+              AND {active_plan_where_clause}
               AND recent.created_at >= %s
               AND recent.created_at < DATE_ADD(%s, INTERVAL 1 DAY)
               AND recent.flagged = 0
@@ -457,6 +471,7 @@ async def get_pending_review_planeaciones(
         ) active_docentes
           ON active_docentes.docente = p.docente
         WHERE {outer_user_where_clause}
+          AND {outer_plan_where_clause}
           AND p.created_at >= %s
           AND p.created_at < DATE_ADD(%s, INTERVAL 1 DAY)
           AND p.flagged = 0
@@ -481,9 +496,11 @@ async def get_pending_review_planeaciones(
                 query,
                 (
                     *active_user_where_params,
+                    *active_plan_where_params,
                     recent_start_date,
                     recent_end_date,
                     *outer_user_where_params,
+                    *outer_plan_where_params,
                     start_date,
                     end_date,
                 ),

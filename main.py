@@ -13,6 +13,7 @@ from modules.employee_attendance.router import router as employee_router
 from modules.sapf.router import router as sapf_router
 from modules.academic.router import router as academic_router
 from modules.baselines.router import router as baselines_router
+from modules.health_reports.router import router as health_reports_router
 
 # ==========================================
 # LIFESPAN & SCHEDULER
@@ -52,6 +53,7 @@ app.include_router(employee_router)
 app.include_router(sapf_router)
 app.include_router(academic_router)
 app.include_router(baselines_router)
+app.include_router(health_reports_router)
 
 if __name__ == "__main__":
     import uvicorn

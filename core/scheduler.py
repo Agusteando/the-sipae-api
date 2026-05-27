@@ -6,6 +6,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from core.logger import get_logger
 from core.constants import ACTIVE_PLANTEL_CODES
 from core.cache import set_cache
+from core.config import settings
 
 # Importación de Servicios de Agregación Pesada
 from modules.husky.service import calculate_husky_daily_rate, get_plantel_retardos
@@ -14,6 +15,7 @@ from modules.employee_attendance.service import get_kardex_attendance_report
 from modules.sapf.service import get_sapf_monthly_report, get_sapf_motivos_report
 from modules.academic.service import get_observaciones_report, get_planeaciones_report
 from modules.baselines.service import get_global_baseline_report
+from modules.health_reports.service import run_daily_health_reports
 
 logger = get_logger("scheduler")
 scheduler = AsyncIOScheduler()
@@ -81,6 +83,15 @@ async def refresh_global_baselines():
     except Exception as e:
         logger.error(f"Fallo al pre-calcular baselines históricos globales: {str(e)}")
 
+async def send_scheduled_health_reports():
+    """Sends the weekday end-of-day SIPAE health report with managers copied."""
+    logger.info("Iniciando envío programado de reportes de cierre SIPAE.")
+    try:
+        result = await run_daily_health_reports(send=True)
+        logger.info("Reportes de cierre SIPAE enviados: %s", result)
+    except Exception as e:
+        logger.error(f"Fallo al enviar reportes de cierre SIPAE: {str(e)}")
+
 def start_scheduler():
     """Registra y arranca el cronograma de ejecución de trabajos automáticos."""
     # Se ejecuta con una cadencia conservadora para no saturar integraciones externas.
@@ -98,6 +109,17 @@ def start_scheduler():
         id='refresh_global_baselines_job',
         replace_existing=True
     )
+    if settings.health_reports_enabled:
+        scheduler.add_job(
+            send_scheduled_health_reports,
+            'cron',
+            day_of_week='mon-fri',
+            hour=settings.health_reports_send_hour,
+            minute=settings.health_reports_send_minute,
+            timezone=settings.health_reports_timezone,
+            id='send_health_reports_job',
+            replace_existing=True
+        )
     scheduler.start()
     
     # Detona una primera ejecución asíncrona al arrancar el servidor (Cold Boot pre-warm)
