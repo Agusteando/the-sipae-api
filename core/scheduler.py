@@ -119,13 +119,23 @@ def update_health_reports_schedule(payload):
     return configure_health_reports_schedule(config)
 
 
+def _safe_job_next_run_time(job):
+    if not job:
+        return None
+    try:
+        next_run_time = getattr(job, 'next_run_time', None)
+    except AttributeError:
+        return None
+    return next_run_time.isoformat() if next_run_time else None
+
+
 def scheduler_status():
     config = get_schedule_config()
     job = scheduler.get_job('send_health_reports_job')
     return {
         'config': config,
         'active': bool(job),
-        'next_run_time': job.next_run_time.isoformat() if job and job.next_run_time else None,
+        'next_run_time': _safe_job_next_run_time(job),
     }
 
 def start_scheduler():

@@ -1,1 +1,1 @@
-Refine health reports console, restore correct preview date handling, and remove runtime schema artifacts
+Fix health report scheduler startup status handling
