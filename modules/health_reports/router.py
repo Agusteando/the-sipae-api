@@ -202,6 +202,7 @@ async def send_test_health_report(
             "error": message.get("error"),
             "resolver_error": result.get("resolver_error"),
             "subject": result["model"]["subject"],
+            "model": result["model"],
             "html": result["html"],
         }
     except Exception as exc:

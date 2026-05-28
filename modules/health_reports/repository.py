@@ -12,9 +12,9 @@ from .recipient_resolver import build_principal_records
 async def ensure_health_report_tables() -> None:
     """Runtime schema creation is intentionally disabled.
 
-    The SIPAE DB user may not have CREATE/ALTER permissions in production, and
-    schema changes must be explicit. Run modules/health_reports/schema.sql
-    manually before enabling persistent logs/tracking.
+    The SIPAE DB user may not have CREATE/ALTER permissions in production.
+    Schema changes are provided outside the code and must be executed manually
+    by the operator before enabling persistent logs/tracking.
     """
     return None
 

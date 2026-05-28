@@ -1,1 +1,1 @@
-Add real health report sends, schedule controls, recipient preview, manual SQL schema, and clearer observation copy
+Refine health reports console, restore correct preview date handling, and remove runtime schema artifacts
