@@ -8,7 +8,7 @@ CORPORATE_COMPLIANCE_HTML = """
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.8/dist/chart.umd.min.js"></script>
   <style>
     :root {
-      --bg: #f8fafc;
+      --bg: #f6f7f9;
       --panel: #ffffff;
       --text: #111827;
       --muted: #64748b;
@@ -19,64 +19,73 @@ CORPORATE_COMPLIANCE_HTML = """
       --red: #ef4444;
       --gray: #94a3b8;
       --ink: #1f2937;
-      --shadow: 0 14px 32px rgba(15, 23, 42, 0.06);
-      --radius: 18px;
+      --radius: 16px;
+      --shadow: 0 10px 24px rgba(15,23,42,.05);
       --sans: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
     }
     * { box-sizing: border-box; }
     body { margin: 0; background: var(--bg); color: var(--text); font-family: var(--sans); line-height: 1.35; }
-    button, input { font: inherit; }
-    .topbar { position: sticky; top: 0; z-index: 50; background: rgba(255,255,255,0.96); border-bottom: 1px solid var(--line); backdrop-filter: blur(14px); }
-    .topbar-inner { max-width: 1640px; margin: 0 auto; padding: 13px 22px; display: grid; grid-template-columns: minmax(240px, 1fr) auto; gap: 16px; align-items: center; }
-    .brand-kicker { font-size: 11px; font-weight: 800; color: var(--muted); text-transform: uppercase; letter-spacing: 0.12em; }
-    .brand-title { margin-top: 2px; font-size: 19px; font-weight: 850; letter-spacing: -0.025em; }
-    .filters { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: flex-end; }
-    .filter-group { display: flex; align-items: center; gap: 6px; padding: 6px; background: var(--soft); border: 1px solid var(--line); border-radius: 999px; }
-    .scope-btn, .plantel-pill, .refresh-btn { border: 1px solid transparent; background: transparent; color: #334155; padding: 9px 12px; border-radius: 999px; font-size: 12px; font-weight: 800; cursor: pointer; transition: 150ms ease; white-space: nowrap; }
-    .scope-btn:hover, .plantel-pill:hover { background: #ffffff; border-color: var(--line); }
-    .scope-btn.active, .plantel-pill.active { background: var(--ink); border-color: var(--ink); color: #ffffff; }
-    .date-input { appearance: none; border: 1px solid var(--line); background: #ffffff; border-radius: 999px; padding: 9px 12px; color: var(--text); font-size: 12px; font-weight: 800; }
-    .refresh-btn { background: var(--text); color: #ffffff; border-color: var(--text); padding-inline: 16px; }
-    .page { max-width: 1640px; margin: 0 auto; padding: 22px 22px 70px; }
-    .loading, .error-box, .card, .section { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); }
-    .loading, .error-box { padding: 24px; color: var(--muted); font-weight: 750; }
-    .error-box { border-color: rgba(239,68,68,0.35); color: #991b1b; background: #fff7f7; }
+    button, input, select { font: inherit; }
     .hidden { display: none !important; }
-    .hero { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(280px, 0.65fr); gap: 18px; align-items: stretch; }
-    .card { padding: 22px; }
-    h1 { margin: 0; font-size: clamp(30px, 4vw, 52px); line-height: 0.98; letter-spacing: -0.055em; }
-    .lead { margin: 12px 0 0; max-width: 790px; font-size: 15px; color: #334155; font-weight: 560; }
-    .stamp-row { margin-top: 18px; display: flex; flex-wrap: wrap; gap: 9px; }
-    .stamp { display: inline-flex; align-items: center; gap: 8px; border: 1px solid var(--line); background: #ffffff; border-radius: 999px; padding: 8px 11px; font-size: 12px; font-weight: 800; color: #334155; }
-    .score-card { display: grid; place-items: center; min-height: 220px; text-align: center; }
-    .score-number { font-size: clamp(72px, 8vw, 112px); font-weight: 920; letter-spacing: -0.08em; line-height: 0.9; }
-    .score-label { margin-top: 10px; font-size: 13px; font-weight: 850; text-transform: uppercase; letter-spacing: 0.08em; color: #334155; }
-    .status-line { height: 8px; border-radius: 999px; background: var(--line); overflow: hidden; margin-top: 14px; }
-    .status-fill { height: 100%; border-radius: 999px; }
-    .grid-kpis { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 14px; margin: 18px 0; }
-    .kpi { padding: 16px; min-height: 116px; }
-    .kpi-title { font-size: 11px; font-weight: 850; color: var(--muted); text-transform: uppercase; letter-spacing: 0.10em; }
-    .kpi-value { margin-top: 10px; font-size: 32px; font-weight: 900; letter-spacing: -0.045em; }
+    .topbar { position: sticky; top: 0; z-index: 50; background: rgba(255,255,255,.97); border-bottom: 1px solid var(--line); backdrop-filter: blur(12px); }
+    .topbar-inner { max-width: 1680px; margin: 0 auto; padding: 12px 22px; display: grid; grid-template-columns: minmax(220px, 1fr) auto; gap: 16px; align-items: center; }
+    .brand-kicker { font-size: 11px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+    .brand-title { margin-top: 2px; font-size: 18px; font-weight: 850; letter-spacing: -.02em; }
+    .filters { display: flex; flex-wrap: wrap; gap: 10px; justify-content: flex-end; align-items: center; }
+    .filter-group { display: flex; align-items: center; gap: 6px; padding: 5px; border: 1px solid var(--line); border-radius: 999px; background: var(--soft); }
+    .scope-btn, .plantel-pill, .refresh-btn { border: 1px solid transparent; background: transparent; color: #334155; padding: 8px 11px; border-radius: 999px; font-size: 12px; font-weight: 800; cursor: pointer; white-space: nowrap; }
+    .scope-btn.active, .plantel-pill.active { color: #fff; background: var(--ink); border-color: var(--ink); }
+    .refresh-btn { color: #fff; background: var(--text); border-color: var(--text); padding-inline: 16px; }
+    .date-input { border: 1px solid var(--line); border-radius: 999px; padding: 8px 11px; font-size: 12px; font-weight: 800; background: #fff; color: var(--text); }
+    .page { max-width: 1680px; margin: 0 auto; padding: 22px 22px 64px; }
+    .loading, .error-box, .card, .section { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); }
+    .loading, .error-box { padding: 22px; font-weight: 760; color: var(--muted); }
+    .error-box { color: #991b1b; background: #fff7f7; border-color: rgba(239,68,68,.35); }
+    .hero { display: grid; grid-template-columns: 1.4fr .6fr; gap: 16px; margin-bottom: 16px; }
+    .card { padding: 20px; }
+    h1 { margin: 0; font-size: clamp(28px, 4vw, 46px); letter-spacing: -.05em; line-height: 1; }
+    .lead { margin: 10px 0 0; max-width: 880px; color: #334155; font-size: 14px; font-weight: 560; }
+    .stamp-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 17px; }
+    .stamp { display: inline-flex; align-items: center; gap: 7px; border: 1px solid var(--line); background: #fff; border-radius: 999px; padding: 7px 10px; font-size: 12px; font-weight: 780; color: #334155; }
+    .quick { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 12px; }
+    .quick-card { padding: 16px; border-left: 5px solid var(--line); }
+    .quick-card.fulfilled { border-left-color: var(--green); }
+    .quick-card.warning { border-left-color: var(--yellow); }
+    .quick-card.critical { border-left-color: var(--red); }
+    .quick-label, .kpi-label, .section-kicker { color: var(--muted); font-size: 11px; font-weight: 850; letter-spacing: .10em; text-transform: uppercase; }
+    .quick-value { margin-top: 8px; font-size: 20px; font-weight: 880; letter-spacing: -.03em; }
+    .quick-detail { margin-top: 7px; color: #475569; font-size: 13px; font-weight: 560; }
+    .kpis { display: grid; grid-template-columns: repeat(8, minmax(0,1fr)); gap: 12px; margin: 16px 0; }
+    .kpi { min-height: 118px; padding: 15px; }
+    .kpi-value { margin-top: 10px; font-size: 28px; font-weight: 900; letter-spacing: -.045em; }
     .kpi-note { margin-top: 5px; font-size: 12px; color: var(--muted); font-weight: 650; }
-    .layout { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
-    .layout .section.wide { grid-column: 1 / -1; }
+    .layout { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 16px; }
     .section { overflow: hidden; }
-    .section-head { padding: 17px 20px; border-bottom: 1px solid var(--line); display: flex; justify-content: space-between; gap: 14px; align-items: flex-start; }
-    .section-eyebrow { font-size: 11px; font-weight: 850; color: var(--muted); text-transform: uppercase; letter-spacing: 0.12em; }
-    .section-title { margin-top: 4px; font-size: 21px; font-weight: 880; letter-spacing: -0.03em; }
-    .section-body { padding: 18px 20px 20px; display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(260px, 0.75fr); gap: 18px; align-items: stretch; }
-    .chart-box { min-height: 320px; height: 360px; border: 1px solid var(--line); border-radius: 16px; padding: 14px; background: #ffffff; }
-    .chart-box.short { height: 310px; }
-    .chart-box.tall { height: 430px; }
-    .note-box { border: 1px solid var(--line); border-radius: 16px; background: #f8fafc; padding: 16px; min-height: 150px; }
-    .note-title { display: flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 850; color: var(--text); text-transform: uppercase; letter-spacing: 0.10em; }
-    .note-box p { margin: 12px 0 0; color: #334155; font-size: 14px; font-weight: 580; }
-    .callout-critical { border-left: 6px solid var(--red); }
-    .callout-warning { border-left: 6px solid var(--yellow); }
-    .callout-fulfilled { border-left: 6px solid var(--green); }
-    .callout-unavailable { border-left: 6px solid var(--gray); }
-    @media (max-width: 1180px) { .topbar-inner, .hero, .section-body, .layout { grid-template-columns: 1fr; } .filters { justify-content: flex-start; } .grid-kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); } .layout .section.wide { grid-column: auto; } }
-    @media (max-width: 760px) { .page { padding: 16px 12px 42px; } .topbar-inner { padding: 12px; } .grid-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } .section-head { display: block; } .chart-box { height: 320px; } }
+    .section.wide { grid-column: 1 / -1; }
+    .section-head { padding: 16px 18px; border-bottom: 1px solid var(--line); display: flex; justify-content: space-between; gap: 14px; align-items: flex-start; }
+    .section-title { margin-top: 3px; font-size: 20px; font-weight: 860; letter-spacing: -.025em; }
+    .section-sub { margin-top: 3px; font-size: 12px; color: var(--muted); font-weight: 620; }
+    .section-body { padding: 18px; display: grid; grid-template-columns: minmax(0,1.25fr) minmax(260px,.75fr); gap: 16px; }
+    .chart-box { height: 350px; min-height: 310px; border: 1px solid var(--line); border-radius: 14px; background: #fff; padding: 12px; }
+    .chart-box.tall { height: 440px; }
+    .note-box { border: 1px solid var(--line); border-radius: 14px; background: #f8fafc; padding: 15px; min-height: 132px; border-left: 5px solid var(--line); }
+    .note-box.fulfilled { border-left-color: var(--green); }
+    .note-box.warning { border-left-color: var(--yellow); }
+    .note-box.critical { border-left-color: var(--red); }
+    .note-title { font-size: 11px; font-weight: 850; letter-spacing: .10em; text-transform: uppercase; color: #334155; }
+    .note-line { margin-top: 10px; font-size: 14px; font-weight: 610; color: #334155; }
+    .selector { border: 1px solid var(--line); border-radius: 999px; padding: 8px 12px; font-size: 12px; font-weight: 800; background: #fff; color: #334155; }
+    .matrix { display: grid; grid-template-columns: 76px repeat(7, minmax(110px, 1fr)); gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; }
+    .mcell { background: #fff; min-height: 66px; padding: 10px; display: flex; flex-direction: column; justify-content: center; }
+    .mhead { background: #f8fafc; color: #475569; font-size: 11px; font-weight: 850; text-transform: uppercase; letter-spacing: .08em; }
+    .mplantel { font-size: 15px; font-weight: 900; }
+    .mvalue { font-size: 18px; font-weight: 890; letter-spacing: -.035em; }
+    .msub { font-size: 11px; color: #64748b; margin-top: 2px; font-weight: 650; }
+    .tone-fulfilled { box-shadow: inset 5px 0 0 var(--green); }
+    .tone-warning { box-shadow: inset 5px 0 0 var(--yellow); }
+    .tone-critical { box-shadow: inset 5px 0 0 var(--red); }
+    @media (max-width: 1240px) { .topbar-inner, .hero, .section-body { grid-template-columns: 1fr; } .filters { justify-content: flex-start; } .quick { grid-template-columns: repeat(2,minmax(0,1fr)); } .kpis { grid-template-columns: repeat(4,minmax(0,1fr)); } .layout { grid-template-columns: 1fr; } .section.wide { grid-column: auto; } .matrix { grid-template-columns: 90px repeat(7, minmax(128px,1fr)); overflow-x: auto; } }
+    @media (max-width: 760px) { .page { padding: 16px 12px 42px; } .topbar-inner { padding: 12px; } .quick, .kpis { grid-template-columns: repeat(2,minmax(0,1fr)); } .section-head { display:block; } .chart-box { height: 320px; } }
   </style>
 </head>
 <body>
@@ -107,122 +116,94 @@ CORPORATE_COMPLIANCE_HTML = """
       <section class="hero">
         <div class="card">
           <h1>Tablero operativo</h1>
-          <p class="lead">Comparativo mensual por plantel. Asistencia, puntualidad, accesos, personal, revisión académica y SAPF.</p>
+          <p class="lead">Lectura por plantel con datos agregados. Compara listas, asistencia, retardos, accesos, personal, revisión académica y SAPF.</p>
           <div class="stamp-row">
             <span id="scopeStamp" class="stamp">Mes en curso</span>
             <span id="dateStamp" class="stamp">Periodo</span>
             <span id="generatedStamp" class="stamp">Actualizado</span>
-            <span class="stamp">PT · PM · ST · SM · PREET · PREEM</span>
           </div>
         </div>
-        <div class="card score-card">
-          <div>
-            <div id="indexNumber" class="score-number">--</div>
-            <div id="indexLabel" class="score-label">Sin lectura</div>
-            <div class="status-line"><div id="indexFill" class="status-fill" style="width:0%"></div></div>
-          </div>
-        </div>
+        <div id="quickRead" class="quick"></div>
       </section>
 
-      <section class="grid-kpis">
-        <div class="card kpi"><div class="kpi-title">Listas completas</div><div id="kpiCompletion" class="kpi-value">--</div><div class="kpi-note">Promedio del periodo</div></div>
-        <div class="card kpi"><div class="kpi-title">Asistencia real</div><div id="kpiAttendance" class="kpi-value">--</div><div class="kpi-note">Registros capturados</div></div>
-        <div class="card kpi"><div class="kpi-title">Retardos alumnos</div><div id="kpiTardies" class="kpi-value">--</div><div class="kpi-note">Primer acceso del día</div></div>
-        <div class="card kpi"><div class="kpi-title">Uso de accesos</div><div id="kpiScans" class="kpi-value">--</div><div class="kpi-note">Entradas con scan</div></div>
-        <div class="card kpi"><div class="kpi-title">Personal</div><div id="kpiEmployee" class="kpi-value">--</div><div class="kpi-note">Faltas y retardos</div></div>
-        <div class="card kpi"><div class="kpi-title">SAPF</div><div id="kpiSapf" class="kpi-value">--</div><div class="kpi-note">Fichas + seguimientos</div></div>
+      <section class="kpis">
+        <div class="card kpi"><div class="kpi-label">Listas</div><div id="kpiLists" class="kpi-value">--</div><div class="kpi-note">Completas</div></div>
+        <div class="card kpi"><div class="kpi-label">Brecha listas</div><div id="kpiMissingLists" class="kpi-value">--</div><div class="kpi-note">Faltantes</div></div>
+        <div class="card kpi"><div class="kpi-label">Asistencia</div><div id="kpiAttendance" class="kpi-value">--</div><div class="kpi-note">Registros capturados</div></div>
+        <div class="card kpi"><div class="kpi-label">Ausencias</div><div id="kpiAbsence" class="kpi-value">--</div><div class="kpi-note">Por 100 registros</div></div>
+        <div class="card kpi"><div class="kpi-label">Retardos</div><div id="kpiTardies" class="kpi-value">--</div><div class="kpi-note">Por 100 entradas</div></div>
+        <div class="card kpi"><div class="kpi-label">Accesos</div><div id="kpiAccess" class="kpi-value">--</div><div class="kpi-note">Cobertura</div></div>
+        <div class="card kpi"><div class="kpi-label">Personal</div><div id="kpiPeople" class="kpi-value">--</div><div class="kpi-note">Incidencias</div></div>
+        <div class="card kpi"><div class="kpi-label">SAPF</div><div id="kpiSapf" class="kpi-value">--</div><div class="kpi-note">Fichas</div></div>
       </section>
 
       <div class="layout">
         <section class="section wide">
           <div class="section-head">
-            <div><div class="section-eyebrow">Resumen</div><div class="section-title">Resultado por plantel</div></div>
-            <span class="stamp">Verde ≥ 78 · Amarillo 55-77 · Rojo &lt; 55</span>
+            <div>
+              <div class="section-kicker">Resumen</div>
+              <div class="section-title">Mapa por plantel</div>
+              <div class="section-sub">Una fila por plantel. Valores agregados del periodo seleccionado.</div>
+            </div>
           </div>
-          <div class="section-body">
-            <div class="chart-box"><canvas id="scoreChart"></canvas></div>
-            <div id="scoreNote" class="note-box"></div>
-          </div>
-        </section>
-
-        <section class="section wide">
-          <div class="section-head">
-            <div><div class="section-eyebrow">Mes</div><div class="section-title">Tendencia diaria</div></div>
-          </div>
-          <div class="section-body">
-            <div class="chart-box"><canvas id="dailyChart"></canvas></div>
-            <div id="dailyNote" class="note-box"></div>
+          <div class="section-body" style="display:block">
+            <div id="matrix" class="matrix"></div>
           </div>
         </section>
 
         <section class="section wide">
           <div class="section-head">
-            <div><div class="section-eyebrow">Brecha</div><div class="section-title">Áreas que mueven el resultado</div></div>
+            <div>
+              <div class="section-kicker">Evolución</div>
+              <div class="section-title">Comparativo en el tiempo</div>
+              <div class="section-sub">Mismo indicador para todos los planteles.</div>
+            </div>
+            <select id="trendMetric" class="selector">
+              <option value="lists_completion">% listas completas</option>
+              <option value="attendance_rate">% asistencia registrada</option>
+              <option value="tardies_per_100">Retardos por 100 entradas</option>
+              <option value="access_coverage">% cobertura de accesos</option>
+            </select>
           </div>
           <div class="section-body">
-            <div class="chart-box"><canvas id="radarChart"></canvas></div>
-            <div id="radarNote" class="note-box"></div>
+            <div class="chart-box tall"><canvas id="trendChart"></canvas></div>
+            <div id="trendNote" class="note-box"></div>
           </div>
         </section>
 
         <section class="section">
-          <div class="section-head">
-            <div><div class="section-eyebrow">Asistencia</div><div class="section-title">Registro y asistencia</div></div>
-          </div>
-          <div class="section-body">
-            <div class="chart-box short"><canvas id="attendanceChart"></canvas></div>
-            <div id="attendanceNote" class="note-box"></div>
-          </div>
+          <div class="section-head"><div><div class="section-kicker">Pase de lista</div><div class="section-title">Esperado vs capturado</div><div class="section-sub">Listas esperadas y listas faltantes.</div></div></div>
+          <div class="section-body"><div class="chart-box"><canvas id="listsChart"></canvas></div><div id="listsNote" class="note-box"></div></div>
         </section>
 
         <section class="section">
-          <div class="section-head">
-            <div><div class="section-eyebrow">Puntualidad</div><div class="section-title">Retardos de alumnos</div></div>
-          </div>
-          <div class="section-body">
-            <div class="chart-box short"><canvas id="tardyChart"></canvas></div>
-            <div id="tardyNote" class="note-box"></div>
-          </div>
+          <div class="section-head"><div><div class="section-kicker">Asistencia</div><div class="section-title">Ausencias registradas</div><div class="section-sub">Ausencias por cada 100 registros capturados.</div></div></div>
+          <div class="section-body"><div class="chart-box"><canvas id="attendanceChart"></canvas></div><div id="attendanceNote" class="note-box"></div></div>
         </section>
 
         <section class="section">
-          <div class="section-head">
-            <div><div class="section-eyebrow">Accesos</div><div class="section-title">Husky Pass</div></div>
-          </div>
-          <div class="section-body">
-            <div class="chart-box short"><canvas id="accessChart"></canvas></div>
-            <div id="accessNote" class="note-box"></div>
-          </div>
+          <div class="section-head"><div><div class="section-kicker">Puntualidad</div><div class="section-title">Retardos de alumnos</div><div class="section-sub">Retardos sobre primeras entradas registradas.</div></div></div>
+          <div class="section-body"><div class="chart-box"><canvas id="tardyChart"></canvas></div><div id="tardyNote" class="note-box"></div></div>
         </section>
 
         <section class="section">
-          <div class="section-head">
-            <div><div class="section-eyebrow">Personal</div><div class="section-title">Asistencia laboral</div></div>
-          </div>
-          <div class="section-body">
-            <div class="chart-box short"><canvas id="peopleChart"></canvas></div>
-            <div id="peopleNote" class="note-box"></div>
-          </div>
+          <div class="section-head"><div><div class="section-kicker">Accesos</div><div class="section-title">Cobertura de entrada</div><div class="section-sub">Entradas con scan contra entradas esperadas.</div></div></div>
+          <div class="section-body"><div class="chart-box"><canvas id="accessChart"></canvas></div><div id="accessNote" class="note-box"></div></div>
         </section>
 
         <section class="section">
-          <div class="section-head">
-            <div><div class="section-eyebrow">Académico</div><div class="section-title">Revisión y observación</div></div>
-          </div>
-          <div class="section-body">
-            <div class="chart-box short"><canvas id="academicChart"></canvas></div>
-            <div id="academicNote" class="note-box"></div>
-          </div>
+          <div class="section-head"><div><div class="section-kicker">Personal</div><div class="section-title">Incidencias laborales</div><div class="section-sub">Faltas y retardos del periodo.</div></div></div>
+          <div class="section-body"><div class="chart-box"><canvas id="peopleChart"></canvas></div><div id="peopleNote" class="note-box"></div></div>
         </section>
 
         <section class="section">
-          <div class="section-head">
-            <div><div class="section-eyebrow">SAPF</div><div class="section-title">Atención documentada</div></div>
-          </div>
-          <div class="section-body">
-            <div class="chart-box short"><canvas id="sapfChart"></canvas></div>
-            <div id="sapfNote" class="note-box"></div>
-          </div>
+          <div class="section-head"><div><div class="section-kicker">Académico</div><div class="section-title">Revisión y observación</div><div class="section-sub">Pendientes de revisión y observación docente.</div></div></div>
+          <div class="section-body"><div class="chart-box"><canvas id="academicChart"></canvas></div><div id="academicNote" class="note-box"></div></div>
+        </section>
+
+        <section class="section wide">
+          <div class="section-head"><div><div class="section-kicker">SAPF</div><div class="section-title">Atención documentada</div><div class="section-sub">Fichas, seguimientos y casos abiertos.</div></div></div>
+          <div class="section-body"><div class="chart-box"><canvas id="sapfChart"></canvas></div><div id="sapfNote" class="note-box"></div></div>
         </section>
       </div>
     </div>
@@ -230,126 +211,89 @@ CORPORATE_COMPLIANCE_HTML = """
 
   <script>
     const PLANTEL_ORDER = ["PT", "PM", "ST", "SM", "PREET", "PREEM"];
-    const GREEN = "#22c55e";
-    const YELLOW = "#f59e0b";
-    const RED = "#ef4444";
-    const GRAY = "#94a3b8";
-    const INK = "#1f2937";
+    const GREEN = "#22c55e", YELLOW = "#f59e0b", RED = "#ef4444", GRAY = "#94a3b8", INK = "#1f2937";
+    const LINE_COLORS = ["#1f2937", "#64748b", "#0f766e", "#7c3aed", "#b45309", "#be123c"];
     const charts = {};
     const state = { scope: "month", selected: new Set(PLANTEL_ORDER), data: null };
 
-    function fmt(value, digits = 0) {
-      const num = Number(value || 0);
-      return num.toLocaleString("es-MX", { maximumFractionDigits: digits, minimumFractionDigits: digits });
-    }
-    function pct(value, digits = 1) { return `${fmt(value, digits)}%`; }
-    function scoreColor(score) { const v = Number(score || 0); return v < 55 ? RED : v < 78 ? YELLOW : GREEN; }
-    function riskColor(risk) { const v = Number(risk || 0); return v >= 45 ? RED : v >= 22 ? YELLOW : GREEN; }
-    function scanColor(rate) { const v = Number(rate || 0); return v < 25 ? RED : v < 55 ? YELLOW : GREEN; }
-    function statusForScore(score) { const v = Number(score || 0); return v < 55 ? "critical" : v < 78 ? "warning" : "fulfilled"; }
-    function statusForScan(rate) { const v = Number(rate || 0); return v < 25 ? "critical" : v < 55 ? "warning" : "fulfilled"; }
-    function statusForRisk(risk) { const v = Number(risk || 0); return v >= 45 ? "critical" : v >= 22 ? "warning" : "fulfilled"; }
-    function plantelRows() { return (state.data?.planteles || []).slice().sort((a, b) => PLANTEL_ORDER.indexOf(a.plantel) - PLANTEL_ORDER.indexOf(b.plantel)); }
-    function selectedPlanteles() { return PLANTEL_ORDER.filter(code => state.selected.has(code)); }
-    function avg(values) { const clean = values.map(Number).filter(Number.isFinite); return clean.length ? clean.reduce((a,b)=>a+b,0) / clean.length : 0; }
-    function sum(values) { return values.map(Number).filter(Number.isFinite).reduce((a,b)=>a+b,0); }
-
-    function setNote(id, html, status = "warning") {
-      const el = document.getElementById(id);
-      el.className = `note-box callout-${status || "warning"}`;
-      el.innerHTML = `<div class="note-title">Dato principal</div><p>${html}</p>`;
-    }
-    function destroyChart(id) { if (charts[id]) { charts[id].destroy(); delete charts[id]; } }
-    function renderChart(id, config) { destroyChart(id); charts[id] = new Chart(document.getElementById(id), config); }
-    function commonOptions(extra = {}) {
-      return {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: {
-          legend: { position: "bottom", labels: { boxWidth: 12, usePointStyle: true, color: "#334155", font: { weight: "bold" } } },
-          tooltip: { callbacks: { label: context => {
-            const parsed = context.parsed || {};
-            const value = context.chart?.options?.indexAxis === "y" ? parsed.x : parsed.y;
-            return `${context.dataset.label}: ${fmt(value, 1)}`;
-          } } }
-        },
-        ...extra,
-      };
-    }
+    const $ = id => document.getElementById(id);
+    const fmt = (value, digits = 0) => Number(value || 0).toLocaleString("es-MX", { maximumFractionDigits: digits, minimumFractionDigits: digits });
+    const pct = (value, digits = 1) => `${fmt(value, digits)}%`;
+    const statusColor = status => status === "critical" ? RED : status === "warning" ? YELLOW : status === "fulfilled" ? GREEN : GRAY;
+    const lowGoodColor = (value, warning, critical) => Number(value || 0) >= critical ? RED : Number(value || 0) >= warning ? YELLOW : GREEN;
+    const highGoodColor = (value, warning, critical) => Number(value || 0) <= critical ? RED : Number(value || 0) <= warning ? YELLOW : GREEN;
+    const labels = () => matrixRows().map(r => r.plantel);
+    const matrixRows = () => (((state.data || {}).operational || {}).matrix || []).filter(r => state.selected.has(r.plantel));
+    const network = () => (((state.data || {}).operational || {}).network || {});
+    const trend = () => (((state.data || {}).operational || {}).trend || { labels: [], metrics: {} });
 
     function initFilters() {
+      const holder = $("plantelFilters");
+      holder.innerHTML = PLANTEL_ORDER.map(code => `<button class="plantel-pill active" data-plantel="${code}">${code}</button>`).join("");
+      holder.querySelectorAll(".plantel-pill").forEach(btn => {
+        btn.addEventListener("click", () => {
+          const code = btn.dataset.plantel;
+          if (state.selected.has(code) && state.selected.size > 1) state.selected.delete(code); else state.selected.add(code);
+          btn.classList.toggle("active", state.selected.has(code));
+          loadDashboard();
+        });
+      });
       document.querySelectorAll(".scope-btn").forEach(btn => {
         btn.addEventListener("click", () => {
-          document.querySelectorAll(".scope-btn").forEach(b => b.classList.remove("active"));
-          btn.classList.add("active");
           state.scope = btn.dataset.scope;
+          document.querySelectorAll(".scope-btn").forEach(b => b.classList.toggle("active", b === btn));
           const custom = state.scope === "range";
-          document.getElementById("startDate").classList.toggle("hidden", !custom);
-          document.getElementById("endDate").classList.toggle("hidden", !custom);
-          if (custom && !document.getElementById("startDate").value) {
+          $("startDate").classList.toggle("hidden", !custom);
+          $("endDate").classList.toggle("hidden", !custom);
+          if (custom && !$("startDate").value) {
             const now = new Date();
-            const start = new Date(now.getFullYear(), now.getMonth(), 1);
-            document.getElementById("startDate").value = start.toISOString().slice(0, 10);
-            document.getElementById("endDate").value = now.toISOString().slice(0, 10);
+            $("startDate").value = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10);
+            $("endDate").value = now.toISOString().slice(0, 10);
           }
           loadDashboard();
         });
       });
-      const plantelWrap = document.getElementById("plantelFilters");
-      PLANTEL_ORDER.forEach(code => {
-        const btn = document.createElement("button");
-        btn.className = "plantel-pill active";
-        btn.textContent = code;
-        btn.type = "button";
-        btn.addEventListener("click", () => {
-          if (state.selected.has(code) && state.selected.size > 1) { state.selected.delete(code); btn.classList.remove("active"); }
-          else { state.selected.add(code); btn.classList.add("active"); }
-          loadDashboard();
-        });
-        plantelWrap.appendChild(btn);
-      });
-      document.getElementById("refreshBtn").addEventListener("click", loadDashboard);
-      document.getElementById("startDate").addEventListener("change", loadDashboard);
-      document.getElementById("endDate").addEventListener("change", loadDashboard);
+      $("refreshBtn").addEventListener("click", () => loadDashboard(true));
+      $("startDate").addEventListener("change", () => loadDashboard(true));
+      $("endDate").addEventListener("change", () => loadDashboard(true));
+      $("trendMetric").addEventListener("change", renderTrendChart);
     }
 
-    async function loadDashboard() {
-      document.getElementById("loadState").classList.remove("hidden");
-      document.getElementById("errorState").classList.add("hidden");
-      document.getElementById("dashboard").classList.add("hidden");
+    async function loadDashboard(force = false) {
+      $("loadState").classList.remove("hidden");
+      $("errorState").classList.add("hidden");
+      $("dashboard").classList.add("hidden");
+      const params = new URLSearchParams();
+      params.set("scope", state.scope || "month");
+      params.set("planteles", Array.from(state.selected).join(","));
+      params.set("include_baselines", "false");
+      if (force) params.set("force_refresh", "true");
+      if (state.scope === "range") {
+        if ($("startDate").value) params.set("start_date", $("startDate").value);
+        if ($("endDate").value) params.set("end_date", $("endDate").value);
+      }
       try {
-        const params = new URLSearchParams();
-        params.set("scope", state.scope || "month");
-        params.set("planteles", selectedPlanteles().join(","));
-        params.set("include_baselines", "false");
-        if (state.scope === "range") {
-          params.set("start_date", document.getElementById("startDate").value);
-          params.set("end_date", document.getElementById("endDate").value);
-        }
-        const response = await fetch(`/api/v1/corporate-compliance-risk-index?${params.toString()}`, { cache: "no-store" });
-        if (!response.ok) {
-          const body = await response.text();
-          const cleanBody = body.replace(/<[^>]+>/g, " ").replace(new RegExp("\\s+", "g"), " ").trim().slice(0, 300);
-          throw new Error(`HTTP ${response.status}: ${cleanBody || response.statusText}`);
-        }
-        state.data = await response.json();
+        const response = await fetch(`/api/v1/corporate-compliance-risk-index?${params.toString()}`, { headers: { "Accept": "application/json" } });
+        const raw = await response.text();
+        if (!response.ok) throw new Error(`HTTP ${response.status}: ${raw.slice(0, 280)}`);
+        state.data = JSON.parse(raw);
         renderDashboard();
-        document.getElementById("dashboard").classList.remove("hidden");
+        $("dashboard").classList.remove("hidden");
       } catch (error) {
-        const box = document.getElementById("errorState");
-        box.textContent = `No se pudo cargar el tablero: ${error.message}`;
-        box.classList.remove("hidden");
+        $("errorState").textContent = `No se pudo cargar el tablero: ${String(error.message || error).slice(0, 360)}`;
+        $("errorState").classList.remove("hidden");
       } finally {
-        document.getElementById("loadState").classList.add("hidden");
+        $("loadState").classList.add("hidden");
       }
     }
 
     function renderDashboard() {
-      renderHero();
+      renderStamps();
+      renderQuickRead();
       renderKpis();
-      renderScoreChart();
-      renderDailyChart();
-      renderRadarChart();
+      renderMatrix();
+      renderTrendChart();
+      renderListsChart();
       renderAttendanceChart();
       renderTardyChart();
       renderAccessChart();
@@ -358,196 +302,168 @@ CORPORATE_COMPLIANCE_HTML = """
       renderSapfChart();
     }
 
-    function renderHero() {
-      const agg = state.data.aggregate;
-      const index = agg.corporate_index.score || 0;
-      document.getElementById("indexNumber").textContent = fmt(index, 1);
-      document.getElementById("indexLabel").textContent = agg.corporate_index.label || "Sin lectura";
-      document.getElementById("indexNumber").style.color = scoreColor(index);
-      document.getElementById("indexFill").style.width = `${Math.max(0, Math.min(100, index))}%`;
-      document.getElementById("indexFill").style.background = scoreColor(index);
-      const scopeLabel = (state.data.scope === "ciclo_escolar") ? "Ciclo" : (state.data.scope === "range") ? "Rango" : "Mes en curso";
-      document.getElementById("scopeStamp").textContent = scopeLabel;
-      document.getElementById("dateStamp").textContent = `${agg.window.start} → ${agg.window.end} · ${agg.window.business_days} días hábiles`;
-      document.getElementById("generatedStamp").textContent = `Actualizado: ${new Date(state.data.generated_at).toLocaleString("es-MX")}`;
+    function renderStamps() {
+      const agg = state.data.aggregate || {};
+      const win = agg.window || {};
+      const labels = { month: "Mes en curso", ciclo_escolar: "Ciclo", range: "Rango", today: "Hoy" };
+      $("scopeStamp").textContent = labels[state.data.scope] || labels[state.scope] || "Mes en curso";
+      $("dateStamp").textContent = `${win.start || "—"} → ${win.end || "—"} · ${win.business_days || 0} días hábiles`;
+      const generated = state.data.generated_at ? new Date(state.data.generated_at) : null;
+      $("generatedStamp").textContent = generated ? `Actualizado ${generated.toLocaleString("es-MX")}` : "Actualizado";
+    }
+
+    function renderQuickRead() {
+      const rows = ((state.data.operational || {}).quick_read || []).slice(0, 4);
+      $("quickRead").innerHTML = rows.map(item => `
+        <div class="card quick-card ${item.status || ""}">
+          <div class="quick-label">${escapeHtml(item.label)}</div>
+          <div class="quick-value">${escapeHtml(item.value)}</div>
+          <div class="quick-detail">${escapeHtml(item.detail)}</div>
+        </div>`).join("");
     }
 
     function renderKpis() {
-      const rows = plantelRows();
-      const t = state.data.aggregate.totals;
-      const completion = avg(rows.map(p => p.domains.attendance.completion_percent));
-      const attendance = avg(rows.map(p => p.domains.attendance.attendance_rate_percent));
-      const scans = avg(rows.map(p => p.domains.husky.scan_rate_percent));
-      document.getElementById("kpiCompletion").textContent = pct(completion);
-      document.getElementById("kpiAttendance").textContent = pct(attendance);
-      document.getElementById("kpiTardies").textContent = fmt(t.student_tardies);
-      document.getElementById("kpiScans").textContent = pct(scans);
-      document.getElementById("kpiEmployee").textContent = fmt(t.employee_incidents);
-      document.getElementById("kpiSapf").textContent = fmt(t.sapf_parent_interactions);
+      const n = network();
+      $("kpiLists").textContent = pct(n.attendance_lists_completion_pct || 0);
+      $("kpiMissingLists").textContent = fmt(n.attendance_lists_missing || 0);
+      $("kpiAttendance").textContent = pct(n.student_attendance_pct || 0);
+      $("kpiAbsence").textContent = fmt(n.absences_per_100 || 0, 1);
+      $("kpiTardies").textContent = fmt(n.tardies_per_100_entries || 0, 1);
+      $("kpiAccess").textContent = pct(n.access_coverage_pct || 0);
+      $("kpiPeople").textContent = fmt(n.employee_incidents || 0);
+      $("kpiSapf").textContent = fmt(n.sapf_tickets || 0);
     }
 
-    function renderScoreChart() {
-      const rows = plantelRows();
-      const labels = rows.map(p => p.plantel);
-      const values = rows.map(p => p.index.score || 0);
-      renderChart("scoreChart", {
-        type: "bar",
-        data: { labels, datasets: [{ label: "Puntaje", data: values, backgroundColor: values.map(scoreColor), borderRadius: 12 }] },
-        options: commonOptions({ indexAxis: "y", scales: { x: { min: 0, max: 100, grid: { color: "#e5e7eb" }, ticks: { color: "#334155", font: { weight: "bold" } } }, y: { grid: { display: false }, ticks: { color: "#111827", font: { weight: "bold" } } } } })
-      });
-      const worst = rows.reduce((a, b) => Number(a.index.score || 0) < Number(b.index.score || 0) ? a : b, rows[0]);
-      const best = rows.reduce((a, b) => Number(a.index.score || 0) > Number(b.index.score || 0) ? a : b, rows[0]);
-      setNote("scoreNote", `${best.plantel} está arriba con ${fmt(best.index.score, 1)} puntos. ${worst.plantel} queda abajo con ${fmt(worst.index.score, 1)}. Brecha entre ambos: ${fmt(Number(best.index.score || 0) - Number(worst.index.score || 0), 1)} puntos.`, statusForScore(worst.index.score));
-    }
-
-    function renderDailyChart() {
-      const series = state.data.aggregate.daily_series || [];
-      const labels = series.map(p => p.date.slice(5));
-      const completion = series.map(p => p.completion_percent || 0);
-      const attendance = series.map(p => p.attendance_rate_percent || 0);
-      const tardies = series.map(p => p.student_tardies || 0);
-      renderChart("dailyChart", {
-        type: "line",
-        data: { labels, datasets: [
-          { label: "% listas completas", data: completion, borderColor: GREEN, backgroundColor: "rgba(34,197,94,0.10)", tension: 0.25, fill: false, yAxisID: "y" },
-          { label: "% asistencia", data: attendance, borderColor: INK, backgroundColor: "rgba(31,41,55,0.08)", tension: 0.25, fill: false, yAxisID: "y" },
-          { label: "Retardos", data: tardies, borderColor: YELLOW, backgroundColor: "rgba(245,158,11,0.12)", tension: 0.25, fill: false, yAxisID: "y1" }
-        ] },
-        options: commonOptions({ scales: { y: { min: 0, max: 100, grid: { color: "#e5e7eb" }, ticks: { color: "#334155", font: { weight: "bold" } } }, y1: { position: "right", beginAtZero: true, grid: { drawOnChartArea: false }, ticks: { color: "#334155", font: { weight: "bold" } } }, x: { grid: { display: false }, ticks: { color: "#334155", maxRotation: 0, autoSkip: true } } } })
-      });
-      const worstDay = series.reduce((a, b) => Number(a.completion_percent || 100) < Number(b.completion_percent || 100) ? a : b, series[0] || {});
-      const maxTardyDay = series.reduce((a, b) => Number(a.student_tardies || 0) > Number(b.student_tardies || 0) ? a : b, series[0] || {});
-      setNote("dailyNote", `Día con menor registro: ${worstDay.date || "—"} (${pct(worstDay.completion_percent || 0)} listas completas). Día con más retardos: ${maxTardyDay.date || "—"} (${fmt(maxTardyDay.student_tardies || 0)}).`, statusForScore(worstDay.completion_percent || 100));
-    }
-
-    function renderRadarChart() {
-      const rows = plantelRows();
-      const labels = ["Asistencia", "Accesos", "Personal", "Académico", "SAPF"];
-      const values = [
-        avg(rows.map(p => p.domain_scores.attendance?.compliance_score || 0)),
-        avg(rows.map(p => p.domain_scores.husky?.compliance_score || 0)),
-        avg(rows.map(p => p.domain_scores.employee?.compliance_score || 0)),
-        avg(rows.map(p => p.domain_scores.academic?.compliance_score || 0)),
-        avg(rows.map(p => p.domain_scores.sapf?.compliance_score || 0)),
+    function renderMatrix() {
+      const rows = matrixRows();
+      const cols = [
+        ["Plantel", ""], ["Listas", "%"], ["Asistencia", "%"], ["Retardos", "/100"], ["Accesos", "%"], ["Personal", "inc."], ["Académico", "pend."], ["SAPF", "abiertos"]
       ];
-      renderChart("radarChart", {
-        type: "radar",
-        data: { labels, datasets: [{ label: "Promedio", data: values, borderColor: INK, backgroundColor: "rgba(31,41,55,0.12)", pointBackgroundColor: values.map(scoreColor) }] },
-        options: commonOptions({ scales: { r: { min: 0, max: 100, ticks: { backdropColor: "transparent", color: "#64748b" }, grid: { color: "#e5e7eb" }, angleLines: { color: "#e5e7eb" }, pointLabels: { color: "#111827", font: { weight: "bold" } } } } })
+      const header = cols.map(([h,s]) => `<div class="mcell mhead"><div>${h}</div><span class="msub">${s}</span></div>`).join("");
+      const body = rows.map(r => {
+        const cells = [
+          `<div class="mcell"><div class="mplantel">${r.plantel}</div><span class="msub">${escapeHtml(r.resolved_name || "")}</span></div>`,
+          matrixCell(r.attendance_lists.completion_pct, "%", r.attendance_lists.status, `${r.attendance_lists.missing} faltantes`),
+          matrixCell(r.student_attendance.attendance_pct, "%", r.student_attendance.status, `${fmt(r.student_attendance.absences_per_100,1)} aus./100`),
+          matrixCell(r.student_tardies.tardies_per_100_entries, "", r.student_tardies.status, `${r.student_tardies.tardies} retardos`),
+          matrixCell(r.access.coverage_pct, "%", r.access.status, `${r.access.gap} brecha`),
+          matrixCell(r.employee_attendance.incidents, "", r.employee_attendance.status, `${r.employee_attendance.absences} faltas`),
+          matrixCell(r.academic.backlog, "", r.academic.status, `${r.academic.pending_lesson_reviews} planeaciones`),
+          matrixCell(r.sapf.open_cases, "", r.sapf.status, `${r.sapf.tickets} fichas`),
+        ];
+        return cells.join("");
+      }).join("");
+      $("matrix").innerHTML = header + body;
+    }
+
+    function matrixCell(value, suffix, status, sub) {
+      return `<div class="mcell tone-${status || "fulfilled"}"><div class="mvalue">${fmt(value, Number(value) % 1 ? 1 : 0)}${suffix}</div><span class="msub">${escapeHtml(sub || "")}</span></div>`;
+    }
+
+    function chartBase(extra = {}) {
+      return Object.assign({
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { labels: { color: "#334155", font: { weight: "bold" } } }, tooltip: { mode: "index", intersect: false } },
+        scales: { x: { grid: { display: false }, ticks: { color: "#111827", font: { weight: "bold" } } }, y: { beginAtZero: true, grid: { color: "#e5e7eb" }, ticks: { color: "#334155", font: { weight: "bold" } } } }
+      }, extra);
+    }
+
+    function renderChart(id, config) {
+      if (charts[id]) charts[id].destroy();
+      charts[id] = new Chart($(id), config);
+    }
+
+    function setNote(id, title, lines, status = "fulfilled") {
+      const box = $(id);
+      box.className = `note-box ${status || "fulfilled"}`;
+      box.innerHTML = `<div class="note-title">${escapeHtml(title)}</div>${[].concat(lines || []).map(line => `<div class="note-line">${escapeHtml(line)}</div>`).join("")}`;
+    }
+
+    function renderTrendChart() {
+      const tr = trend();
+      const metricKey = $("trendMetric").value;
+      const metric = (tr.metrics || {})[metricKey] || { label: "", series: [] };
+      const series = (metric.series || []).filter(s => state.selected.has(s.plantel));
+      renderChart("trendChart", {
+        type: "line",
+        data: { labels: tr.labels || [], datasets: series.map((s, i) => ({ label: s.plantel, data: s.values || [], borderColor: LINE_COLORS[i % LINE_COLORS.length], backgroundColor: LINE_COLORS[i % LINE_COLORS.length], borderWidth: 3, tension: .25, pointRadius: 3 })) },
+        options: chartBase({ scales: { x: { grid: { display: false }, ticks: { color: "#111827", font: { weight: "bold" } } }, y: { beginAtZero: true, grid: { color: "#e5e7eb" }, ticks: { color: "#334155", font: { weight: "bold" } } } } })
       });
-      const minIndex = values.reduce((min, v, i) => v < values[min] ? i : min, 0);
-      setNote("radarNote", `Área con menor resultado promedio: ${labels[minIndex]} (${fmt(values[minIndex], 1)}). Este gráfico sirve para ubicar la brecha principal sin mezclarla con el tamaño del plantel.`, statusForScore(values[minIndex]));
+      const all = series.flatMap(s => (s.values || []).map((v, idx) => ({ plantel: s.plantel, value: Number(v || 0), label: (tr.labels || [])[idx] })));
+      if (!all.length) return setNote("trendNote", "Lectura", "Sin datos para la evolución del periodo.", "warning");
+      const highBad = metricKey === "tardies_per_100";
+      const main = highBad ? all.reduce((a,b)=>a.value>b.value?a:b) : all.reduce((a,b)=>a.value<b.value?a:b);
+      setNote("trendNote", "Lectura", `${main.plantel} marca ${fmt(main.value,1)}${metric.unit || ""} en ${main.label || "el periodo"}.`, highBad ? lowGoodColor(main.value, 4, 9) === RED ? "critical" : lowGoodColor(main.value,4,9) === YELLOW ? "warning" : "fulfilled" : highGoodColor(main.value, 75, 55) === RED ? "critical" : highGoodColor(main.value,75,55) === YELLOW ? "warning" : "fulfilled");
+    }
+
+    function renderListsChart() {
+      const rows = matrixRows();
+      renderChart("listsChart", { type: "bar", data: { labels: labels(), datasets: [
+        { label: "Capturadas", data: rows.map(r=>r.attendance_lists.captured), backgroundColor: GREEN, borderRadius: 8, stack: "lists" },
+        { label: "Faltantes", data: rows.map(r=>r.attendance_lists.missing), backgroundColor: rows.map(r=>r.attendance_lists.missing > 0 ? YELLOW : GREEN), borderRadius: 8, stack: "lists" }
+      ]}, options: chartBase({ indexAxis: "y", scales: { x: { stacked: true, beginAtZero: true, grid: { color: "#e5e7eb" }, ticks: { color: "#334155", font: { weight: "bold" } } }, y: { stacked: true, grid: { display: false }, ticks: { color: "#111827", font: { weight: "bold" } } } } }) });
+      const worst = rows.reduce((a,b)=>a.attendance_lists.completion_pct < b.attendance_lists.completion_pct ? a : b, rows[0]);
+      setNote("listsNote", "Lectura", [`${worst.plantel}: ${fmt(worst.attendance_lists.missing)} listas faltantes.`, `${fmt(worst.attendance_lists.captured)} de ${fmt(worst.attendance_lists.expected)} listas capturadas (${pct(worst.attendance_lists.completion_pct)}).`], worst.attendance_lists.status);
     }
 
     function renderAttendanceChart() {
-      const rows = plantelRows();
-      const labels = rows.map(p => p.plantel);
-      const completion = rows.map(p => p.domains.attendance.completion_percent || 0);
-      const absence = rows.map(p => p.domains.attendance.absence_rate_percent || 0);
-      renderChart("attendanceChart", {
-        type: "bar",
-        data: { labels, datasets: [
-          { label: "% listas completas", data: completion, backgroundColor: completion.map(scoreColor), borderRadius: 10 },
-          { label: "% ausentismo", data: absence, backgroundColor: absence.map(v => v >= 12 ? RED : v >= 7 ? YELLOW : GREEN), borderRadius: 10 }
-        ] },
-        options: commonOptions({ scales: { y: { min: 0, max: 100, grid: { color: "#e5e7eb" }, ticks: { color: "#334155", font: { weight: "bold" } } }, x: { grid: { display: false }, ticks: { color: "#111827", font: { weight: "bold" } } } } })
-      });
-      const low = rows.reduce((a, b) => Number(a.domains.attendance.completion_percent || 0) < Number(b.domains.attendance.completion_percent || 0) ? a : b, rows[0]);
-      setNote("attendanceNote", `${low.plantel} tiene el menor registro de listas (${pct(low.domains.attendance.completion_percent)}). Ausentismo registrado: ${pct(low.domains.attendance.absence_rate_percent)}.`, statusForScore(low.domains.attendance.completion_percent));
+      const rows = matrixRows();
+      renderChart("attendanceChart", { type: "bar", data: { labels: labels(), datasets: [{ label: "Ausencias por 100 registros", data: rows.map(r=>r.student_attendance.absences_per_100), backgroundColor: rows.map(r=>lowGoodColor(r.student_attendance.absences_per_100, 8, 12)), borderRadius: 8 }] }, options: chartBase({ scales: { x: { grid: { display: false }, ticks: { color: "#111827", font: { weight: "bold" } } }, y: { beginAtZero: true, grid: { color: "#e5e7eb" }, ticks: { color: "#334155", font: { weight: "bold" } } } } }) });
+      const worst = rows.reduce((a,b)=>a.student_attendance.absences_per_100 > b.student_attendance.absences_per_100 ? a : b, rows[0]);
+      setNote("attendanceNote", "Lectura", [`${worst.plantel}: ${fmt(worst.student_attendance.absences_per_100,1)} ausencias por cada 100 registros.`, `Asistencia registrada: ${pct(worst.student_attendance.attendance_pct)}.`], worst.student_attendance.status);
     }
 
     function renderTardyChart() {
-      const rows = plantelRows();
-      const labels = rows.map(p => p.plantel);
-      const rates = rows.map(p => p.domains.husky.student_tardy_rate_percent || 0);
-      const avgDaily = rows.map(p => p.domains.husky.avg_tardies_per_business_day || 0);
-      renderChart("tardyChart", {
-        type: "bar",
-        data: { labels, datasets: [
-          { label: "% alumnos/día tarde", data: rates, backgroundColor: rates.map(v => v >= 4 ? RED : v >= 1.5 ? YELLOW : GREEN), borderRadius: 10 },
-          { label: "Promedio diario", data: avgDaily, backgroundColor: GRAY, borderRadius: 10, yAxisID: "y1" }
-        ] },
-        options: commonOptions({ scales: { y: { beginAtZero: true, grid: { color: "#e5e7eb" }, ticks: { color: "#334155", font: { weight: "bold" } } }, y1: { position: "right", beginAtZero: true, grid: { drawOnChartArea: false }, ticks: { color: "#334155", font: { weight: "bold" } } }, x: { grid: { display: false }, ticks: { color: "#111827", font: { weight: "bold" } } } } })
-      });
-      const high = rows.reduce((a, b) => Number(a.domains.husky.student_tardy_rate_percent || 0) > Number(b.domains.husky.student_tardy_rate_percent || 0) ? a : b, rows[0]);
-      const t = state.data.aggregate.totals;
-      const status = Number(high.domains.husky.student_tardy_rate_percent || 0) >= 4 ? "critical" : Number(high.domains.husky.student_tardy_rate_percent || 0) >= 1.5 ? "warning" : "fulfilled";
-      setNote("tardyNote", `${high.plantel} tiene la mayor tasa de retardo (${pct(high.domains.husky.student_tardy_rate_percent)}). Total del periodo: ${fmt(t.student_tardies)} retardos, ${fmt(t.unique_tardy_students)} alumnos distintos y ${fmt(t.repeat_tardy_students)} reincidencias.`, status);
+      const rows = matrixRows();
+      renderChart("tardyChart", { type: "bar", data: { labels: labels(), datasets: [{ label: "Retardos por 100 entradas", data: rows.map(r=>r.student_tardies.tardies_per_100_entries), backgroundColor: rows.map(r=>lowGoodColor(r.student_tardies.tardies_per_100_entries, 4, 9)), borderRadius: 8 }] }, options: chartBase() });
+      const worst = rows.reduce((a,b)=>a.student_tardies.tardies_per_100_entries > b.student_tardies.tardies_per_100_entries ? a : b, rows[0]);
+      setNote("tardyNote", "Lectura", [`${worst.plantel}: ${fmt(worst.student_tardies.tardies_per_100_entries,1)} retardos por 100 entradas.`, `${fmt(worst.student_tardies.tardies)} retardos; ${fmt(worst.student_tardies.unique_students)} alumnos distintos; ${pct(worst.student_tardies.repeat_share_pct)} reincidencia.`], worst.student_tardies.status);
     }
 
     function renderAccessChart() {
-      const rows = plantelRows();
-      const labels = rows.map(p => p.plantel);
-      const rates = rows.map(p => p.domains.husky.scan_rate_percent || 0);
-      const gaps = rows.map(p => p.domains.husky.scan_gap || 0);
-      renderChart("accessChart", {
-        type: "bar",
-        data: { labels, datasets: [
-          { label: "% entradas con scan", data: rates, backgroundColor: rates.map(scanColor), borderRadius: 10 },
-          { label: "Brecha estimada", data: gaps, backgroundColor: gaps.map(v => v > 0 ? YELLOW : GREEN), borderRadius: 10, yAxisID: "y1" }
-        ] },
-        options: commonOptions({ scales: { y: { min: 0, max: 100, grid: { color: "#e5e7eb" }, ticks: { color: "#334155", font: { weight: "bold" } } }, y1: { position: "right", beginAtZero: true, grid: { drawOnChartArea: false }, ticks: { color: "#334155", font: { weight: "bold" } } }, x: { grid: { display: false }, ticks: { color: "#111827", font: { weight: "bold" } } } } })
-      });
-      const low = rows.reduce((a, b) => Number(a.domains.husky.scan_rate_percent || 0) < Number(b.domains.husky.scan_rate_percent || 0) ? a : b, rows[0]);
-      setNote("accessNote", `${low.plantel} tiene el menor uso de entrada con scan (${pct(low.domains.husky.scan_rate_percent)}). Brecha estimada del periodo: ${fmt(state.data.aggregate.totals.security_scan_gap)} entradas.`, statusForScan(low.domains.husky.scan_rate_percent));
+      const rows = matrixRows();
+      renderChart("accessChart", { type: "bar", data: { labels: labels(), datasets: [{ label: "% cobertura de entrada", data: rows.map(r=>r.access.coverage_pct), backgroundColor: rows.map(r=>highGoodColor(r.access.coverage_pct, 75, 55)), borderRadius: 8 }] }, options: chartBase({ scales: { x: { grid: { display: false }, ticks: { color: "#111827", font: { weight: "bold" } } }, y: { beginAtZero: true, max: 100, grid: { color: "#e5e7eb" }, ticks: { color: "#334155", font: { weight: "bold" } } } } }) });
+      const worst = rows.reduce((a,b)=>a.access.coverage_pct < b.access.coverage_pct ? a : b, rows[0]);
+      setNote("accessNote", "Lectura", [`${worst.plantel}: ${pct(worst.access.coverage_pct)} cobertura de entrada.`, `${fmt(worst.access.scans)} entradas con scan; brecha estimada ${fmt(worst.access.gap)}.`], worst.access.status);
     }
 
     function renderPeopleChart() {
-      const rows = plantelRows();
-      const labels = rows.map(p => p.plantel);
-      const absences = rows.map(p => p.domains.employee.employee_absences || 0);
-      const tardies = rows.map(p => p.domains.employee.employee_tardies || 0);
-      renderChart("peopleChart", {
-        type: "bar",
-        data: { labels, datasets: [
-          { label: "Faltas", data: absences, backgroundColor: absences.map(v => v >= 12 ? RED : v > 0 ? YELLOW : GREEN), borderRadius: 10, stack: "incidents" },
-          { label: "Retardos", data: tardies, backgroundColor: tardies.map(v => v >= 40 ? RED : v > 0 ? YELLOW : GREEN), borderRadius: 10, stack: "incidents" }
-        ] },
-        options: commonOptions({ scales: { x: { stacked: true, grid: { display: false }, ticks: { color: "#111827", font: { weight: "bold" } } }, y: { stacked: true, beginAtZero: true, grid: { color: "#e5e7eb" }, ticks: { color: "#334155", font: { weight: "bold" } } } } })
-      });
-      const high = rows.reduce((a, b) => Number(a.domains.employee.employee_incidents || 0) > Number(b.domains.employee.employee_incidents || 0) ? a : b, rows[0]);
-      const t = state.data.aggregate.totals;
-      const status = t.employee_absences >= 12 ? "critical" : t.employee_incidents > 0 ? "warning" : "fulfilled";
-      setNote("peopleNote", `${high.plantel} concentra más incidencias de personal (${fmt(high.domains.employee.employee_incidents)}). Total: ${fmt(t.employee_absences)} faltas y ${fmt(t.employee_tardies)} retardos.`, status);
+      const rows = matrixRows();
+      renderChart("peopleChart", { type: "bar", data: { labels: labels(), datasets: [
+        { label: "Faltas", data: rows.map(r=>r.employee_attendance.absences), backgroundColor: RED, borderRadius: 8, stack: "p" },
+        { label: "Retardos", data: rows.map(r=>r.employee_attendance.tardies), backgroundColor: YELLOW, borderRadius: 8, stack: "p" }
+      ] }, options: chartBase({ indexAxis: "y", scales: { x: { stacked: true, beginAtZero: true, grid: { color: "#e5e7eb" }, ticks: { color: "#334155", font: { weight: "bold" } } }, y: { stacked: true, grid: { display: false }, ticks: { color: "#111827", font: { weight: "bold" } } } } }) });
+      const worst = rows.reduce((a,b)=>a.employee_attendance.incidents > b.employee_attendance.incidents ? a : b, rows[0]);
+      setNote("peopleNote", "Lectura", [`${worst.plantel}: ${fmt(worst.employee_attendance.incidents)} incidencias.`, `${fmt(worst.employee_attendance.absences)} faltas y ${fmt(worst.employee_attendance.tardies)} retardos.`], worst.employee_attendance.status);
     }
 
     function renderAcademicChart() {
-      const rows = plantelRows();
-      const labels = rows.map(p => p.plantel);
-      const pending = rows.map(p => p.domains.academic.planeaciones_pendientes || 0);
-      const noObs = rows.map(p => p.domains.academic.docentes_sin_observacion_30_dias || 0);
-      renderChart("academicChart", {
-        type: "bar",
-        data: { labels, datasets: [
-          { label: "Planeaciones pendientes", data: pending, backgroundColor: pending.map(v => v >= 18 ? RED : v > 0 ? YELLOW : GREEN), borderRadius: 10 },
-          { label: "Docentes sin observación", data: noObs, backgroundColor: noObs.map(v => v >= 12 ? RED : v > 0 ? YELLOW : GREEN), borderRadius: 10 }
-        ] },
-        options: commonOptions({ indexAxis: "y", scales: { x: { beginAtZero: true, grid: { color: "#e5e7eb" }, ticks: { color: "#334155", font: { weight: "bold" } } }, y: { grid: { display: false }, ticks: { color: "#111827", font: { weight: "bold" } } } } })
-      });
-      const high = rows.reduce((a, b) => Number(a.domains.academic.supervision_backlog || 0) > Number(b.domains.academic.supervision_backlog || 0) ? a : b, rows[0]);
-      const total = state.data.aggregate.totals.academic_backlog;
-      setNote("academicNote", `${high.plantel} tiene más pendientes académicos (${fmt(high.domains.academic.supervision_backlog)}). Total del periodo: ${fmt(total)} pendientes.`, total >= 35 ? "critical" : total > 0 ? "warning" : "fulfilled");
+      const rows = matrixRows();
+      renderChart("academicChart", { type: "bar", data: { labels: labels(), datasets: [
+        { label: "Planeaciones pendientes", data: rows.map(r=>r.academic.pending_lesson_reviews), backgroundColor: YELLOW, borderRadius: 8 },
+        { label: "Docentes sin observación", data: rows.map(r=>r.academic.teachers_without_observation), backgroundColor: RED, borderRadius: 8 }
+      ] }, options: chartBase({ indexAxis: "y", scales: { x: { beginAtZero: true, grid: { color: "#e5e7eb" }, ticks: { color: "#334155", font: { weight: "bold" } } }, y: { grid: { display: false }, ticks: { color: "#111827", font: { weight: "bold" } } } } }) });
+      const worst = rows.reduce((a,b)=>a.academic.backlog > b.academic.backlog ? a : b, rows[0]);
+      setNote("academicNote", "Lectura", [`${worst.plantel}: ${fmt(worst.academic.backlog)} pendientes académicos.`, `${fmt(worst.academic.pending_lesson_reviews)} planeaciones y ${fmt(worst.academic.teachers_without_observation)} docentes sin observación reciente.`], worst.academic.status);
     }
 
     function renderSapfChart() {
-      const rows = plantelRows();
-      const labels = rows.map(p => p.plantel);
-      const tickets = rows.map(p => p.domains.sapf.tickets_created || 0);
-      const followups = rows.map(p => p.domains.sapf.followups || 0);
-      const open = rows.map(p => p.domains.sapf.open_cases || 0);
-      renderChart("sapfChart", {
-        type: "bar",
-        data: { labels, datasets: [
-          { label: "Fichas", data: tickets, backgroundColor: INK, borderRadius: 10 },
-          { label: "Seguimientos", data: followups, backgroundColor: GREEN, borderRadius: 10 },
-          { label: "Abiertos", data: open, backgroundColor: open.map(v => v >= 8 ? RED : v > 0 ? YELLOW : GREEN), borderRadius: 10 }
-        ] },
-        options: commonOptions({ indexAxis: "y", scales: { x: { beginAtZero: true, grid: { color: "#e5e7eb" }, ticks: { color: "#334155", font: { weight: "bold" } } }, y: { grid: { display: false }, ticks: { color: "#111827", font: { weight: "bold" } } } } })
-      });
-      const t = state.data.aggregate.totals;
-      const zero = rows.filter(p => Number(p.domains.sapf.parent_interactions || 0) === 0).map(p => p.plantel);
-      const status = t.sapf_open_cases >= 20 ? "critical" : zero.length || t.sapf_open_cases > 0 ? "warning" : "fulfilled";
-      setNote("sapfNote", `${fmt(t.sapf_tickets_created)} fichas y ${fmt(t.sapf_followups)} seguimientos en el periodo. Casos abiertos: ${fmt(t.sapf_open_cases)}.${zero.length ? ` Sin registros: ${zero.join(", ")}.` : ""}`, status);
+      const rows = matrixRows();
+      renderChart("sapfChart", { type: "bar", data: { labels: labels(), datasets: [
+        { label: "Fichas", data: rows.map(r=>r.sapf.tickets), backgroundColor: INK, borderRadius: 8 },
+        { label: "Seguimientos", data: rows.map(r=>r.sapf.followups), backgroundColor: GREEN, borderRadius: 8 },
+        { label: "Abiertos", data: rows.map(r=>r.sapf.open_cases), backgroundColor: rows.map(r=>r.sapf.open_cases > 0 ? YELLOW : GREEN), borderRadius: 8 }
+      ] }, options: chartBase({ scales: { x: { grid: { display: false }, ticks: { color: "#111827", font: { weight: "bold" } } }, y: { beginAtZero: true, grid: { color: "#e5e7eb" }, ticks: { color: "#334155", font: { weight: "bold" } } } } }) });
+      const mostOpen = rows.reduce((a,b)=>a.sapf.open_cases > b.sapf.open_cases ? a : b, rows[0]);
+      const noData = rows.filter(r=>Number(r.sapf.interactions || 0) === 0).map(r=>r.plantel);
+      const lines = [`${mostOpen.plantel}: ${fmt(mostOpen.sapf.open_cases)} casos abiertos.`, `${fmt(mostOpen.sapf.tickets)} fichas y ${fmt(mostOpen.sapf.followups)} seguimientos.`];
+      if (noData.length) lines.push(`Sin registros en el periodo: ${noData.join(", ")}.`);
+      setNote("sapfNote", "Lectura", lines, mostOpen.sapf.status);
+    }
+
+    function escapeHtml(value) {
+      return String(value ?? "").replace(/[&<>"']/g, ch => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch]));
     }
 
     initFilters();

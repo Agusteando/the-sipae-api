@@ -1,1 +1,1 @@
-Refactor operational dashboard charts and fix Husky tardy aggregation
+Redesign operational dashboard around aggregate plantel metrics and clearer trends
