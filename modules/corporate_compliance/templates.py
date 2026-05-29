@@ -52,6 +52,7 @@ CORPORATE_COMPLIANCE_HTML = """
     .quick-card.fulfilled { border-left-color: var(--green); }
     .quick-card.warning { border-left-color: var(--yellow); }
     .quick-card.critical { border-left-color: var(--red); }
+    .quick-card.unavailable { border-left-color: var(--gray); }
     .quick-label, .kpi-label, .section-kicker { color: var(--muted); font-size: 11px; font-weight: 850; letter-spacing: .10em; text-transform: uppercase; }
     .quick-value { margin-top: 8px; font-size: 20px; font-weight: 880; letter-spacing: -.03em; }
     .quick-detail { margin-top: 7px; color: #475569; font-size: 13px; font-weight: 560; }
@@ -65,13 +66,14 @@ CORPORATE_COMPLIANCE_HTML = """
     .section-head { padding: 16px 18px; border-bottom: 1px solid var(--line); display: flex; justify-content: space-between; gap: 14px; align-items: flex-start; }
     .section-title { margin-top: 3px; font-size: 20px; font-weight: 860; letter-spacing: -.025em; }
     .section-sub { margin-top: 3px; font-size: 12px; color: var(--muted); font-weight: 620; }
-    .section-body { padding: 18px; display: grid; grid-template-columns: minmax(0,1.25fr) minmax(260px,.75fr); gap: 16px; }
-    .chart-box { height: 350px; min-height: 310px; border: 1px solid var(--line); border-radius: 14px; background: #fff; padding: 12px; }
+    .section-body { padding: 18px; display: grid; grid-template-columns: minmax(0,1.7fr) minmax(240px,.55fr); gap: 16px; }
+    .chart-box { height: 390px; min-height: 340px; border: 1px solid var(--line); border-radius: 14px; background: #fff; padding: 14px; position: relative; }
     .chart-box.tall { height: 440px; }
     .note-box { border: 1px solid var(--line); border-radius: 14px; background: #f8fafc; padding: 15px; min-height: 132px; border-left: 5px solid var(--line); }
     .note-box.fulfilled { border-left-color: var(--green); }
     .note-box.warning { border-left-color: var(--yellow); }
     .note-box.critical { border-left-color: var(--red); }
+    .note-box.unavailable { border-left-color: var(--gray); }
     .note-title { font-size: 11px; font-weight: 850; letter-spacing: .10em; text-transform: uppercase; color: #334155; }
     .note-line { margin-top: 10px; font-size: 14px; font-weight: 610; color: #334155; }
     .selector { border: 1px solid var(--line); border-radius: 999px; padding: 8px 12px; font-size: 12px; font-weight: 800; background: #fff; color: #334155; }
@@ -84,6 +86,7 @@ CORPORATE_COMPLIANCE_HTML = """
     .tone-fulfilled { box-shadow: inset 5px 0 0 var(--green); }
     .tone-warning { box-shadow: inset 5px 0 0 var(--yellow); }
     .tone-critical { box-shadow: inset 5px 0 0 var(--red); }
+    .tone-unavailable { box-shadow: inset 5px 0 0 var(--gray); color: #64748b; }
     @media (max-width: 1240px) { .topbar-inner, .hero, .section-body { grid-template-columns: 1fr; } .filters { justify-content: flex-start; } .quick { grid-template-columns: repeat(2,minmax(0,1fr)); } .kpis { grid-template-columns: repeat(4,minmax(0,1fr)); } .layout { grid-template-columns: 1fr; } .section.wide { grid-column: auto; } .matrix { grid-template-columns: 90px repeat(7, minmax(128px,1fr)); overflow-x: auto; } }
     @media (max-width: 760px) { .page { padding: 16px 12px 42px; } .topbar-inner { padding: 12px; } .quick, .kpis { grid-template-columns: repeat(2,minmax(0,1fr)); } .section-head { display:block; } .chart-box { height: 320px; } }
   </style>
@@ -217,11 +220,13 @@ CORPORATE_COMPLIANCE_HTML = """
     const state = { scope: "month", selected: new Set(PLANTEL_ORDER), data: null };
 
     const $ = id => document.getElementById(id);
-    const fmt = (value, digits = 0) => Number(value || 0).toLocaleString("es-MX", { maximumFractionDigits: digits, minimumFractionDigits: digits });
-    const pct = (value, digits = 1) => `${fmt(value, digits)}%`;
+    const isMissing = value => value === null || value === undefined || value === "" || Number.isNaN(Number(value));
+    const fmt = (value, digits = 0) => isMissing(value) ? "s/d" : Number(value).toLocaleString("es-MX", { maximumFractionDigits: digits, minimumFractionDigits: digits });
+    const pct = (value, digits = 1) => isMissing(value) ? "s/d" : `${fmt(value, digits)}%`;
+    const chartValue = value => isMissing(value) ? null : Number(value);
     const statusColor = status => status === "critical" ? RED : status === "warning" ? YELLOW : status === "fulfilled" ? GREEN : GRAY;
-    const lowGoodColor = (value, warning, critical) => Number(value || 0) >= critical ? RED : Number(value || 0) >= warning ? YELLOW : GREEN;
-    const highGoodColor = (value, warning, critical) => Number(value || 0) <= critical ? RED : Number(value || 0) <= warning ? YELLOW : GREEN;
+    const lowGoodColor = (value, warning, critical) => isMissing(value) ? GRAY : Number(value) >= critical ? RED : Number(value) >= warning ? YELLOW : GREEN;
+    const highGoodColor = (value, warning, critical) => isMissing(value) ? GRAY : Number(value) <= critical ? RED : Number(value) <= warning ? YELLOW : GREEN;
     const labels = () => matrixRows().map(r => r.plantel);
     const matrixRows = () => (((state.data || {}).operational || {}).matrix || []).filter(r => state.selected.has(r.plantel));
     const network = () => (((state.data || {}).operational || {}).network || {});
@@ -343,10 +348,10 @@ CORPORATE_COMPLIANCE_HTML = """
       const body = rows.map(r => {
         const cells = [
           `<div class="mcell"><div class="mplantel">${r.plantel}</div><span class="msub">${escapeHtml(r.resolved_name || "")}</span></div>`,
-          matrixCell(r.attendance_lists.completion_pct, "%", r.attendance_lists.status, `${r.attendance_lists.missing} faltantes`),
-          matrixCell(r.student_attendance.attendance_pct, "%", r.student_attendance.status, `${fmt(r.student_attendance.absences_per_100,1)} aus./100`),
-          matrixCell(r.student_tardies.tardies_per_100_entries, "", r.student_tardies.status, `${r.student_tardies.tardies} retardos`),
-          matrixCell(r.access.coverage_pct, "%", r.access.status, `${r.access.gap} brecha`),
+          matrixCell(r.attendance_lists.completion_pct, "%", r.attendance_lists.status, isMissing(r.attendance_lists.completion_pct) ? "sin registros" : `${r.attendance_lists.missing} faltantes`),
+          matrixCell(r.student_attendance.attendance_pct, "%", r.student_attendance.status, isMissing(r.student_attendance.attendance_pct) ? "sin registros" : `${fmt(r.student_attendance.absences_per_100,1)} aus./100`),
+          matrixCell(r.student_tardies.tardies_per_100_entries, "", r.student_tardies.status, isMissing(r.student_tardies.tardies_per_100_entries) ? "sin entradas" : `${r.student_tardies.tardies} retardos`),
+          matrixCell(r.access.coverage_pct, "%", r.access.status, isMissing(r.access.coverage_pct) ? "sin registros" : `${r.access.gap} brecha`),
           matrixCell(r.employee_attendance.incidents, "", r.employee_attendance.status, `${r.employee_attendance.absences} faltas`),
           matrixCell(r.academic.backlog, "", r.academic.status, `${r.academic.pending_lesson_reviews} planeaciones`),
           matrixCell(r.sapf.open_cases, "", r.sapf.status, `${r.sapf.tickets} fichas`),
@@ -357,7 +362,10 @@ CORPORATE_COMPLIANCE_HTML = """
     }
 
     function matrixCell(value, suffix, status, sub) {
-      return `<div class="mcell tone-${status || "fulfilled"}"><div class="mvalue">${fmt(value, Number(value) % 1 ? 1 : 0)}${suffix}</div><span class="msub">${escapeHtml(sub || "")}</span></div>`;
+      const missing = isMissing(value);
+      const digits = !missing && Number(value) % 1 ? 1 : 0;
+      const display = missing ? "s/d" : `${fmt(value, digits)}${suffix}`;
+      return `<div class="mcell tone-${status || "unavailable"}"><div class="mvalue">${display}</div><span class="msub">${escapeHtml(sub || (missing ? "sin lectura" : ""))}</span></div>`;
     }
 
     function chartBase(extra = {}) {
@@ -385,46 +393,67 @@ CORPORATE_COMPLIANCE_HTML = """
       const metricKey = $("trendMetric").value;
       const metric = (tr.metrics || {})[metricKey] || { label: "", series: [] };
       const series = (metric.series || []).filter(s => state.selected.has(s.plantel));
+      const values = series.flatMap(s => (s.values || []).filter(v => !isMissing(v)).map(Number));
+      const highBad = metricKey === "tardies_per_100";
       renderChart("trendChart", {
         type: "line",
-        data: { labels: tr.labels || [], datasets: series.map((s, i) => ({ label: s.plantel, data: s.values || [], borderColor: LINE_COLORS[i % LINE_COLORS.length], backgroundColor: LINE_COLORS[i % LINE_COLORS.length], borderWidth: 3, tension: .25, pointRadius: 3 })) },
-        options: chartBase({ scales: { x: { grid: { display: false }, ticks: { color: "#111827", font: { weight: "bold" } } }, y: { beginAtZero: true, grid: { color: "#e5e7eb" }, ticks: { color: "#334155", font: { weight: "bold" } } } } })
+        data: { labels: tr.labels || [], datasets: series.map((s, i) => ({
+          label: s.plantel,
+          data: (s.values || []).map(chartValue),
+          borderColor: LINE_COLORS[i % LINE_COLORS.length],
+          backgroundColor: LINE_COLORS[i % LINE_COLORS.length],
+          borderWidth: 3,
+          tension: .22,
+          pointRadius: 4,
+          pointHoverRadius: 6,
+          spanGaps: false
+        })) },
+        options: chartBase({ scales: { x: { grid: { display: false }, ticks: { color: "#111827", font: { weight: "bold" } } }, y: { beginAtZero: true, suggestedMax: values.length ? Math.max(...values) * 1.15 : 10, grid: { color: "#e5e7eb" }, ticks: { color: "#334155", font: { weight: "bold" } } } } })
       });
-      const all = series.flatMap(s => (s.values || []).map((v, idx) => ({ plantel: s.plantel, value: Number(v || 0), label: (tr.labels || [])[idx] })));
-      if (!all.length) return setNote("trendNote", "Lectura", "Sin datos para la evolución del periodo.", "warning");
-      const highBad = metricKey === "tardies_per_100";
+      const all = series.flatMap(s => (s.values || []).map((v, idx) => isMissing(v) ? null : ({ plantel: s.plantel, value: Number(v), label: (tr.labels || [])[idx] })).filter(Boolean));
+      if (!all.length) return setNote("trendNote", "Lectura", "Sin datos suficientes para comparar este indicador en el periodo.", "unavailable");
       const main = highBad ? all.reduce((a,b)=>a.value>b.value?a:b) : all.reduce((a,b)=>a.value<b.value?a:b);
       setNote("trendNote", "Lectura", `${main.plantel} marca ${fmt(main.value,1)}${metric.unit || ""} en ${main.label || "el periodo"}.`, highBad ? lowGoodColor(main.value, 4, 9) === RED ? "critical" : lowGoodColor(main.value,4,9) === YELLOW ? "warning" : "fulfilled" : highGoodColor(main.value, 75, 55) === RED ? "critical" : highGoodColor(main.value,75,55) === YELLOW ? "warning" : "fulfilled");
     }
 
     function renderListsChart() {
       const rows = matrixRows();
+      const valid = rows.filter(r => !isMissing(r.attendance_lists.completion_pct));
       renderChart("listsChart", { type: "bar", data: { labels: labels(), datasets: [
-        { label: "Capturadas", data: rows.map(r=>r.attendance_lists.captured), backgroundColor: GREEN, borderRadius: 8, stack: "lists" },
-        { label: "Faltantes", data: rows.map(r=>r.attendance_lists.missing), backgroundColor: rows.map(r=>r.attendance_lists.missing > 0 ? YELLOW : GREEN), borderRadius: 8, stack: "lists" }
+        { label: "Capturadas", data: rows.map(r=>isMissing(r.attendance_lists.completion_pct) ? null : r.attendance_lists.captured), backgroundColor: GREEN, borderRadius: 8, stack: "lists" },
+        { label: "Faltantes", data: rows.map(r=>isMissing(r.attendance_lists.completion_pct) ? null : r.attendance_lists.missing), backgroundColor: rows.map(r=>isMissing(r.attendance_lists.completion_pct) ? GRAY : r.attendance_lists.missing > 0 ? YELLOW : GREEN), borderRadius: 8, stack: "lists" }
       ]}, options: chartBase({ indexAxis: "y", scales: { x: { stacked: true, beginAtZero: true, grid: { color: "#e5e7eb" }, ticks: { color: "#334155", font: { weight: "bold" } } }, y: { stacked: true, grid: { display: false }, ticks: { color: "#111827", font: { weight: "bold" } } } } }) });
-      const worst = rows.reduce((a,b)=>a.attendance_lists.completion_pct < b.attendance_lists.completion_pct ? a : b, rows[0]);
+      if (!valid.length) return setNote("listsNote", "Lectura", "Sin registros confiables de pase de lista para el periodo.", "unavailable");
+      const worst = valid.reduce((a,b)=>a.attendance_lists.completion_pct < b.attendance_lists.completion_pct ? a : b, valid[0]);
       setNote("listsNote", "Lectura", [`${worst.plantel}: ${fmt(worst.attendance_lists.missing)} listas faltantes.`, `${fmt(worst.attendance_lists.captured)} de ${fmt(worst.attendance_lists.expected)} listas capturadas (${pct(worst.attendance_lists.completion_pct)}).`], worst.attendance_lists.status);
     }
 
     function renderAttendanceChart() {
       const rows = matrixRows();
-      renderChart("attendanceChart", { type: "bar", data: { labels: labels(), datasets: [{ label: "Ausencias por 100 registros", data: rows.map(r=>r.student_attendance.absences_per_100), backgroundColor: rows.map(r=>lowGoodColor(r.student_attendance.absences_per_100, 8, 12)), borderRadius: 8 }] }, options: chartBase({ scales: { x: { grid: { display: false }, ticks: { color: "#111827", font: { weight: "bold" } } }, y: { beginAtZero: true, grid: { color: "#e5e7eb" }, ticks: { color: "#334155", font: { weight: "bold" } } } } }) });
-      const worst = rows.reduce((a,b)=>a.student_attendance.absences_per_100 > b.student_attendance.absences_per_100 ? a : b, rows[0]);
+      const valid = rows.filter(r => !isMissing(r.student_attendance.absences_per_100));
+      const values = valid.map(r => Number(r.student_attendance.absences_per_100));
+      renderChart("attendanceChart", { type: "bar", data: { labels: labels(), datasets: [{ label: "Ausencias por 100 registros", data: rows.map(r=>chartValue(r.student_attendance.absences_per_100)), backgroundColor: rows.map(r=>lowGoodColor(r.student_attendance.absences_per_100, 8, 12)), borderRadius: 8 }] }, options: chartBase({ indexAxis: "y", scales: { x: { beginAtZero: true, suggestedMax: values.length ? Math.max(5, Math.max(...values) * 1.25) : 5, grid: { color: "#e5e7eb" }, ticks: { color: "#334155", font: { weight: "bold" } } }, y: { grid: { display: false }, ticks: { color: "#111827", font: { weight: "bold" } } } } }) });
+      if (!valid.length) return setNote("attendanceNote", "Lectura", "Sin registros de asistencia capturados para calcular ausencias.", "unavailable");
+      const worst = valid.reduce((a,b)=>a.student_attendance.absences_per_100 > b.student_attendance.absences_per_100 ? a : b, valid[0]);
       setNote("attendanceNote", "Lectura", [`${worst.plantel}: ${fmt(worst.student_attendance.absences_per_100,1)} ausencias por cada 100 registros.`, `Asistencia registrada: ${pct(worst.student_attendance.attendance_pct)}.`], worst.student_attendance.status);
     }
 
     function renderTardyChart() {
       const rows = matrixRows();
-      renderChart("tardyChart", { type: "bar", data: { labels: labels(), datasets: [{ label: "Retardos por 100 entradas", data: rows.map(r=>r.student_tardies.tardies_per_100_entries), backgroundColor: rows.map(r=>lowGoodColor(r.student_tardies.tardies_per_100_entries, 4, 9)), borderRadius: 8 }] }, options: chartBase() });
-      const worst = rows.reduce((a,b)=>a.student_tardies.tardies_per_100_entries > b.student_tardies.tardies_per_100_entries ? a : b, rows[0]);
+      const valid = rows.filter(r => !isMissing(r.student_tardies.tardies_per_100_entries));
+      const values = valid.map(r => Number(r.student_tardies.tardies_per_100_entries));
+      renderChart("tardyChart", { type: "bar", data: { labels: labels(), datasets: [{ label: "Retardos por 100 entradas", data: rows.map(r=>chartValue(r.student_tardies.tardies_per_100_entries)), backgroundColor: rows.map(r=>lowGoodColor(r.student_tardies.tardies_per_100_entries, 4, 9)), borderRadius: 8 }] }, options: chartBase({ indexAxis: "y", scales: { x: { beginAtZero: true, suggestedMax: values.length ? Math.max(5, Math.max(...values) * 1.35) : 5, grid: { color: "#e5e7eb" }, ticks: { color: "#334155", font: { weight: "bold" } } }, y: { grid: { display: false }, ticks: { color: "#111827", font: { weight: "bold" } } } } }) });
+      if (!valid.length) return setNote("tardyNote", "Lectura", "Sin entradas registradas para calcular retardos. No se muestra como 0.", "unavailable");
+      const worst = valid.reduce((a,b)=>a.student_tardies.tardies_per_100_entries > b.student_tardies.tardies_per_100_entries ? a : b, valid[0]);
       setNote("tardyNote", "Lectura", [`${worst.plantel}: ${fmt(worst.student_tardies.tardies_per_100_entries,1)} retardos por 100 entradas.`, `${fmt(worst.student_tardies.tardies)} retardos; ${fmt(worst.student_tardies.unique_students)} alumnos distintos; ${pct(worst.student_tardies.repeat_share_pct)} reincidencia.`], worst.student_tardies.status);
     }
 
     function renderAccessChart() {
       const rows = matrixRows();
-      renderChart("accessChart", { type: "bar", data: { labels: labels(), datasets: [{ label: "% cobertura de entrada", data: rows.map(r=>r.access.coverage_pct), backgroundColor: rows.map(r=>highGoodColor(r.access.coverage_pct, 75, 55)), borderRadius: 8 }] }, options: chartBase({ scales: { x: { grid: { display: false }, ticks: { color: "#111827", font: { weight: "bold" } } }, y: { beginAtZero: true, max: 100, grid: { color: "#e5e7eb" }, ticks: { color: "#334155", font: { weight: "bold" } } } } }) });
-      const worst = rows.reduce((a,b)=>a.access.coverage_pct < b.access.coverage_pct ? a : b, rows[0]);
+      const valid = rows.filter(r => !isMissing(r.access.coverage_pct));
+      renderChart("accessChart", { type: "bar", data: { labels: labels(), datasets: [{ label: "% cobertura de entrada", data: rows.map(r=>chartValue(r.access.coverage_pct)), backgroundColor: rows.map(r=>highGoodColor(r.access.coverage_pct, 75, 55)), borderRadius: 8 }] }, options: chartBase({ indexAxis: "y", scales: { x: { beginAtZero: true, max: 100, grid: { color: "#e5e7eb" }, ticks: { color: "#334155", font: { weight: "bold" } } }, y: { grid: { display: false }, ticks: { color: "#111827", font: { weight: "bold" } } } } }) });
+      if (!valid.length) return setNote("accessNote", "Lectura", "Sin registros de entrada para calcular cobertura de accesos.", "unavailable");
+      const worst = valid.reduce((a,b)=>a.access.coverage_pct < b.access.coverage_pct ? a : b, valid[0]);
       setNote("accessNote", "Lectura", [`${worst.plantel}: ${pct(worst.access.coverage_pct)} cobertura de entrada.`, `${fmt(worst.access.scans)} entradas con scan; brecha estimada ${fmt(worst.access.gap)}.`], worst.access.status);
     }
 

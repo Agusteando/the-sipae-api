@@ -152,7 +152,10 @@ def _sum_daily_attendance(attendance: Dict[str, Any], start_date: date, end_date
             "absence_motives": [],
             "group_absence_hotspots": [],
             "low_attendance_groups": [],
-            "risk_score": 45.0,
+            "days_with_records": 0,
+            "has_data": False,
+            "data_quality": "source_error",
+            "risk_score": 0.0,
         }
 
     daily_payloads: List[Dict[str, Any]] = []
@@ -176,6 +179,7 @@ def _sum_daily_attendance(attendance: Dict[str, Any], start_date: date, end_date
     virtual_count = 0
     girls_count = 0
     boys_count = 0
+    days_with_records = 0
     missing_groups: List[Dict[str, Any]] = []
     daily_attendance: List[Dict[str, Any]] = []
     motive_counts: Dict[str, int] = {}
@@ -203,6 +207,9 @@ def _sum_daily_attendance(attendance: Dict[str, Any], start_date: date, end_date
         present_day = _safe_int(summary.get("asistencia"))
         absent_day = _safe_int(summary.get("ausencia"))
         no_modality_day = _safe_int(summary.get("ausencia2"))
+        has_records_day = total_day > 0 or completed_day > 0
+        if has_records_day:
+            days_with_records += 1
 
         expected_groups += expected_day
         completed_groups += completed_day
@@ -229,6 +236,7 @@ def _sum_daily_attendance(attendance: Dict[str, Any], start_date: date, end_date
             "completion_percent": _safe_float(missing_data.get("completion_percent")),
             "missing_groups_count": missing_day,
             "missing_expected_students": missing_students_day,
+            "has_records": has_records_day,
         })
 
         for group in point.get("groups") or []:
@@ -273,10 +281,11 @@ def _sum_daily_attendance(attendance: Dict[str, Any], start_date: date, end_date
             missing_counter[group_key]["expected_students"] = max(missing_counter[group_key]["expected_students"], expected)
             missing_counter[group_key]["dates"].append(point_date_str)
 
-    completion = _pct(completed_groups, expected_groups) if expected_groups else 0.0
-    attendance_rate = _pct(present_students, total_students)
-    absence_rate = _pct(absent_students, total_students)
-    legal_risk_units = missing_expected_students
+    has_data = days_with_records > 0 or total_students > 0 or completed_groups > 0
+    completion = _pct(completed_groups, expected_groups) if expected_groups and has_data else None
+    attendance_rate = _pct(present_students, total_students) if total_students else None
+    absence_rate = _pct(absent_students, total_students) if total_students else None
+    legal_risk_units = missing_expected_students if has_data else 0
 
     absence_motives = [
         {"motivo": motive, "conteo": count}
@@ -304,26 +313,30 @@ def _sum_daily_attendance(attendance: Dict[str, Any], start_date: date, end_date
         if item["days_missing"] > 1
     ][:20]
 
-    possible_students = total_students + missing_expected_students
-    trace_gap_rate = _pct(missing_expected_students, possible_students) if possible_students else 0.0
-    missing_group_rate = max(0.0, 100.0 - completion)
+    possible_students = total_students + (missing_expected_students if has_data else 0)
+    trace_gap_rate = _pct(missing_expected_students, possible_students) if possible_students and has_data else None
+    missing_group_rate = max(0.0, 100.0 - _safe_float(completion)) if completion is not None else None
     modality_gap_rate = _pct(no_modality_records, total_students) if total_students else 0.0
-    risk_score = _clamp(
-        missing_group_rate * 1.10
-        + trace_gap_rate * 0.70
-        + max(0.0, 92.0 - attendance_rate) * 0.45
-        + max(0.0, absence_rate - 12.0) * 0.35
-        + modality_gap_rate * 0.20
-        + len(repeated_missing_groups) * 1.25
-    )
-    critical = completion < 70 or trace_gap_rate >= 20 or missing_group_rate >= 30
-    status = _status_from_index(100 - risk_score, critical)
+    if not has_data:
+        risk_score = 0.0
+        status = "unavailable"
+    else:
+        risk_score = _clamp(
+            _safe_float(missing_group_rate) * 1.10
+            + _safe_float(trace_gap_rate) * 0.70
+            + max(0.0, 92.0 - _safe_float(attendance_rate, 100.0)) * 0.45
+            + max(0.0, _safe_float(absence_rate) - 12.0) * 0.35
+            + modality_gap_rate * 0.20
+            + len(repeated_missing_groups) * 1.25
+        )
+        critical = _safe_float(completion, 100.0) < 70 or _safe_float(trace_gap_rate) >= 20 or _safe_float(missing_group_rate) >= 30
+        status = _status_from_index(100 - risk_score, critical)
 
     return {
         "status": status,
-        "completion_percent": completion,
-        "attendance_rate_percent": attendance_rate,
-        "absence_rate_percent": absence_rate,
+        "completion_percent": _round(completion, 2),
+        "attendance_rate_percent": _round(attendance_rate, 2),
+        "absence_rate_percent": _round(absence_rate, 2),
         "expected_groups_count": expected_groups,
         "completed_groups_count": completed_groups,
         "missing_groups_count": missing_groups_count,
@@ -337,6 +350,9 @@ def _sum_daily_attendance(attendance: Dict[str, Any], start_date: date, end_date
         "boys_count": boys_count,
         "legal_risk_units": legal_risk_units,
         "trace_gap_rate_percent": _round(trace_gap_rate, 2),
+        "days_with_records": days_with_records,
+        "has_data": has_data,
+        "data_quality": "ok" if has_data else "no_attendance_records",
         "missing_groups_count_detail": missing_groups_count,
         "repeated_missing_groups_count": len(repeated_missing_groups),
         "missing_groups": [],
@@ -354,20 +370,23 @@ def _sum_husky(husky: Dict[str, Any], retardos: Dict[str, Any], start_date: date
         return {
             "status": "unavailable",
             "error": husky.get("error"),
-            "scan_rate_percent": 0.0,
+            "scan_rate_percent": None,
             "entrada_scans": 0,
             "salida_scans": 0,
             "scan_gap": 0,
             "student_tardies": _safe_int(retardos.get("total_retardos")),
             "unique_tardy_students_count": 0,
             "repeat_tardy_students_count": 0,
-            "student_tardy_rate_percent": 0.0,
-            "student_tardies_per_100_entries": 0.0,
+            "student_tardy_rate_percent": None,
+            "student_tardies_per_100_entries": None,
             "avg_tardies_per_business_day": 0.0,
             "tardy_recurrence_buckets": {"one": 0, "two_three": 0, "four_plus": 0},
             "daily_tardies": [],
             "daily_scans": [],
-            "risk_score": 35.0,
+            "has_scan_data": False,
+            "has_tardy_denominator": False,
+            "data_quality": "source_error",
+            "risk_score": 0.0,
         }
 
     points = husky.get("daily_datapoints") or {}
@@ -375,6 +394,7 @@ def _sum_husky(husky: Dict[str, Any], retardos: Dict[str, Any], start_date: date
     business_days = _business_days(start_date, end_date)
     entrada = 0
     salida = 0
+    days_with_scan_data = 0
     daily_scans: List[Dict[str, Any]] = []
     entrada_by_day: Dict[str, int] = {}
 
@@ -388,6 +408,8 @@ def _sum_husky(husky: Dict[str, Any], retardos: Dict[str, Any], start_date: date
         day_key = str(day)[:10]
         entrada_day = _safe_int(point.get("entrada"))
         salida_day = _safe_int(point.get("salida"))
+        if entrada_day > 0 or salida_day > 0:
+            days_with_scan_data += 1
         entrada += entrada_day
         salida += salida_day
         entrada_by_day[day_key] = entrada_by_day.get(day_key, 0) + entrada_day
@@ -400,8 +422,9 @@ def _sum_husky(husky: Dict[str, Any], retardos: Dict[str, Any], start_date: date
         })
 
     expected_ops = expected_population * business_days
-    scan_rate = min(_pct(entrada, expected_ops), 100.0) if expected_ops else 0.0
-    scan_gap = max(expected_ops - entrada, 0)
+    has_scan_data = entrada > 0 or salida > 0 or days_with_scan_data > 0
+    scan_rate = min(_pct(entrada, expected_ops), 100.0) if expected_ops and has_scan_data else None
+    scan_gap = max(expected_ops - entrada, 0) if has_scan_data else 0
     student_tardies = _safe_int(retardos.get("total_retardos")) if not retardos.get("error") else 0
 
     tardy_rows = (retardos.get("retardos") or []) if not retardos.get("error") else []
@@ -437,22 +460,26 @@ def _sum_husky(husky: Dict[str, Any], retardos: Dict[str, Any], start_date: date
         "two_three": sum(1 for item in student_map.values() if 2 <= item["tardies"] <= 3),
         "four_plus": sum(1 for item in student_map.values() if item["tardies"] >= 4),
     }
-    tardies_per_100_entries = _pct(student_tardies, entrada) if entrada else 0.0
+    tardies_per_100_entries = _pct(student_tardies, entrada) if entrada else None
     avg_tardies_per_business_day = _round(student_tardies / business_days, 2)
     repeat_share = _pct(repeat_tardy_students_count, unique_tardy_students_count)
 
-    # Retardos are evaluated against documented first entrance scans. This is
-    # more stable than comparing against expected population, and prevents a
-    # low scan-rate plantel from looking artificially punctual.
-    risk_score = _clamp(
-        max(0.0, 70 - scan_rate) * 0.18
-        + tardies_per_100_entries * 3.8
-        + avg_tardies_per_business_day * 0.25
-        + repeat_share * 0.18
-    )
-    material_scan_gap = expected_population > 0 and scan_rate < 35 and scan_gap > expected_population * max(3, business_days * 0.35)
-    material_tardy_gap = tardies_per_100_entries >= 9.0 or avg_tardies_per_business_day >= 25
-    status = _status_from_index(100 - risk_score, material_scan_gap or material_tardy_gap)
+    has_tardy_denominator = entrada > 0
+    if not has_scan_data and not student_tardies:
+        risk_score = 0.0
+        status = "unavailable"
+    else:
+        # Retardos are evaluated against documented first entrance scans. If the
+        # denominator is missing, do not convert it into a fake 0.0 rate.
+        risk_score = _clamp(
+            max(0.0, 70 - _safe_float(scan_rate, 70.0)) * 0.18
+            + _safe_float(tardies_per_100_entries) * 3.8
+            + avg_tardies_per_business_day * 0.25
+            + repeat_share * 0.18
+        )
+        material_scan_gap = expected_population > 0 and scan_rate is not None and scan_rate < 35 and scan_gap > expected_population * max(3, business_days * 0.35)
+        material_tardy_gap = _safe_float(tardies_per_100_entries) >= 9.0 or avg_tardies_per_business_day >= 25
+        status = _status_from_index(100 - risk_score, material_scan_gap or material_tardy_gap)
     return {
         "status": status,
         "expected_population": expected_population,
@@ -462,6 +489,10 @@ def _sum_husky(husky: Dict[str, Any], retardos: Dict[str, Any], start_date: date
         "first_entries": entrada,
         "scan_rate_percent": _round(scan_rate, 2),
         "scan_gap": scan_gap,
+        "days_with_scan_data": days_with_scan_data,
+        "has_scan_data": has_scan_data,
+        "has_tardy_denominator": has_tardy_denominator,
+        "data_quality": "ok" if has_scan_data else "no_access_records",
         "student_tardies": student_tardies,
         "unique_tardy_students_count": unique_tardy_students_count,
         "repeat_tardy_students_count": repeat_tardy_students_count,
@@ -640,13 +671,18 @@ def _build_index(domains: Dict[str, Dict[str, Any]]) -> Dict[str, Any]:
 
     for key, weight in DOMAIN_WEIGHTS.items():
         domain = domains.get(key) or {}
-        risk = _safe_float(domain.get("risk_score"), 45.0)
+        if domain.get("status") == "unavailable":
+            continue
+        risk = _safe_float(domain.get("risk_score"), 0.0)
         weighted_risk += risk * weight
         total_weight += weight
         if domain.get("status") == "critical":
             critical_domains += 1
 
-    index = 100.0 - (weighted_risk / total_weight if total_weight else 100.0)
+    if total_weight <= 0:
+        return {"score": None, "risk_score": None, "status": "unavailable", "label": _risk_label("unavailable")}
+
+    index = 100.0 - (weighted_risk / total_weight)
     index = _clamp(index)
     material = critical_domains >= 2 and index < 70
     status = _status_from_index(index, material)
@@ -734,10 +770,12 @@ def _aggregate_daily_series(planteles: List[Dict[str, Any]], start_date: date, e
     for plantel in planteles:
         attendance = plantel.get("domains", {}).get("attendance", {})
         husky = plantel.get("domains", {}).get("husky", {})
+        attendance_has_data = bool(attendance.get("has_data"))
+        husky_has_data = bool(husky.get("has_scan_data"))
 
         for point in attendance.get("daily_attendance") or []:
             day = str(point.get("date") or "")[:10]
-            if day not in days:
+            if day not in days or not attendance_has_data:
                 continue
             bucket = days[day]
             bucket["expected_groups"] += _safe_int(point.get("expected_groups_count"))
@@ -750,7 +788,7 @@ def _aggregate_daily_series(planteles: List[Dict[str, Any]], start_date: date, e
 
         for point in husky.get("daily_scans") or []:
             day = str(point.get("date") or "")[:10]
-            if day not in days:
+            if day not in days or not husky_has_data:
                 continue
             bucket = days[day]
             bucket["entrada_scans"] += _safe_int(point.get("entrada_scans"))
@@ -773,24 +811,27 @@ def _aggregate_daily_series(planteles: List[Dict[str, Any]], start_date: date, e
         entrada_scans = _safe_int(bucket.get("entrada_scans"))
         series.append({
             **bucket,
-            "completion_percent": _round(_pct(completed_groups, expected_groups), 2),
-            "attendance_rate_percent": _round(_pct(present_students, total_students), 2),
-            "absence_rate_percent": _round(_pct(bucket.get("absent_students"), total_students), 2),
-            "scan_rate_percent": _round(min(_pct(entrada_scans, expected_scan_ops), 100.0) if expected_scan_ops else 0.0, 2),
+            "completion_percent": _round(_pct(completed_groups, expected_groups), 2) if expected_groups else None,
+            "attendance_rate_percent": _round(_pct(present_students, total_students), 2) if total_students else None,
+            "absence_rate_percent": _round(_pct(bucket.get("absent_students"), total_students), 2) if total_students else None,
+            "scan_rate_percent": _round(min(_pct(entrada_scans, expected_scan_ops), 100.0), 2) if expected_scan_ops else None,
         })
     return series
 
 
-def _status_for_threshold(value: float, *, high_bad: bool, warning: float, critical: float) -> str:
+def _status_for_threshold(value: Optional[float], *, high_bad: bool, warning: float, critical: float) -> str:
+    if value is None:
+        return "unavailable"
+    numeric = _safe_float(value)
     if high_bad:
-        if value >= critical:
+        if numeric >= critical:
             return "critical"
-        if value >= warning:
+        if numeric >= warning:
             return "warning"
         return "fulfilled"
-    if value <= critical:
+    if numeric <= critical:
         return "critical"
-    if value <= warning:
+    if numeric <= warning:
         return "warning"
     return "fulfilled"
 
@@ -804,27 +845,30 @@ def _plantel_metric_row(plantel_payload: Dict[str, Any], business_days: int) -> 
     academic = domains.get("academic") or {}
     sapf = domains.get("sapf") or {}
 
+    attendance_has_data = bool(attendance.get("has_data"))
     expected_lists = _safe_int(attendance.get("expected_groups_count"))
     captured_lists = _safe_int(attendance.get("completed_groups_count"))
-    missing_lists = max(expected_lists - captured_lists, 0)
-    completion_pct = _safe_float(attendance.get("completion_percent"))
+    missing_lists = max(expected_lists - captured_lists, 0) if attendance_has_data else 0
+    completion_pct = attendance.get("completion_percent") if attendance_has_data else None
 
     recorded_students = _safe_int(attendance.get("total_students_recorded"))
     present_students = max(recorded_students - _safe_int(attendance.get("absent_students_count")), 0)
     absent_students = _safe_int(attendance.get("absent_students_count"))
-    attendance_pct = _safe_float(attendance.get("attendance_rate_percent"))
-    absences_per_100 = _safe_float(attendance.get("absence_rate_percent"))
+    attendance_pct = attendance.get("attendance_rate_percent") if recorded_students else None
+    absences_per_100 = attendance.get("absence_rate_percent") if recorded_students else None
 
+    husky_has_scan_data = bool(husky.get("has_scan_data"))
     first_entries = _safe_int(husky.get("first_entries") or husky.get("entrada_scans"))
     student_tardies = _safe_int(husky.get("student_tardies"))
-    tardies_per_100_entries = _safe_float(husky.get("student_tardies_per_100_entries") or husky.get("student_tardy_rate_percent"))
+    tardies_raw = husky.get("student_tardies_per_100_entries") if husky.get("student_tardies_per_100_entries") is not None else husky.get("student_tardy_rate_percent")
+    tardies_per_100_entries = tardies_raw if first_entries else None
     unique_tardy_students = _safe_int(husky.get("unique_tardy_students_count"))
     repeat_share = _safe_float(husky.get("repeat_tardy_share_percent"))
 
     expected_access = _safe_int(husky.get("expected_scan_ops"))
     access_scans = _safe_int(husky.get("entrada_scans"))
-    access_gap = max(expected_access - access_scans, 0)
-    access_rate = _safe_float(husky.get("scan_rate_percent"))
+    access_gap = max(expected_access - access_scans, 0) if husky_has_scan_data else 0
+    access_rate = husky.get("scan_rate_percent") if husky_has_scan_data else None
 
     employee_absences = _safe_int(employee.get("employee_absences"))
     employee_tardies = _safe_int(employee.get("employee_tardies"))
@@ -858,6 +902,7 @@ def _plantel_metric_row(plantel_payload: Dict[str, Any], business_days: int) -> 
             "missing": missing_lists,
             "completion_pct": _round(completion_pct, 2),
             "status": _status_for_threshold(completion_pct, high_bad=False, warning=92.0, critical=82.0),
+            "has_data": attendance_has_data,
         },
         "student_attendance": {
             "records": recorded_students,
@@ -866,6 +911,7 @@ def _plantel_metric_row(plantel_payload: Dict[str, Any], business_days: int) -> 
             "attendance_pct": _round(attendance_pct, 2),
             "absences_per_100": _round(absences_per_100, 2),
             "status": _status_for_threshold(attendance_pct, high_bad=False, warning=92.0, critical=88.0),
+            "has_data": recorded_students > 0,
         },
         "student_tardies": {
             "first_entries": first_entries,
@@ -876,6 +922,7 @@ def _plantel_metric_row(plantel_payload: Dict[str, Any], business_days: int) -> 
             "avg_daily": husky.get("avg_tardies_per_business_day"),
             "recurrence_buckets": husky.get("tardy_recurrence_buckets") or {"one": 0, "two_three": 0, "four_plus": 0},
             "status": _status_for_threshold(tardies_per_100_entries, high_bad=True, warning=4.0, critical=9.0),
+            "has_data": first_entries > 0,
         },
         "access": {
             "expected_entries": expected_access,
@@ -883,6 +930,7 @@ def _plantel_metric_row(plantel_payload: Dict[str, Any], business_days: int) -> 
             "gap": access_gap,
             "coverage_pct": _round(access_rate, 2),
             "status": _status_for_threshold(access_rate, high_bad=False, warning=75.0, critical=55.0),
+            "has_data": husky_has_scan_data,
         },
         "employee_attendance": {
             "absences": employee_absences,
@@ -917,15 +965,19 @@ def _plantel_metric_row(plantel_payload: Dict[str, Any], business_days: int) -> 
 def _network_from_matrix(matrix: List[Dict[str, Any]]) -> Dict[str, Any]:
     if not matrix:
         return {}
-    expected_lists = sum(_safe_int(r["attendance_lists"].get("expected")) for r in matrix)
-    captured_lists = sum(_safe_int(r["attendance_lists"].get("captured")) for r in matrix)
-    records = sum(_safe_int(r["student_attendance"].get("records")) for r in matrix)
-    present = sum(_safe_int(r["student_attendance"].get("present")) for r in matrix)
-    absent = sum(_safe_int(r["student_attendance"].get("absent")) for r in matrix)
-    first_entries = sum(_safe_int(r["student_tardies"].get("first_entries")) for r in matrix)
-    tardies = sum(_safe_int(r["student_tardies"].get("tardies")) for r in matrix)
-    access_expected = sum(_safe_int(r["access"].get("expected_entries")) for r in matrix)
-    access_scans = sum(_safe_int(r["access"].get("scans")) for r in matrix)
+    valid_lists = [r for r in matrix if r["attendance_lists"].get("has_data")]
+    valid_attendance = [r for r in matrix if r["student_attendance"].get("has_data")]
+    valid_tardies = [r for r in matrix if r["student_tardies"].get("has_data")]
+    valid_access = [r for r in matrix if r["access"].get("has_data")]
+    expected_lists = sum(_safe_int(r["attendance_lists"].get("expected")) for r in valid_lists)
+    captured_lists = sum(_safe_int(r["attendance_lists"].get("captured")) for r in valid_lists)
+    records = sum(_safe_int(r["student_attendance"].get("records")) for r in valid_attendance)
+    present = sum(_safe_int(r["student_attendance"].get("present")) for r in valid_attendance)
+    absent = sum(_safe_int(r["student_attendance"].get("absent")) for r in valid_attendance)
+    first_entries = sum(_safe_int(r["student_tardies"].get("first_entries")) for r in valid_tardies)
+    tardies = sum(_safe_int(r["student_tardies"].get("tardies")) for r in valid_tardies)
+    access_expected = sum(_safe_int(r["access"].get("expected_entries")) for r in valid_access)
+    access_scans = sum(_safe_int(r["access"].get("scans")) for r in valid_access)
     employee_incidents = sum(_safe_int(r["employee_attendance"].get("incidents")) for r in matrix)
     academic_backlog = sum(_safe_int(r["academic"].get("backlog")) for r in matrix)
     sapf_tickets = sum(_safe_int(r["sapf"].get("tickets")) for r in matrix)
@@ -933,14 +985,20 @@ def _network_from_matrix(matrix: List[Dict[str, Any]]) -> Dict[str, Any]:
     sapf_open = sum(_safe_int(r["sapf"].get("open_cases")) for r in matrix)
     sapf_closed = sum(_safe_int(r["sapf"].get("closed_cases")) for r in matrix)
     return {
-        "attendance_lists_completion_pct": _round(_pct(captured_lists, expected_lists), 2),
-        "attendance_lists_missing": max(expected_lists - captured_lists, 0),
-        "student_attendance_pct": _round(_pct(present, records), 2),
-        "absences_per_100": _round(_pct(absent, records), 2),
-        "tardies_per_100_entries": _round(_pct(tardies, first_entries), 2),
+        "attendance_lists_completion_pct": _round(_pct(captured_lists, expected_lists), 2) if expected_lists else None,
+        "attendance_lists_missing": max(expected_lists - captured_lists, 0) if expected_lists else None,
+        "student_attendance_pct": _round(_pct(present, records), 2) if records else None,
+        "absences_per_100": _round(_pct(absent, records), 2) if records else None,
+        "tardies_per_100_entries": _round(_pct(tardies, first_entries), 2) if first_entries else None,
         "student_tardies": tardies,
-        "access_coverage_pct": _round(_pct(access_scans, access_expected), 2),
-        "access_gap": max(access_expected - access_scans, 0),
+        "access_coverage_pct": _round(_pct(access_scans, access_expected), 2) if access_expected else None,
+        "access_gap": max(access_expected - access_scans, 0) if access_expected else None,
+        "data_coverage": {
+            "lists": len(valid_lists),
+            "attendance": len(valid_attendance),
+            "tardies": len(valid_tardies),
+            "access": len(valid_access),
+        },
         "employee_incidents": employee_incidents,
         "academic_backlog": academic_backlog,
         "sapf_tickets": sapf_tickets,
@@ -952,15 +1010,19 @@ def _network_from_matrix(matrix: List[Dict[str, Any]]) -> Dict[str, Any]:
 
 
 def _domain_gaps_for_row(row: Dict[str, Any]) -> Dict[str, float]:
-    return {
-        "Pase de lista": max(0.0, 100.0 - _safe_float(row["attendance_lists"].get("completion_pct"))),
-        "Asistencia": _safe_float(row["student_attendance"].get("absences_per_100")),
-        "Retardos": _safe_float(row["student_tardies"].get("tardies_per_100_entries")),
-        "Accesos": max(0.0, 100.0 - _safe_float(row["access"].get("coverage_pct"))),
-        "Personal": _safe_float(row["employee_attendance"].get("incidents_per_business_day")) * 6.0,
-        "Académico": min(100.0, _safe_float(row["academic"].get("backlog")) * 2.5),
-        "SAPF": _safe_float(row["sapf"].get("open_case_share_pct")),
-    }
+    gaps: Dict[str, float] = {}
+    if row["attendance_lists"].get("completion_pct") is not None:
+        gaps["Pase de lista"] = max(0.0, 100.0 - _safe_float(row["attendance_lists"].get("completion_pct")))
+    if row["student_attendance"].get("absences_per_100") is not None:
+        gaps["Asistencia"] = _safe_float(row["student_attendance"].get("absences_per_100"))
+    if row["student_tardies"].get("tardies_per_100_entries") is not None:
+        gaps["Retardos"] = _safe_float(row["student_tardies"].get("tardies_per_100_entries"))
+    if row["access"].get("coverage_pct") is not None:
+        gaps["Accesos"] = max(0.0, 100.0 - _safe_float(row["access"].get("coverage_pct")))
+    gaps["Personal"] = _safe_float(row["employee_attendance"].get("incidents_per_business_day")) * 6.0
+    gaps["Académico"] = min(100.0, _safe_float(row["academic"].get("backlog")) * 2.5)
+    gaps["SAPF"] = _safe_float(row["sapf"].get("open_case_share_pct"))
+    return gaps
 
 
 def _build_quick_read(matrix: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -970,10 +1032,15 @@ def _build_quick_read(matrix: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     for row in matrix:
         for label, value in _domain_gaps_for_row(row).items():
             gap_items.append({"plantel": row["plantel"], "area": label, "value": value})
+    if not gap_items:
+        return [{"label": "Datos", "value": "Sin lectura suficiente", "detail": "No hay denominadores confiables para comparar el periodo.", "status": "unavailable"}]
     top_gap = max(gap_items, key=lambda x: x["value"])
-    best_lists = max(matrix, key=lambda r: _safe_float(r["attendance_lists"].get("completion_pct")))
-    worst_tardy = max(matrix, key=lambda r: _safe_float(r["student_tardies"].get("tardies_per_100_entries")))
-    weakest_access = min(matrix, key=lambda r: _safe_float(r["access"].get("coverage_pct")))
+    list_rows = [r for r in matrix if r["attendance_lists"].get("completion_pct") is not None]
+    tardy_rows = [r for r in matrix if r["student_tardies"].get("tardies_per_100_entries") is not None]
+    access_rows = [r for r in matrix if r["access"].get("coverage_pct") is not None]
+    best_lists = max(list_rows, key=lambda r: _safe_float(r["attendance_lists"].get("completion_pct"))) if list_rows else None
+    worst_tardy = max(tardy_rows, key=lambda r: _safe_float(r["student_tardies"].get("tardies_per_100_entries"))) if tardy_rows else None
+    weakest_access = min(access_rows, key=lambda r: _safe_float(r["access"].get("coverage_pct"))) if access_rows else None
     no_sapf = [r["plantel"] for r in matrix if _safe_int(r["sapf"].get("interactions")) == 0]
     return [
         {
@@ -984,21 +1051,21 @@ def _build_quick_read(matrix: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         },
         {
             "label": "Mejor registro de listas",
-            "value": f"{best_lists['plantel']} · {best_lists['attendance_lists'].get('completion_pct') or 0:.1f}%",
-            "detail": f"{best_lists['attendance_lists'].get('captured')} de {best_lists['attendance_lists'].get('expected')} listas capturadas.",
-            "status": best_lists["attendance_lists"].get("status"),
+            "value": f"{best_lists['plantel']} · {best_lists['attendance_lists'].get('completion_pct'):.1f}%" if best_lists else "Sin lectura",
+            "detail": f"{best_lists['attendance_lists'].get('captured')} de {best_lists['attendance_lists'].get('expected')} listas capturadas." if best_lists else "Sin datos suficientes de asistencia.",
+            "status": best_lists["attendance_lists"].get("status") if best_lists else "unavailable",
         },
         {
             "label": "Mayor presión por retardos",
-            "value": f"{worst_tardy['plantel']} · {worst_tardy['student_tardies'].get('tardies_per_100_entries') or 0:.1f}/100",
-            "detail": f"{worst_tardy['student_tardies'].get('tardies')} retardos sobre {worst_tardy['student_tardies'].get('first_entries')} entradas.",
-            "status": worst_tardy["student_tardies"].get("status"),
+            "value": f"{worst_tardy['plantel']} · {worst_tardy['student_tardies'].get('tardies_per_100_entries'):.1f}/100" if worst_tardy else "Sin lectura",
+            "detail": f"{worst_tardy['student_tardies'].get('tardies')} retardos sobre {worst_tardy['student_tardies'].get('first_entries')} entradas." if worst_tardy else "Sin denominador de entradas para calcular retardos.",
+            "status": worst_tardy["student_tardies"].get("status") if worst_tardy else "unavailable",
         },
         {
             "label": "Menor cobertura de accesos",
-            "value": f"{weakest_access['plantel']} · {weakest_access['access'].get('coverage_pct') or 0:.1f}%",
+            "value": f"{weakest_access['plantel']} · {weakest_access['access'].get('coverage_pct'):.1f}%" if weakest_access else "Sin lectura",
             "detail": ("SAPF sin registros: " + ", ".join(no_sapf)) if no_sapf else "SAPF tiene registros en los planteles seleccionados.",
-            "status": weakest_access["access"].get("status"),
+            "status": weakest_access["access"].get("status") if weakest_access else "unavailable",
         },
     ]
 
@@ -1030,6 +1097,8 @@ def _build_trend(planteles: List[Dict[str, Any]], start_date: date, end_date: da
         domains = plantel.get("domains") or {}
         attendance = domains.get("attendance") or {}
         husky = domains.get("husky") or {}
+        attendance_has_data = bool(attendance.get("has_data"))
+        husky_has_data = bool(husky.get("has_scan_data"))
         for point in attendance.get("daily_attendance") or []:
             try:
                 d = date.fromisoformat(str(point.get("date") or "")[:10])
@@ -1038,7 +1107,7 @@ def _build_trend(planteles: List[Dict[str, Any]], start_date: date, end_date: da
             if d.weekday() >= 5:
                 continue
             label = _bucket_label(d, start_date, end_date)
-            if label not in buckets[code]:
+            if label not in buckets[code] or not attendance_has_data:
                 continue
             bucket = buckets[code][label]
             bucket["expected_groups"] += _safe_int(point.get("expected_groups_count"))
@@ -1053,7 +1122,7 @@ def _build_trend(planteles: List[Dict[str, Any]], start_date: date, end_date: da
             if d.weekday() >= 5:
                 continue
             label = _bucket_label(d, start_date, end_date)
-            if label not in buckets[code]:
+            if label not in buckets[code] or not husky_has_data:
                 continue
             bucket = buckets[code][label]
             bucket["entrada"] += _safe_int(point.get("entrada_scans"))
@@ -1078,16 +1147,20 @@ def _build_trend(planteles: List[Dict[str, Any]], start_date: date, end_date: da
             for label in labels:
                 b = buckets.get(code, {}).get(label) or {}
                 if metric_key == "lists_completion":
-                    value = _pct(b.get("completed_groups", 0), b.get("expected_groups", 0))
+                    denom = b.get("expected_groups", 0)
+                    value = _pct(b.get("completed_groups", 0), denom) if denom else None
                 elif metric_key == "attendance_rate":
-                    value = _pct(b.get("present", 0), b.get("records", 0))
+                    denom = b.get("records", 0)
+                    value = _pct(b.get("present", 0), denom) if denom else None
                 elif metric_key == "tardies_per_100":
-                    value = _pct(b.get("tardies", 0), b.get("entrada", 0))
+                    denom = b.get("entrada", 0)
+                    value = _pct(b.get("tardies", 0), denom) if denom else None
                 elif metric_key == "access_coverage":
-                    value = min(_pct(b.get("entrada", 0), b.get("expected_scan", 0)), 100.0) if b.get("expected_scan", 0) else 0.0
+                    denom = b.get("expected_scan", 0)
+                    value = min(_pct(b.get("entrada", 0), denom), 100.0) if denom else None
                 else:
-                    value = 0.0
-                values.append(_round(value, 2))
+                    value = None
+                values.append(_round(value, 2) if value is not None else None)
             output.append({"plantel": code, "values": values})
         return output
 
@@ -1114,8 +1187,9 @@ def _build_operational_model(planteles: List[Dict[str, Any]], start_date: date, 
     }
 
 def _aggregate(planteles: List[Dict[str, Any]], start_date: date, end_date: date) -> Dict[str, Any]:
-    count = max(len(planteles), 1)
-    avg_index = sum(_safe_float(p.get("index", {}).get("score")) for p in planteles) / count
+    scored = [p for p in planteles if p.get("index", {}).get("score") is not None]
+    count = max(len(scored), 1)
+    avg_index = sum(_safe_float(p.get("index", {}).get("score")) for p in scored) / count if scored else None
     critical_count = sum(1 for p in planteles if p.get("index", {}).get("status") == "critical")
     warning_count = sum(1 for p in planteles if p.get("index", {}).get("status") == "warning")
     green_count = sum(1 for p in planteles if p.get("index", {}).get("status") == "fulfilled")
@@ -1146,15 +1220,15 @@ def _aggregate(planteles: List[Dict[str, Any]], start_date: date, end_date: date
 
     worst = None
     best = None
-    if planteles:
-        worst = min(planteles, key=lambda p: _safe_float(p.get("index", {}).get("score"), 0.0))
-        best = max(planteles, key=lambda p: _safe_float(p.get("index", {}).get("score"), 0.0))
+    if scored:
+        worst = min(scored, key=lambda p: _safe_float(p.get("index", {}).get("score"), 0.0))
+        best = max(scored, key=lambda p: _safe_float(p.get("index", {}).get("score"), 0.0))
 
-    status = _status_from_index(avg_index, critical_count >= max(2, math.ceil(count / 2)))
+    status = _status_from_index(avg_index, critical_count >= max(2, math.ceil(count / 2))) if avg_index is not None else "unavailable"
     return {
         "corporate_index": {
             "score": _round(avg_index, 1),
-            "risk_score": _round(100 - avg_index, 1),
+            "risk_score": _round(100 - avg_index, 1) if avg_index is not None else None,
             "status": status,
             "label": _risk_label(status),
         },

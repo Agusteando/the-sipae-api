@@ -24,8 +24,13 @@ async def get_attendance_detail_report(plantel: str, start_date: date, end_date:
     expected_set = set(expected_students_by_group.keys())
     total_expected = len(expected_set)
 
+    attendance_aliases = list(dict.fromkeys(
+        plantel_info.get("db_codes", [])
+        + plantel_info.get("sapf_data_campuses", [])
+        + [plantel_info.get("resolved_name", ""), plantel_info.get("short_name", "")]
+    ))
     stats_results, absents_results = await fetch_attendance_data(
-        plantel_info["db_code"], start_date, end_date
+        attendance_aliases, start_date, end_date
     )
 
     daily_points = {}

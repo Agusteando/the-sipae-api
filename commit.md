@@ -1,1 +1,1 @@
-Redesign operational dashboard around aggregate plantel metrics and clearer trends
+Fix operational dashboard denominators, tardy extraction, and sparse-data chart handling

@@ -1,4 +1,4 @@
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from typing import Optional
 from zoneinfo import ZoneInfo
 
@@ -32,19 +32,33 @@ async def serve_tablero_operativo():
     return HTMLResponse(CORPORATE_COMPLIANCE_HTML)
 
 
+def _last_completed_operational_day(now: datetime) -> date:
+    """Return the latest school day that should be considered closed.
+
+    The operational dashboard should not penalize the current day while lists,
+    access scans, SAPF notes, and academic reviews are still being captured.
+    Health reports can still call `today`; the global dashboard defaults to the
+    last completed weekday before the afternoon cut-off.
+    """
+    candidate = now.date()
+    if now.weekday() >= 5 or now.hour < 15:
+        candidate = candidate - timedelta(days=1)
+    while candidate.weekday() >= 5:
+        candidate = candidate - timedelta(days=1)
+    return candidate
+
+
 def _resolve_corporate_dates(scope: Optional[str], start_date: Optional[date], end_date: Optional[date]) -> tuple[str, date, date]:
-    """
-    This dashboard is month-first. Other API modules keep their existing
-    defaults, but this page should open on the current month because daily
-    SAPF/attendance reads are often too sparse to be useful.
-    """
+    """Month-first defaults, using the last completed school day for safety."""
     tz_mx = ZoneInfo("America/Mexico_City")
-    today = datetime.now(tz_mx).date()
+    now = datetime.now(tz_mx)
+    today = now.date()
+    completed_day = _last_completed_operational_day(now)
     requested_scope = (scope or "month").lower()
 
     if requested_scope == "range":
         resolved_start = start_date or today.replace(day=1)
-        resolved_end = end_date or today
+        resolved_end = end_date or completed_day
         if resolved_end < resolved_start:
             resolved_start, resolved_end = resolved_end, resolved_start
         return "range", resolved_start, resolved_end
@@ -53,11 +67,14 @@ def _resolve_corporate_dates(scope: Optional[str], start_date: Optional[date], e
         return "today", today, today
 
     if requested_scope == "ciclo_escolar":
-        start_year = today.year - 1 if today.month < 8 else today.year
-        return "ciclo_escolar", date(start_year, 8, 1), today
+        start_year = completed_day.year - 1 if completed_day.month < 8 else completed_day.year
+        return "ciclo_escolar", date(start_year, 8, 1), completed_day
 
-    # Month-to-date avoids treating future school days as missing attendance.
-    return "month", today.replace(day=1), today
+    month_start = completed_day.replace(day=1)
+    if completed_day < month_start:
+        completed_day = today
+        month_start = today.replace(day=1)
+    return "month", month_start, completed_day
 
 
 def _cache_age_seconds(cache_entry) -> float:

@@ -6,6 +6,23 @@ from .repository import get_daily_scans, fetch_plantel_retardos
 
 logger = get_logger("service.husky")
 
+
+def _husky_filter_values(plantel_info: dict) -> list:
+    values = []
+    values.extend(plantel_info.get("husky_db_codes") or [])
+    values.extend(plantel_info.get("db_codes") or [])
+    values.extend(plantel_info.get("sapf_data_campuses") or [])
+    values.extend([plantel_info.get("resolved_name", ""), plantel_info.get("short_name", "")])
+    seen = set()
+    out = []
+    for value in values:
+        clean = str(value or "").strip()
+        key = clean.upper()
+        if clean and key not in seen:
+            seen.add(key)
+            out.append(clean)
+    return out
+
 async def calculate_husky_daily_rate(plantel: str, start_date: date, end_date: date, scope: str) -> dict:
     """
     Orchestrates integration and repository data to compute daily metrics.
@@ -14,7 +31,7 @@ async def calculate_husky_daily_rate(plantel: str, start_date: date, end_date: d
     plantel_info = resolve_plantel(plantel)
     total_population = await fetch_expected_population(plantel_info["sheets_code"])
     
-    results = await get_daily_scans(plantel_info["husky_db_codes"], start_date, end_date)
+    results = await get_daily_scans(_husky_filter_values(plantel_info), start_date, end_date)
 
     daily_data = {}
     for row in results:
@@ -46,7 +63,7 @@ async def get_plantel_retardos(plantel: str, start_date: date, end_date: date, s
     """
     plantel_info = resolve_plantel(plantel)
     db_code = plantel_info["db_code"]
-    husky_db_codes = plantel_info["husky_db_codes"]
+    husky_db_codes = _husky_filter_values(plantel_info)
     
     # Apply strict rules for threshold mappings based on normalized plantel
     if db_code in ['PM', 'PT']:
