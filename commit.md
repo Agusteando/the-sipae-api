@@ -1,1 +1,1 @@
-Fix health report scheduler startup status handling
+feat: add SIPAE Corporate Compliance & Risk Index dashboard

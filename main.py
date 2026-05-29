@@ -14,6 +14,7 @@ from modules.sapf.router import router as sapf_router
 from modules.academic.router import router as academic_router
 from modules.baselines.router import router as baselines_router
 from modules.health_reports.router import router as health_reports_router
+from modules.corporate_compliance.router import router as corporate_compliance_router
 
 # ==========================================
 # LIFESPAN & SCHEDULER
@@ -25,7 +26,7 @@ async def lifespan(app: FastAPI):
     yield
     # Lógica de cierre futuro (si es necesario)
 
-app = FastAPI(title="The SIPAE API Hub", version="1.5.0", lifespan=lifespan)
+app = FastAPI(title="The SIPAE API Hub", version="1.6.0", lifespan=lifespan)
 
 # ==========================================
 # CORS CONFIGURATION
@@ -54,6 +55,7 @@ app.include_router(sapf_router)
 app.include_router(academic_router)
 app.include_router(baselines_router)
 app.include_router(health_reports_router)
+app.include_router(corporate_compliance_router)
 
 if __name__ == "__main__":
     import uvicorn
