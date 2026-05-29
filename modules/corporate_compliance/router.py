@@ -27,6 +27,11 @@ async def serve_cumplimiento_operativo():
     return HTMLResponse(CORPORATE_COMPLIANCE_HTML)
 
 
+@router.get("/tablero-operativo", response_class=HTMLResponse, include_in_schema=False)
+async def serve_tablero_operativo():
+    return HTMLResponse(CORPORATE_COMPLIANCE_HTML)
+
+
 def _resolve_corporate_dates(scope: Optional[str], start_date: Optional[date], end_date: Optional[date]) -> tuple[str, date, date]:
     """
     This dashboard is month-first. Other API modules keep their existing

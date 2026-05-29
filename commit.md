@@ -1,1 +1,1 @@
-Refine school operations dashboard defaults, charting, and scoring calibration
+Refactor operational dashboard charts and fix Husky tardy aggregation

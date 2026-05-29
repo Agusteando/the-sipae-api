@@ -60,29 +60,40 @@ async def get_daily_scans(db_codes: Iterable[str] | str, start_date: date, end_d
 
 async def fetch_plantel_retardos(db_codes: Iterable[str] | str, start_date: date, end_date: date, threshold_time: str) -> list:
     """
-    Fetches tardies globally for the requested plantel. Uses the same Husky
-    plantel storage codes as scan activity.
+    Fetches student tardies from Husky Pass using the same access identity chain
+    as the scan-rate query: acceso.ss_id -> personas_autorizadas.id -> users.id.
+
+    Important: count only the first valid entrada per student per day. A student
+    can scan more than once; additional entrance scans after the threshold should
+    not inflate tardies.
     """
     plantel_clause, plantel_params = _plantel_like_clause("B", db_codes)
     query = f"""
         SELECT
-            A.id,
-            CONCAT(IFNULL(ap.nombreA,''), ' ', IFNULL(ap.paternoA,''), ' ', IFNULL(ap.maternoA,'')) as student_fullname,
-            B.username as matricula,
-            DATE(A.timestamp) as date,
-            TIME(A.timestamp) as time
+            MIN(A.id) AS id,
+            COALESCE(
+                NULLIF(TRIM(CONCAT_WS(' ', ap.nombreA, ap.paternoA, ap.maternoA)), ''),
+                NULLIF(TRIM(B.username), ''),
+                'Desconocido'
+            ) AS student_fullname,
+            COALESCE(NULLIF(TRIM(B.username), ''), 'N/A') AS matricula,
+            DATE(MIN(A.timestamp)) AS date,
+            TIME(MIN(A.timestamp)) AS time
         FROM acceso A
-        JOIN alumno_pa ap ON ap.user_id = A.ss_id
-        JOIN users B ON ap.user_id = B.id
+        LEFT JOIN personas_autorizadas pa ON pa.id = A.ss_id
+        LEFT JOIN users B ON pa.user_id = B.id
+        LEFT JOIN alumno_pa ap ON ap.user_id = B.id
         WHERE
             {plantel_clause}
             AND DATE(A.timestamp) BETWEEN %s AND %s
             AND A.timestamp IS NOT NULL
-            AND A.type = 'entrada'
-            AND A.suspension_efectiva = 0
+            AND LOWER(A.type) = 'entrada'
+            AND COALESCE(A.suspension_efectiva, 0) = 0
             AND DAYOFWEEK(A.timestamp) NOT IN (1, 7)
-            AND TIME(A.timestamp) > %s
-        ORDER BY A.timestamp ASC
+            AND B.id IS NOT NULL
+        GROUP BY DATE(A.timestamp), B.id, B.username, ap.nombreA, ap.paternoA, ap.maternoA
+        HAVING TIME(MIN(A.timestamp)) > %s
+        ORDER BY MIN(A.timestamp) ASC
     """
 
     conn = await get_husky_db_connection()

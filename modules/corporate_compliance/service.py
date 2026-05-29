@@ -219,6 +219,8 @@ def _sum_daily_attendance(attendance: Dict[str, Any], start_date: date, end_date
 
         daily_attendance.append({
             "date": point_date_str,
+            "expected_groups_count": expected_day,
+            "completed_groups_count": completed_day,
             "total_students": total_day,
             "present_students": present_day,
             "absent_students": absent_day,
@@ -357,25 +359,51 @@ def _sum_husky(husky: Dict[str, Any], retardos: Dict[str, Any], start_date: date
             "salida_scans": 0,
             "scan_gap": 0,
             "student_tardies": _safe_int(retardos.get("total_retardos")),
-            "repeat_tardy_students": [],
+            "unique_tardy_students_count": 0,
+            "repeat_tardy_students_count": 0,
+            "student_tardy_rate_percent": 0.0,
+            "avg_tardies_per_business_day": 0.0,
             "daily_tardies": [],
-            "risk_score": 45.0,
+            "daily_scans": [],
+            "risk_score": 35.0,
         }
 
     points = husky.get("daily_datapoints") or {}
     expected_population = _safe_int(husky.get("expected_population"))
-    entrada = sum(_safe_int(point.get("entrada")) for point in points.values())
-    salida = sum(_safe_int(point.get("salida")) for point in points.values())
-    expected_ops = expected_population * _business_days(start_date, end_date)
+    business_days = _business_days(start_date, end_date)
+    entrada = 0
+    salida = 0
+    daily_scans: List[Dict[str, Any]] = []
+
+    for day, point in sorted(points.items(), key=lambda item: str(item[0])):
+        try:
+            day_dt = date.fromisoformat(str(day)[:10])
+        except Exception:
+            day_dt = None
+        if day_dt and day_dt.weekday() >= 5:
+            continue
+        entrada_day = _safe_int(point.get("entrada"))
+        salida_day = _safe_int(point.get("salida"))
+        entrada += entrada_day
+        salida += salida_day
+        daily_scans.append({
+            "date": str(day)[:10],
+            "entrada_scans": entrada_day,
+            "salida_scans": salida_day,
+            "expected_population": expected_population,
+            "scan_rate_percent": min(_pct(entrada_day, expected_population), 100.0) if expected_population else 0.0,
+        })
+
+    expected_ops = expected_population * business_days
     scan_rate = min(_pct(entrada, expected_ops), 100.0) if expected_ops else 0.0
     scan_gap = max(expected_ops - entrada, 0)
     student_tardies = _safe_int(retardos.get("total_retardos")) if not retardos.get("error") else 0
 
-    tardy_rows = retardos.get("retardos") or [] if not retardos.get("error") else []
+    tardy_rows = (retardos.get("retardos") or []) if not retardos.get("error") else []
     tardies_by_day: Dict[str, int] = {}
     student_map: Dict[str, Dict[str, Any]] = {}
     for item in tardy_rows:
-        day = str(item.get("date") or "")
+        day = str(item.get("date") or "")[:10]
         if day:
             tardies_by_day[day] = tardies_by_day.get(day, 0) + 1
         matricula = str(item.get("matricula") or "N/A").strip() or "N/A"
@@ -391,17 +419,22 @@ def _sum_husky(husky: Dict[str, Any], retardos: Dict[str, Any], start_date: date
         {"date": day, "tardies": count}
         for day, count in sorted(tardies_by_day.items(), key=lambda item: item[0])
     ]
-    repeat_tardy_students = [
-        {**item, "dates": item["dates"][:10]}
-        for item in sorted(student_map.values(), key=lambda row: (-row["tardies"], row["student_fullname"]))
-        if item["tardies"] > 1
-    ][:30]
-    tardy_rate_per_population = _pct(student_tardies, expected_population * _business_days(start_date, end_date)) if expected_population else 0.0
-    avg_tardies_per_business_day = _round(student_tardies / _business_days(start_date, end_date), 2)
+    repeat_tardy_students_count = sum(1 for item in student_map.values() if item["tardies"] > 1)
+    unique_tardy_students_count = len(student_map)
+    tardy_rate_per_population = _pct(student_tardies, expected_ops) if expected_ops else 0.0
+    avg_tardies_per_business_day = _round(student_tardies / business_days, 2)
 
-    risk_score = _clamp(max(0.0, 75 - scan_rate) * 0.35 + student_tardies * 0.08 + len(repeat_tardy_students) * 0.35)
-    material_scan_gap = expected_population > 0 and scan_rate < 25 and scan_gap > expected_population * 5
-    status = _status_from_index(100 - risk_score, material_scan_gap)
+    # Calibrated to month-to-date: tardies are material when the rate is high
+    # relative to population, not merely because the campus has more students.
+    risk_score = _clamp(
+        max(0.0, 68 - scan_rate) * 0.22
+        + tardy_rate_per_population * 5.0
+        + avg_tardies_per_business_day * 0.35
+        + repeat_tardy_students_count * 0.45
+    )
+    material_scan_gap = expected_population > 0 and scan_rate < 25 and scan_gap > expected_population * max(3, business_days * 0.35)
+    material_tardy_gap = tardy_rate_per_population >= 4.0 or avg_tardies_per_business_day >= 18
+    status = _status_from_index(100 - risk_score, material_scan_gap or material_tardy_gap)
     return {
         "status": status,
         "expected_population": expected_population,
@@ -411,15 +444,16 @@ def _sum_husky(husky: Dict[str, Any], retardos: Dict[str, Any], start_date: date
         "scan_rate_percent": _round(scan_rate, 2),
         "scan_gap": scan_gap,
         "student_tardies": student_tardies,
+        "unique_tardy_students_count": unique_tardy_students_count,
+        "repeat_tardy_students_count": repeat_tardy_students_count,
         "student_tardy_rate_percent": _round(tardy_rate_per_population, 2),
         "avg_tardies_per_business_day": avg_tardies_per_business_day,
         "daily_tardies": daily_tardies,
-        "repeat_tardy_students_count": len(repeat_tardy_students),
-        "repeat_tardy_students": [],
-        "late_arrivals_sample": [],
+        "daily_scans": daily_scans,
         "risk_score": _round(risk_score, 2),
-        "risk_narrative": "Uso de escaneo y brecha de acceso registrada.",
+        "risk_narrative": "Retardos y uso de escaneo por plantel.",
     }
+
 
 def _sum_employee(kardex: Dict[str, Any]) -> Dict[str, Any]:
     if kardex.get("error"):
@@ -653,6 +687,77 @@ async def _collect_plantel(plantel: str, start_date: date, end_date: date, scope
     }
 
 
+
+def _aggregate_daily_series(planteles: List[Dict[str, Any]], start_date: date, end_date: date) -> List[Dict[str, Any]]:
+    days: Dict[str, Dict[str, Any]] = {}
+    cursor = start_date
+    while cursor <= end_date:
+        if cursor.weekday() < 5:
+            days[cursor.isoformat()] = {
+                "date": cursor.isoformat(),
+                "expected_groups": 0,
+                "completed_groups": 0,
+                "total_students": 0,
+                "present_students": 0,
+                "absent_students": 0,
+                "missing_groups": 0,
+                "missing_expected_students": 0,
+                "entrada_scans": 0,
+                "salida_scans": 0,
+                "expected_scan_ops": 0,
+                "student_tardies": 0,
+            }
+        cursor += timedelta(days=1)
+
+    for plantel in planteles:
+        attendance = plantel.get("domains", {}).get("attendance", {})
+        husky = plantel.get("domains", {}).get("husky", {})
+
+        for point in attendance.get("daily_attendance") or []:
+            day = str(point.get("date") or "")[:10]
+            if day not in days:
+                continue
+            bucket = days[day]
+            bucket["expected_groups"] += _safe_int(point.get("expected_groups_count"))
+            bucket["completed_groups"] += _safe_int(point.get("completed_groups_count"))
+            bucket["total_students"] += _safe_int(point.get("total_students"))
+            bucket["present_students"] += _safe_int(point.get("present_students"))
+            bucket["absent_students"] += _safe_int(point.get("absent_students"))
+            bucket["missing_groups"] += _safe_int(point.get("missing_groups_count"))
+            bucket["missing_expected_students"] += _safe_int(point.get("missing_expected_students"))
+
+        for point in husky.get("daily_scans") or []:
+            day = str(point.get("date") or "")[:10]
+            if day not in days:
+                continue
+            bucket = days[day]
+            bucket["entrada_scans"] += _safe_int(point.get("entrada_scans"))
+            bucket["salida_scans"] += _safe_int(point.get("salida_scans"))
+            bucket["expected_scan_ops"] += _safe_int(point.get("expected_population"))
+
+        for point in husky.get("daily_tardies") or []:
+            day = str(point.get("date") or "")[:10]
+            if day not in days:
+                continue
+            days[day]["student_tardies"] += _safe_int(point.get("tardies"))
+
+    series = []
+    for bucket in days.values():
+        expected_groups = _safe_int(bucket.get("expected_groups"))
+        completed_groups = _safe_int(bucket.get("completed_groups"))
+        total_students = _safe_int(bucket.get("total_students"))
+        present_students = _safe_int(bucket.get("present_students"))
+        expected_scan_ops = _safe_int(bucket.get("expected_scan_ops"))
+        entrada_scans = _safe_int(bucket.get("entrada_scans"))
+        series.append({
+            **bucket,
+            "completion_percent": _round(_pct(completed_groups, expected_groups), 2),
+            "attendance_rate_percent": _round(_pct(present_students, total_students), 2),
+            "absence_rate_percent": _round(_pct(bucket.get("absent_students"), total_students), 2),
+            "scan_rate_percent": _round(min(_pct(entrada_scans, expected_scan_ops), 100.0) if expected_scan_ops else 0.0, 2),
+        })
+    return series
+
 def _aggregate(planteles: List[Dict[str, Any]], start_date: date, end_date: date) -> Dict[str, Any]:
     count = max(len(planteles), 1)
     avg_index = sum(_safe_float(p.get("index", {}).get("score")) for p in planteles) / count
@@ -672,6 +777,7 @@ def _aggregate(planteles: List[Dict[str, Any]], start_date: date, end_date: date
         "payroll_waste_minutes": sum(_safe_int(p["domains"]["employee"].get("payroll_waste_minutes")) for p in planteles),
         "security_scan_gap": sum(_safe_int(p["domains"]["husky"].get("scan_gap")) for p in planteles),
         "student_tardies": sum(_safe_int(p["domains"]["husky"].get("student_tardies")) for p in planteles),
+        "unique_tardy_students": sum(_safe_int(p["domains"]["husky"].get("unique_tardy_students_count")) for p in planteles),
         "repeat_tardy_students": sum(_safe_int(p["domains"]["husky"].get("repeat_tardy_students_count")) for p in planteles),
         "academic_backlog": sum(_safe_int(p["domains"]["academic"].get("supervision_backlog")) for p in planteles),
         "pending_lesson_reviews": sum(_safe_int(p["domains"]["academic"].get("planeaciones_pendientes")) for p in planteles),
@@ -721,6 +827,7 @@ def _aggregate(planteles: List[Dict[str, Any]], start_date: date, end_date: date
             "calendar_days": _date_range_days(start_date, end_date),
             "business_days": _business_days(start_date, end_date),
         },
+        "daily_series": _aggregate_daily_series(planteles, start_date, end_date),
     }
 
 
