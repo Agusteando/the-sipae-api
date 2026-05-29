@@ -16,6 +16,7 @@ class SapfAreaMonthlyData(BaseModel):
     area: str
     monthly_data: List[SapfMonthlyRecord]
     total_conteo: int
+    sources: Optional[Dict[str, int]] = None
 
 class SapfMonthlyResponse(BaseModel):
     plantel_requested: str
@@ -29,6 +30,7 @@ class SapfMotivoRecord(BaseModel):
     area: str
     motivo: str
     conteo: int
+    source: Optional[str] = None
 
 class SapfMotivosResponse(BaseModel):
     plantel_requested: str

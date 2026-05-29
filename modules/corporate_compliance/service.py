@@ -16,7 +16,7 @@ from modules.attendance.service import get_attendance_detail_report
 from modules.baselines.service import get_global_baseline_report
 from modules.employee_attendance.service import get_kardex_attendance_report
 from modules.husky.service import calculate_husky_daily_rate, get_plantel_retardos
-from modules.sapf.service import get_sapf_monthly_report, get_sapf_motivos_report
+from modules.sapf.service import get_sapf_monthly_report, get_sapf_motivos_report, get_sapf_overview_report
 
 logger = get_logger("service.corporate_compliance")
 
@@ -125,13 +125,20 @@ def _sum_daily_attendance(attendance: Dict[str, Any], start_date: date, end_date
             "error": attendance.get("error"),
             "completion_percent": 0.0,
             "attendance_rate_percent": 0.0,
+            "absence_rate_percent": 0.0,
             "missing_groups_count": 0,
             "missing_expected_students": 0,
             "absent_students_count": 0,
             "expected_groups_count": 0,
             "completed_groups_count": 0,
             "legal_risk_units": 0,
+            "no_modality_records": 0,
             "missing_groups": [],
+            "repeated_missing_groups": [],
+            "daily_attendance": [],
+            "absence_motives": [],
+            "group_absence_hotspots": [],
+            "low_attendance_groups": [],
             "risk_score": 45.0,
         }
 
@@ -151,37 +158,138 @@ def _sum_daily_attendance(attendance: Dict[str, Any], start_date: date, end_date
     total_students = 0
     present_students = 0
     absent_students = 0
+    no_modality_records = 0
+    presencial_count = 0
+    virtual_count = 0
+    girls_count = 0
+    boys_count = 0
     missing_groups: List[Dict[str, Any]] = []
+    daily_attendance: List[Dict[str, Any]] = []
+    motive_counts: Dict[str, int] = {}
+    group_absence: Dict[str, Dict[str, Any]] = {}
+    group_seen: Dict[str, Dict[str, int]] = {}
+    missing_counter: Dict[str, Dict[str, Any]] = {}
 
     for point in daily_payloads:
         missing_data = point.get("missing_groups_data") or {}
         summary = point.get("summary") or {}
         point_date = point.get("date") or point.get("date_range", {}).get("start") or start_date.isoformat()
+        point_date_str = str(point_date)
 
-        expected_groups += _safe_int(missing_data.get("expected_groups_count"))
-        completed_groups += _safe_int(missing_data.get("completed_groups_count"))
-        missing_groups_count += _safe_int(missing_data.get("missing_groups_count"))
-        missing_expected_students += _safe_int(missing_data.get("expected_students_count"))
-        total_students += _safe_int(summary.get("total_students"))
-        present_students += _safe_int(summary.get("asistencia"))
-        absent_students += _safe_int(summary.get("ausencia")) + _safe_int(summary.get("ausencia2"))
+        expected_day = _safe_int(missing_data.get("expected_groups_count"))
+        completed_day = _safe_int(missing_data.get("completed_groups_count"))
+        missing_day = _safe_int(missing_data.get("missing_groups_count"))
+        missing_students_day = _safe_int(missing_data.get("expected_students_count"))
+        total_day = _safe_int(summary.get("total_students"))
+        present_day = _safe_int(summary.get("asistencia"))
+        absent_day = _safe_int(summary.get("ausencia"))
+        no_modality_day = _safe_int(summary.get("ausencia2"))
+
+        expected_groups += expected_day
+        completed_groups += completed_day
+        missing_groups_count += missing_day
+        missing_expected_students += missing_students_day
+        total_students += total_day
+        present_students += present_day
+        absent_students += absent_day
+        no_modality_records += no_modality_day
+        presencial_count += _safe_int(summary.get("presencial"))
+        virtual_count += _safe_int(summary.get("virt"))
+        girls_count += _safe_int(summary.get("girls"))
+        boys_count += _safe_int(summary.get("boys"))
+
+        daily_attendance.append({
+            "date": point_date_str,
+            "total_students": total_day,
+            "present_students": present_day,
+            "absent_students": absent_day,
+            "attendance_rate_percent": _pct(present_day, total_day),
+            "absence_rate_percent": _pct(absent_day, total_day),
+            "completion_percent": _safe_float(missing_data.get("completion_percent")),
+            "missing_groups_count": missing_day,
+            "missing_expected_students": missing_students_day,
+        })
+
+        for group in point.get("groups") or []:
+            grade = str(group.get("grado") or "").strip()
+            classroom = str(group.get("grupo") or "").strip()
+            key = f"{grade} {classroom}".strip() or "Sin grupo"
+            g_total = _safe_int(group.get("total_students_per_group"))
+            g_present = _safe_int(group.get("asistencia"))
+            g_absent = _safe_int(group.get("ausencia"))
+            if key not in group_seen:
+                group_seen[key] = {"days": 0, "total": 0, "present": 0, "absent": 0}
+            group_seen[key]["days"] += 1
+            group_seen[key]["total"] += g_total
+            group_seen[key]["present"] += g_present
+            group_seen[key]["absent"] += g_absent
+
+        for absent in point.get("absent_students") or []:
+            motive = str(absent.get("motivo") or "Sin motivo capturado").strip() or "Sin motivo capturado"
+            motive_counts[motive] = motive_counts.get(motive, 0) + 1
+            grade = str(absent.get("grado") or "").strip()
+            classroom = str(absent.get("grupo") or "").strip()
+            key = f"{grade} {classroom}".strip() or "Sin grupo"
+            if key not in group_absence:
+                group_absence[key] = {"grupo": key, "absences": 0, "dates": set()}
+            group_absence[key]["absences"] += 1
+            group_absence[key]["dates"].add(point_date_str)
 
         for group in missing_data.get("missing_groups") or []:
+            grade = str(group.get("grado") or "").strip()
+            classroom = str(group.get("grupo") or "").strip()
+            group_key = f"{grade} {classroom}".strip() or "Sin grupo"
+            expected = _safe_int(group.get("expected_students"))
             missing_groups.append({
-                "date": str(point_date),
-                "grado": str(group.get("grado") or "").strip(),
-                "grupo": str(group.get("grupo") or "").strip(),
-                "expected_students": _safe_int(group.get("expected_students")),
+                "date": point_date_str,
+                "grado": grade,
+                "grupo": classroom,
+                "expected_students": expected,
             })
+            if group_key not in missing_counter:
+                missing_counter[group_key] = {"grupo": group_key, "days_missing": 0, "expected_students": expected, "dates": []}
+            missing_counter[group_key]["days_missing"] += 1
+            missing_counter[group_key]["expected_students"] = max(missing_counter[group_key]["expected_students"], expected)
+            missing_counter[group_key]["dates"].append(point_date_str)
 
-    if expected_groups == 0 and not daily_payloads:
-        completion = 0.0
-    else:
-        completion = _pct(completed_groups, expected_groups)
+    completion = _pct(completed_groups, expected_groups) if expected_groups else 0.0
     attendance_rate = _pct(present_students, total_students)
+    absence_rate = _pct(absent_students, total_students)
     legal_risk_units = missing_expected_students
 
-    risk_score = _clamp((100 - completion) * 1.65 + missing_groups_count * 6 + missing_expected_students * 0.08)
+    absence_motives = [
+        {"motivo": motive, "conteo": count}
+        for motive, count in sorted(motive_counts.items(), key=lambda item: (-item[1], item[0]))[:12]
+    ]
+    group_absence_hotspots = [
+        {"grupo": item["grupo"], "absences": item["absences"], "days_with_absences": len(item["dates"])}
+        for item in sorted(group_absence.values(), key=lambda row: (-row["absences"], row["grupo"]))[:20]
+    ]
+    low_attendance_groups = []
+    for group, data in group_seen.items():
+        rate = _pct(data["present"], data["total"])
+        if data["total"] > 0 and rate < 90:
+            low_attendance_groups.append({
+                "grupo": group,
+                "attendance_rate_percent": rate,
+                "absent_students": data["absent"],
+                "total_students": data["total"],
+                "days_recorded": data["days"],
+            })
+    low_attendance_groups.sort(key=lambda row: (row["attendance_rate_percent"], -row["absent_students"], row["grupo"]))
+    repeated_missing_groups = [
+        {**item, "dates": item["dates"][:10]}
+        for item in sorted(missing_counter.values(), key=lambda row: (-row["days_missing"], row["grupo"]))
+        if item["days_missing"] > 1
+    ][:20]
+
+    risk_score = _clamp(
+        (100 - completion) * 1.65
+        + missing_groups_count * 6
+        + missing_expected_students * 0.08
+        + max(0.0, absence_rate - 8.0) * 0.75
+        + len(repeated_missing_groups) * 4
+    )
     critical = missing_groups_count > 0 or completion < 90
     status = _status_from_index(100 - risk_score, critical)
 
@@ -189,18 +297,28 @@ def _sum_daily_attendance(attendance: Dict[str, Any], start_date: date, end_date
         "status": status,
         "completion_percent": completion,
         "attendance_rate_percent": attendance_rate,
+        "absence_rate_percent": absence_rate,
         "expected_groups_count": expected_groups,
         "completed_groups_count": completed_groups,
         "missing_groups_count": missing_groups_count,
         "missing_expected_students": missing_expected_students,
         "absent_students_count": absent_students,
         "total_students_recorded": total_students,
+        "no_modality_records": no_modality_records,
+        "presencial_count": presencial_count,
+        "virtual_count": virtual_count,
+        "girls_count": girls_count,
+        "boys_count": boys_count,
         "legal_risk_units": legal_risk_units,
-        "missing_groups": missing_groups[:80],
+        "missing_groups": missing_groups[:120],
+        "repeated_missing_groups": repeated_missing_groups,
+        "daily_attendance": daily_attendance,
+        "absence_motives": absence_motives,
+        "group_absence_hotspots": group_absence_hotspots,
+        "low_attendance_groups": low_attendance_groups[:20],
         "risk_score": _round(risk_score, 2),
         "risk_narrative": "Grupos sin pase de lista, rompiendo la continuidad del expediente legal y operativo del alumno, generando riesgo de compliance.",
     }
-
 
 def _sum_husky(husky: Dict[str, Any], retardos: Dict[str, Any], start_date: date, end_date: date) -> Dict[str, Any]:
     if husky.get("error"):
@@ -212,6 +330,8 @@ def _sum_husky(husky: Dict[str, Any], retardos: Dict[str, Any], start_date: date
             "salida_scans": 0,
             "scan_gap": 0,
             "student_tardies": _safe_int(retardos.get("total_retardos")),
+            "repeat_tardy_students": [],
+            "daily_tardies": [],
             "risk_score": 45.0,
         }
 
@@ -224,7 +344,35 @@ def _sum_husky(husky: Dict[str, Any], retardos: Dict[str, Any], start_date: date
     scan_gap = max(expected_ops - entrada, 0)
     student_tardies = _safe_int(retardos.get("total_retardos")) if not retardos.get("error") else 0
 
-    risk_score = _clamp(max(0.0, 90 - scan_rate) * 1.75 + student_tardies * 0.8)
+    tardy_rows = retardos.get("retardos") or [] if not retardos.get("error") else []
+    tardies_by_day: Dict[str, int] = {}
+    student_map: Dict[str, Dict[str, Any]] = {}
+    for item in tardy_rows:
+        day = str(item.get("date") or "")
+        if day:
+            tardies_by_day[day] = tardies_by_day.get(day, 0) + 1
+        matricula = str(item.get("matricula") or "N/A").strip() or "N/A"
+        name = str(item.get("student_fullname") or "Desconocido").strip() or "Desconocido"
+        key = matricula if matricula != "N/A" else name
+        if key not in student_map:
+            student_map[key] = {"matricula": matricula, "student_fullname": name, "tardies": 0, "dates": []}
+        student_map[key]["tardies"] += 1
+        if day:
+            student_map[key]["dates"].append(day)
+
+    daily_tardies = [
+        {"date": day, "tardies": count}
+        for day, count in sorted(tardies_by_day.items(), key=lambda item: item[0])
+    ]
+    repeat_tardy_students = [
+        {**item, "dates": item["dates"][:10]}
+        for item in sorted(student_map.values(), key=lambda row: (-row["tardies"], row["student_fullname"]))
+        if item["tardies"] > 1
+    ][:30]
+    tardy_rate_per_population = _pct(student_tardies, expected_population * _business_days(start_date, end_date)) if expected_population else 0.0
+    avg_tardies_per_business_day = _round(student_tardies / _business_days(start_date, end_date), 2)
+
+    risk_score = _clamp(max(0.0, 90 - scan_rate) * 1.75 + student_tardies * 0.8 + len(repeat_tardy_students) * 1.5)
     status = _status_from_index(100 - risk_score, scan_rate < 60)
     return {
         "status": status,
@@ -235,11 +383,14 @@ def _sum_husky(husky: Dict[str, Any], retardos: Dict[str, Any], start_date: date
         "scan_rate_percent": _round(scan_rate, 2),
         "scan_gap": scan_gap,
         "student_tardies": student_tardies,
-        "late_arrivals_sample": (retardos.get("retardos") or [])[:40] if not retardos.get("error") else [],
+        "student_tardy_rate_percent": _round(tardy_rate_per_population, 2),
+        "avg_tardies_per_business_day": avg_tardies_per_business_day,
+        "daily_tardies": daily_tardies,
+        "repeat_tardy_students": repeat_tardy_students,
+        "late_arrivals_sample": tardy_rows[:60],
         "risk_score": _round(risk_score, 2),
         "risk_narrative": "Vulnerabilidad de seguridad y cadena de custodia en accesos.",
     }
-
 
 def _sum_employee(kardex: Dict[str, Any]) -> Dict[str, Any]:
     if kardex.get("error"):
@@ -336,35 +487,65 @@ def _sum_academic(
     }
 
 
-def _sum_sapf(monthly: Dict[str, Any], motivos: Dict[str, Any]) -> Dict[str, Any]:
-    if monthly.get("error") and motivos.get("error"):
+def _sum_sapf(monthly: Dict[str, Any], motivos: Dict[str, Any], overview: Dict[str, Any]) -> Dict[str, Any]:
+    if monthly.get("error") and motivos.get("error") and overview.get("error"):
         return {
             "status": "unavailable",
-            "error": monthly.get("error") or motivos.get("error"),
+            "error": monthly.get("error") or motivos.get("error") or overview.get("error"),
             "parent_interactions": 0,
             "risk_score": 35.0,
         }
 
-    areas = monthly.get("data") or []
-    parent_interactions = sum(_safe_int(area.get("total_conteo")) for area in areas)
+    areas = monthly.get("data") or [] if not monthly.get("error") else []
+    parent_interactions_from_monthly = sum(_safe_int(area.get("total_conteo")) for area in areas)
+    total_fichas = _safe_int(overview.get("total_fichas")) if not overview.get("error") else 0
+    total_followups = _safe_int(overview.get("total_followups")) if not overview.get("error") else 0
+    parent_interactions = _safe_int(overview.get("total_interactions")) if not overview.get("error") else parent_interactions_from_monthly
+    if parent_interactions == 0 and parent_interactions_from_monthly:
+        parent_interactions = parent_interactions_from_monthly
+
+    open_cases = _safe_int(overview.get("open_cases")) if not overview.get("error") else 0
+    closed_cases = _safe_int(overview.get("closed_cases")) if not overview.get("error") else 0
+    complaints = _safe_int(overview.get("complaints")) if not overview.get("error") else 0
+    parent_origin_cases = _safe_int(overview.get("parent_origin_cases")) if not overview.get("error") else 0
+    open_case_rate = _safe_float(overview.get("open_case_rate_percent"), 0.0) if not overview.get("error") else 0.0
+    followup_ratio = _safe_float(overview.get("followup_ratio_percent"), 0.0) if not overview.get("error") else 0.0
+
     motive_rows = motivos.get("motivos") or [] if not motivos.get("error") else []
-    top_motives = sorted(motive_rows, key=lambda item: _safe_int(item.get("conteo")), reverse=True)[:10]
+    top_motives = sorted(motive_rows, key=lambda item: _safe_int(item.get("conteo")), reverse=True)[:12]
     area_rows = sorted(
-        [{"area": area.get("area"), "conteo": _safe_int(area.get("total_conteo"))} for area in areas],
+        [{"area": area.get("area"), "conteo": _safe_int(area.get("total_conteo")), "sources": area.get("sources") or {}} for area in areas],
         key=lambda item: item["conteo"],
         reverse=True,
-    )[:12]
-    risk_score = 42.0 if parent_interactions == 0 else 0.0
-    status = _status_from_index(100 - risk_score, False)
+    )[:14]
+
+    zero_data_risk = parent_interactions == 0
+    risk_score = _clamp(
+        (45.0 if zero_data_risk else 0.0)
+        + open_case_rate * 0.28
+        + complaints * 1.4
+        + max(0.0, followup_ratio - 120.0) * 0.06
+    )
+    status = _status_from_index(100 - risk_score, zero_data_risk)
     return {
         "status": status,
         "parent_interactions": parent_interactions,
+        "tickets_created": total_fichas,
+        "followups": total_followups,
+        "open_cases": open_cases,
+        "closed_cases": closed_cases,
+        "complaints": complaints,
+        "parent_origin_cases": parent_origin_cases,
+        "open_case_rate_percent": _round(open_case_rate, 2),
+        "followup_ratio_percent": _round(followup_ratio, 2),
+        "avg_resolution_hours": _round(_safe_float(overview.get("avg_resolution_hours"), 0.0), 2) if overview.get("avg_resolution_hours") is not None else None,
         "areas": area_rows,
         "top_motives": top_motives,
+        "matched_campus_values": overview.get("matched_campus_values") or monthly.get("data_campuses") or [],
+        "source_breakdown": monthly.get("source_breakdown") or {},
         "risk_score": _round(risk_score, 2),
         "risk_narrative": "Trazabilidad de atención a padres y concentración de motivos de presión operativa.",
     }
-
 
 def _build_index(domains: Dict[str, Dict[str, Any]]) -> Dict[str, Any]:
     weighted_risk = 0.0
@@ -401,19 +582,20 @@ async def _collect_plantel(plantel: str, start_date: date, end_date: date, scope
         _safe_call("kardex", lambda: get_kardex_attendance_report(plantel, start_date, end_date, scope)),
         _safe_call("sapf_monthly", lambda: get_sapf_monthly_report(plantel, start_date, end_date, scope)),
         _safe_call("sapf_motivos", lambda: get_sapf_motivos_report(plantel, start_date, end_date, scope)),
+        _safe_call("sapf_overview", lambda: get_sapf_overview_report(plantel, start_date, end_date, scope)),
         _safe_call("observaciones", lambda: get_observaciones_report(plantel, start_date, end_date, scope)),
         _safe_call("planeaciones", lambda: get_planeaciones_report(plantel, start_date, end_date, scope)),
         _safe_call("observaciones_docentes", lambda: get_observaciones_docentes_report(plantel)),
         _safe_call("planeaciones_pendientes", lambda: get_planeaciones_pendientes_report(plantel, week_start, end_date, "range")),
     )
 
-    attendance, husky, retardos, kardex, sapf_monthly, sapf_motivos, observaciones, planeaciones, obs_docentes, plan_pendientes = results
+    attendance, husky, retardos, kardex, sapf_monthly, sapf_motivos, sapf_overview, observaciones, planeaciones, obs_docentes, plan_pendientes = results
     domains = {
         "attendance": _sum_daily_attendance(attendance, start_date, end_date),
         "husky": _sum_husky(husky, retardos, start_date, end_date),
         "employee": _sum_employee(kardex),
         "academic": _sum_academic(observaciones, planeaciones, obs_docentes, plan_pendientes),
-        "sapf": _sum_sapf(sapf_monthly, sapf_motivos),
+        "sapf": _sum_sapf(sapf_monthly, sapf_motivos, sapf_overview),
     }
     index = _build_index(domains)
 
@@ -450,16 +632,24 @@ def _aggregate(planteles: List[Dict[str, Any]], start_date: date, end_date: date
     totals = {
         "missing_groups": sum(_safe_int(p["domains"]["attendance"].get("missing_groups_count")) for p in planteles),
         "students_without_legal_attendance_trace": sum(_safe_int(p["domains"]["attendance"].get("missing_expected_students")) for p in planteles),
+        "absent_students": sum(_safe_int(p["domains"]["attendance"].get("absent_students_count")) for p in planteles),
+        "attendance_no_modality_records": sum(_safe_int(p["domains"]["attendance"].get("no_modality_records")) for p in planteles),
+        "repeated_missing_groups": sum(len(p["domains"]["attendance"].get("repeated_missing_groups") or []) for p in planteles),
         "employee_incidents": sum(_safe_int(p["domains"]["employee"].get("employee_incidents")) for p in planteles),
         "employee_absences": sum(_safe_int(p["domains"]["employee"].get("employee_absences")) for p in planteles),
         "employee_tardies": sum(_safe_int(p["domains"]["employee"].get("employee_tardies")) for p in planteles),
         "payroll_waste_minutes": sum(_safe_int(p["domains"]["employee"].get("payroll_waste_minutes")) for p in planteles),
         "security_scan_gap": sum(_safe_int(p["domains"]["husky"].get("scan_gap")) for p in planteles),
         "student_tardies": sum(_safe_int(p["domains"]["husky"].get("student_tardies")) for p in planteles),
+        "repeat_tardy_students": sum(len(p["domains"]["husky"].get("repeat_tardy_students") or []) for p in planteles),
         "academic_backlog": sum(_safe_int(p["domains"]["academic"].get("supervision_backlog")) for p in planteles),
         "pending_lesson_reviews": sum(_safe_int(p["domains"]["academic"].get("planeaciones_pendientes")) for p in planteles),
         "teachers_without_observation": sum(_safe_int(p["domains"]["academic"].get("docentes_sin_observacion_30_dias")) for p in planteles),
         "sapf_parent_interactions": sum(_safe_int(p["domains"]["sapf"].get("parent_interactions")) for p in planteles),
+        "sapf_tickets_created": sum(_safe_int(p["domains"]["sapf"].get("tickets_created")) for p in planteles),
+        "sapf_followups": sum(_safe_int(p["domains"]["sapf"].get("followups")) for p in planteles),
+        "sapf_open_cases": sum(_safe_int(p["domains"]["sapf"].get("open_cases")) for p in planteles),
+        "sapf_complaints": sum(_safe_int(p["domains"]["sapf"].get("complaints")) for p in planteles),
     }
 
     worst = None

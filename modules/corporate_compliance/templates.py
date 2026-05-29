@@ -526,7 +526,7 @@ CORPORATE_COMPLIANCE_HTML = """
       <section class="grid-kpis">
         <div class="kpi"><div class="kpi-title">Grupos sin lista</div><div id="kpiMissingGroups" class="kpi-value">--</div><div class="kpi-note">Continuidad legal rota</div></div>
         <div class="kpi"><div class="kpi-title">Alumnos sin traza</div><div id="kpiStudentsTrace" class="kpi-value">--</div><div class="kpi-note">Expediente operativo incompleto</div></div>
-        <div class="kpi"><div class="kpi-title">Incidencias personal</div><div id="kpiEmployee" class="kpi-value">--</div><div class="kpi-note">Faltas + retardos Kardex</div></div>
+        <div class="kpi"><div class="kpi-title">Incidencias personal</div><div id="kpiEmployee" class="kpi-value">--</div><div class="kpi-note">Faltas + retardos laborales</div></div>
         <div class="kpi"><div class="kpi-title">Brecha seguridad</div><div id="kpiSecurityGap" class="kpi-value">--</div><div class="kpi-note">Entradas no respaldadas por scan</div></div>
         <div class="kpi"><div class="kpi-title">Backlog académico</div><div id="kpiAcademic" class="kpi-value">--</div><div class="kpi-note">Planeaciones + observaciones</div></div>
         <div class="kpi"><div class="kpi-title">SAPF documentado</div><div id="kpiSapf" class="kpi-value">--</div><div class="kpi-note">Atenciones y seguimientos</div></div>
@@ -565,6 +565,16 @@ CORPORATE_COMPLIANCE_HTML = """
 
       <section class="section">
         <div class="section-head">
+          <div><div class="section-eyebrow">Ausentismo estudiantil</div><div class="section-title">Asistencia real: ausencias, baja asistencia y modalidad incompleta</div></div>
+        </div>
+        <div class="section-body">
+          <div class="chart-box"><canvas id="attendanceDepthChart"></canvas></div>
+          <div id="attendanceDepthInterpretation" class="interpretation"></div>
+        </div>
+      </section>
+
+      <section class="section">
+        <div class="section-head">
           <div><div class="section-eyebrow">Cadena de custodia</div><div class="section-title">Husky Pass: tasa de escaneo y vulnerabilidad de acceso</div></div>
         </div>
         <div class="section-body">
@@ -575,7 +585,17 @@ CORPORATE_COMPLIANCE_HTML = """
 
       <section class="section">
         <div class="section-head">
-          <div><div class="section-eyebrow">Fuga de capital humano</div><div class="section-title">Kardex: ausencias, retardos y minutos descontables</div></div>
+          <div><div class="section-eyebrow">Puntualidad estudiantil</div><div class="section-title">Retardos de alumnos: reincidencia y disciplina de entrada</div></div>
+        </div>
+        <div class="section-body">
+          <div class="chart-box"><canvas id="studentTardiesChart"></canvas></div>
+          <div id="studentTardiesInterpretation" class="interpretation"></div>
+        </div>
+      </section>
+
+      <section class="section">
+        <div class="section-head">
+          <div><div class="section-eyebrow">Fuga de capital humano</div><div class="section-title">Asistencia laboral: ausencias, retardos y minutos descontables</div></div>
         </div>
         <div class="section-body">
           <div class="chart-box"><canvas id="employeeChart"></canvas></div>
@@ -622,6 +642,17 @@ CORPORATE_COMPLIANCE_HTML = """
         <section class="table-panel">
           <div class="table-title">Motivos SAPF dominantes</div>
           <div style="overflow:auto"><table id="sapfMotivesTable"></table></div>
+        </section>
+      </div>
+
+      <div class="two-col">
+        <section class="table-panel">
+          <div class="table-title">Grupos con ausentismo o baja asistencia</div>
+          <div style="overflow:auto"><table id="attendanceHotspotsTable"></table></div>
+        </section>
+        <section class="table-panel">
+          <div class="table-title">Alumnos con retardos repetidos</div>
+          <div style="overflow:auto"><table id="studentTardiesTable"></table></div>
         </section>
       </div>
 
@@ -769,7 +800,9 @@ CORPORATE_COMPLIANCE_HTML = """
       renderRiskIndex();
       renderRadar();
       renderAttendance();
+      renderAttendanceDepth();
       renderHusky();
+      renderStudentTardies();
       renderEmployee();
       renderAcademic();
       renderSapf();
@@ -777,6 +810,8 @@ CORPORATE_COMPLIANCE_HTML = """
       renderWatchlist();
       renderMissingGroupsTable();
       renderSapfMotivesTable();
+      renderAttendanceHotspotsTable();
+      renderStudentTardiesTable();
       renderBaseline();
     }
 
@@ -820,7 +855,7 @@ CORPORATE_COMPLIANCE_HTML = """
     function renderRadar() {
       const rows = plantelRows();
       const dimensions = ["attendance", "husky", "employee", "academic", "sapf"];
-      const labels = ["Asistencia", "Husky", "Kardex", "Académico", "SAPF"];
+      const labels = ["Asistencia", "Husky", "Personal", "Académico", "SAPF"];
       const palette = ["#0f172a", "#2563eb", "#7c3aed", "#db2777", "#0891b2", "#65a30d"];
       renderChart("radarChart", {
         type: "radar",
@@ -875,6 +910,39 @@ CORPORATE_COMPLIANCE_HTML = """
       setInterpretation("attendanceInterpretation", conclusion, status);
     }
 
+
+    function renderAttendanceDepth() {
+      const rows = plantelRows();
+      const labels = rows.map(p => p.plantel);
+      const rates = rows.map(p => p.domains.attendance.attendance_rate_percent || 0);
+      const absences = rows.map(p => p.domains.attendance.absent_students_count || 0);
+      const modalityGaps = rows.map(p => p.domains.attendance.no_modality_records || 0);
+      renderChart("attendanceDepthChart", {
+        type: "bar",
+        data: {
+          labels,
+          datasets: [
+            { label: "% asistencia real", data: rates, backgroundColor: rates.map(v => v >= 94 ? GREEN : v >= 90 ? YELLOW : RED), borderRadius: 10 },
+            { label: "Ausencias registradas", data: absences, backgroundColor: RED, borderRadius: 10, yAxisID: "y1" },
+            { label: "Modalidad incompleta", data: modalityGaps, backgroundColor: INK, borderRadius: 10, yAxisID: "y1" }
+          ]
+        },
+        options: commonOptions({
+          scales: {
+            y: { min: 0, max: 100, grid: { color: "#e2e8f0" }, ticks: { color: "#334155", font: { weight: "bold" } } },
+            y1: { position: "right", beginAtZero: true, grid: { drawOnChartArea: false }, ticks: { color: "#991b1b", font: { weight: "bold" } } },
+            x: { grid: { display: false }, ticks: { color: "#0f172a", font: { weight: "bold" } } }
+          }
+        })
+      });
+      const worstRate = rows.reduce((a, b) => (Number(a.domains.attendance.attendance_rate_percent || 0) < Number(b.domains.attendance.attendance_rate_percent || 0) ? a : b), rows[0]);
+      const t = state.data.aggregate.totals;
+      const status = t.absent_students > 0 || t.attendance_no_modality_records > 0 ? "warning" : "fulfilled";
+      const topMotive = rows.flatMap(p => (p.domains.attendance.absence_motives || []).map(m => ({ plantel: p.plantel, ...m }))).sort((a,b) => (b.conteo || 0) - (a.conteo || 0))[0];
+      const motiveText = topMotive ? ` Motivo dominante registrado: ${topMotive.motivo} (${fmt(topMotive.conteo)} eventos, ${topMotive.plantel}).` : "";
+      setInterpretation("attendanceDepthInterpretation", `${worstRate.plantel} tiene la tasa de asistencia real más baja con ${pct(worstRate.domains.attendance.attendance_rate_percent)}. Total corporativo: ${fmt(t.absent_students)} ausencias registradas y ${fmt(t.attendance_no_modality_records)} registros con modalidad incompleta.${motiveText} Esta lectura separa el riesgo legal de no pasar lista del ausentismo real del alumno.`, status);
+    }
+
     function renderHusky() {
       const rows = plantelRows();
       const labels = rows.map(p => p.plantel);
@@ -901,6 +969,29 @@ CORPORATE_COMPLIANCE_HTML = """
       const gap = state.data.aggregate.totals.security_scan_gap;
       const status = gap > 0 || (worst.domains.husky.scan_rate_percent || 0) < 70 ? "critical" : (worst.domains.husky.scan_rate_percent || 0) < 90 ? "warning" : "fulfilled";
       setInterpretation("huskyInterpretation", `${worst.plantel} muestra la cadena de custodia más débil con ${pct(worst.domains.husky.scan_rate_percent)} de entradas respaldadas. La brecha corporativa es de ${fmt(gap)} accesos esperados sin soporte de escaneo. Lectura ejecutiva: vulnerabilidad de seguridad y cadena de custodia en accesos.`, status);
+    }
+
+
+    function renderStudentTardies() {
+      const rows = plantelRows();
+      const labels = rows.map(p => p.plantel);
+      const tardies = rows.map(p => p.domains.husky.student_tardies || 0);
+      const repeaters = rows.map(p => (p.domains.husky.repeat_tardy_students || []).length);
+      renderChart("studentTardiesChart", {
+        type: "bar",
+        data: {
+          labels,
+          datasets: [
+            { label: "Retardos alumnos", data: tardies, backgroundColor: tardies.map(v => v > 0 ? YELLOW : GREEN), borderRadius: 10 },
+            { label: "Alumnos reincidentes", data: repeaters, backgroundColor: RED, borderRadius: 10 }
+          ]
+        },
+        options: commonOptions({ indexAxis: "y", scales: { x: { beginAtZero: true, grid: { color: "#e2e8f0" }, ticks: { color: "#334155", font: { weight: "bold" } } }, y: { grid: { display: false }, ticks: { color: "#0f172a", font: { weight: "bold" } } } } })
+      });
+      const worst = rows.reduce((a, b) => (Number(a.domains.husky.student_tardies || 0) > Number(b.domains.husky.student_tardies || 0) ? a : b), rows[0]);
+      const t = state.data.aggregate.totals;
+      const status = t.student_tardies > 0 ? "warning" : "fulfilled";
+      setInterpretation("studentTardiesInterpretation", `${worst.plantel} concentra la mayor indisciplina de entrada con ${fmt(worst.domains.husky.student_tardies)} retardos. Total corporativo: ${fmt(t.student_tardies)} retardos y ${fmt(t.repeat_tardy_students)} alumnos reincidentes. Esto cruza puntualidad con cadena de custodia: llegar tarde reduce control operativo en accesos.`, status);
     }
 
     function renderEmployee() {
@@ -960,18 +1051,28 @@ CORPORATE_COMPLIANCE_HTML = """
     function renderSapf() {
       const rows = plantelRows();
       const labels = rows.map(p => p.plantel);
-      const values = rows.map(p => p.domains.sapf.parent_interactions || 0);
+      const tickets = rows.map(p => p.domains.sapf.tickets_created || 0);
+      const followups = rows.map(p => p.domains.sapf.followups || 0);
+      const openCases = rows.map(p => p.domains.sapf.open_cases || 0);
       renderChart("sapfChart", {
         type: "bar",
-        data: { labels, datasets: [{ label: "Atenciones SAPF documentadas", data: values, backgroundColor: values.map(v => v > 0 ? GREEN : YELLOW), borderRadius: 10 }] },
-        options: commonOptions({ indexAxis: "y", scales: { x: { beginAtZero: true, grid: { color: "#e2e8f0" }, ticks: { color: "#334155", font: { weight: "bold" } } }, y: { grid: { display: false }, ticks: { color: "#0f172a", font: { weight: "bold" } } } } })
+        data: {
+          labels,
+          datasets: [
+            { label: "Fichas creadas", data: tickets, backgroundColor: GREEN, borderRadius: 10, stack: "sapf" },
+            { label: "Seguimientos", data: followups, backgroundColor: YELLOW, borderRadius: 10, stack: "sapf" },
+            { label: "Casos abiertos", data: openCases, backgroundColor: RED, borderRadius: 10 }
+          ]
+        },
+        options: commonOptions({ indexAxis: "y", scales: { x: { beginAtZero: true, grid: { color: "#e2e8f0" }, ticks: { color: "#334155", font: { weight: "bold" } } }, y: { stacked: true, grid: { display: false }, ticks: { color: "#0f172a", font: { weight: "bold" } } } } })
       });
       const zeroes = rows.filter(p => (p.domains.sapf.parent_interactions || 0) === 0).map(p => p.plantel);
       const highest = rows.reduce((a, b) => (Number(a.domains.sapf.parent_interactions || 0) > Number(b.domains.sapf.parent_interactions || 0) ? a : b), rows[0]);
-      const status = zeroes.length ? "warning" : "fulfilled";
+      const t = state.data.aggregate.totals;
+      const status = zeroes.length ? "critical" : t.sapf_open_cases > 0 ? "warning" : "fulfilled";
       const msg = zeroes.length
-        ? `${zeroes.join(", ")} no tiene registros SAPF en el periodo. Para una dueña, cero interacción no significa necesariamente tranquilidad; puede significar falta de trazabilidad de atención a padres.`
-        : `${highest.plantel} concentra la mayor presión documentada con ${fmt(highest.domains.sapf.parent_interactions)} atenciones. SAPF sirve como lectura de trazabilidad con familias y temperatura operativa del plantel.`;
+        ? `${zeroes.join(", ")} no tiene registros SAPF en el periodo. En la estructura real de SAPF se consultan fichas_atencion y seguimiento con campus normalizado; por eso cero registros ahora sí debe leerse como falta de trazabilidad, no como un supuesto fallo del endpoint.`
+        : `${highest.plantel} concentra la mayor presión documentada con ${fmt(highest.domains.sapf.parent_interactions)} interacciones. Total corporativo: ${fmt(t.sapf_tickets_created)} fichas, ${fmt(t.sapf_followups)} seguimientos, ${fmt(t.sapf_open_cases)} casos abiertos y ${fmt(t.sapf_complaints)} quejas. SAPF mide trazabilidad con familias y temperatura operativa del plantel.`;
       setInterpretation("sapfInterpretation", msg, status);
     }
 
@@ -980,7 +1081,7 @@ CORPORATE_COMPLIANCE_HTML = """
       const domains = [
         ["attendance", "Asistencia"],
         ["husky", "Husky"],
-        ["employee", "Kardex"],
+        ["employee", "Personal"],
         ["academic", "Académico"],
         ["sapf", "SAPF"]
       ];
@@ -1000,10 +1101,14 @@ CORPORATE_COMPLIANCE_HTML = """
       rows.forEach(p => {
         const d = p.domains;
         if ((d.attendance.missing_groups_count || 0) > 0) items.push({ status: "critical", plantel: p.plantel, title: "Asistencia incompleta", body: `${fmt(d.attendance.missing_groups_count)} grupos sin pase de lista; ${fmt(d.attendance.missing_expected_students)} alumnos estimados sin continuidad de expediente.` });
+        if ((d.attendance.repeated_missing_groups || []).length > 0) items.push({ status: "critical", plantel: p.plantel, title: "Grupo reincidente sin lista", body: `${fmt((d.attendance.repeated_missing_groups || []).length)} grupos repiten falta de pase de lista; esto apunta a omisión de supervisión, no a evento aislado.` });
+        if ((d.attendance.absent_students_count || 0) > 0) items.push({ status: "warning", plantel: p.plantel, title: "Ausentismo estudiantil", body: `${fmt(d.attendance.absent_students_count)} ausencias registradas; tasa de asistencia real ${pct(d.attendance.attendance_rate_percent || 0)}.` });
         if ((d.academic.supervision_backlog || 0) > 0) items.push({ status: "critical", plantel: p.plantel, title: "Supervisión académica rezagada", body: `${fmt(d.academic.planeaciones_pendientes)} planeaciones sin revisión y ${fmt(d.academic.docentes_sin_observacion_30_dias)} docentes sin observación reciente.` });
-        if ((d.employee.employee_absences || 0) > 0) items.push({ status: "critical", plantel: p.plantel, title: "Ausencias de personal", body: `${fmt(d.employee.employee_absences)} ausencias Kardex; riesgo financiero por horas no laboradas.` });
+        if ((d.employee.employee_absences || 0) > 0) items.push({ status: "critical", plantel: p.plantel, title: "Ausencias de personal", body: `${fmt(d.employee.employee_absences)} ausencias laborales; riesgo financiero por horas no laboradas.` });
         if ((d.husky.scan_rate_percent || 0) < 70) items.push({ status: "critical", plantel: p.plantel, title: "Cadena de custodia débil", body: `${pct(d.husky.scan_rate_percent)} de entradas escaneadas; brecha de ${fmt(d.husky.scan_gap)} scans.` });
-        if ((d.sapf.parent_interactions || 0) === 0) items.push({ status: "warning", plantel: p.plantel, title: "SAPF sin trazabilidad", body: "No hay atenciones documentadas en el periodo consultado." });
+        if ((d.husky.student_tardies || 0) > 0) items.push({ status: "warning", plantel: p.plantel, title: "Retardos de alumnos", body: `${fmt(d.husky.student_tardies)} retardos; ${fmt((d.husky.repeat_tardy_students || []).length)} alumnos reincidentes.` });
+        if ((d.sapf.parent_interactions || 0) === 0) items.push({ status: "warning", plantel: p.plantel, title: "SAPF sin trazabilidad", body: "No hay fichas ni seguimientos documentados en el periodo consultado." });
+        if ((d.sapf.open_cases || 0) > 0) items.push({ status: "warning", plantel: p.plantel, title: "SAPF con casos abiertos", body: `${fmt(d.sapf.open_cases)} casos abiertos y ${fmt(d.sapf.complaints || 0)} quejas documentadas.` });
       });
       const wrap = document.getElementById("watchlist");
       const sorted = items.sort((a, b) => (a.status === "critical" ? -1 : 1) - (b.status === "critical" ? -1 : 1)).slice(0, 18);
@@ -1014,6 +1119,23 @@ CORPORATE_COMPLIANCE_HTML = """
       const rows = plantelRows().flatMap(p => (p.domains.attendance.missing_groups || []).map(g => ({ plantel: p.plantel, ...g })));
       const table = document.getElementById("missingGroupsTable");
       table.innerHTML = `<thead><tr><th>Plantel</th><th>Fecha</th><th>Grupo</th><th>Alumnos esperados</th></tr></thead><tbody>${rows.length ? rows.map(g => `<tr><td><strong>${g.plantel}</strong></td><td>${g.date}</td><td>${g.grado} ${g.grupo}</td><td class="num">${fmt(g.expected_students)}</td></tr>`).join("") : `<tr><td colspan="4">Sin grupos faltantes.</td></tr>`}</tbody>`;
+    }
+
+
+    function renderAttendanceHotspotsTable() {
+      const rows = plantelRows().flatMap(p => {
+        const low = (p.domains.attendance.low_attendance_groups || []).slice(0, 5).map(g => ({ plantel: p.plantel, type: "Baja asistencia", grupo: g.grupo, metric: pct(g.attendance_rate_percent), count: g.absent_students }));
+        const repeated = (p.domains.attendance.repeated_missing_groups || []).slice(0, 5).map(g => ({ plantel: p.plantel, type: "Sin lista recurrente", grupo: g.grupo, metric: `${fmt(g.days_missing)} días`, count: g.expected_students }));
+        return [...repeated, ...low];
+      });
+      const table = document.getElementById("attendanceHotspotsTable");
+      table.innerHTML = `<thead><tr><th>Plantel</th><th>Tipo</th><th>Grupo</th><th>Métrica</th><th>Volumen</th></tr></thead><tbody>${rows.length ? rows.map(r => `<tr><td><strong>${r.plantel}</strong></td><td>${r.type}</td><td>${r.grupo}</td><td>${r.metric}</td><td class="num">${fmt(r.count)}</td></tr>`).join("") : `<tr><td colspan="5">Sin grupos reincidentes o baja asistencia menor a 90%.</td></tr>`}</tbody>`;
+    }
+
+    function renderStudentTardiesTable() {
+      const rows = plantelRows().flatMap(p => (p.domains.husky.repeat_tardy_students || []).slice(0, 6).map(r => ({ plantel: p.plantel, ...r })));
+      const table = document.getElementById("studentTardiesTable");
+      table.innerHTML = `<thead><tr><th>Plantel</th><th>Alumno</th><th>Matrícula</th><th>Retardos</th><th>Fechas</th></tr></thead><tbody>${rows.length ? rows.map(r => `<tr><td><strong>${r.plantel}</strong></td><td>${r.student_fullname || "Desconocido"}</td><td>${r.matricula || "N/A"}</td><td class="num">${fmt(r.tardies)}</td><td>${(r.dates || []).slice(0, 4).join(", ")}</td></tr>`).join("") : `<tr><td colspan="5">Sin alumnos reincidentes en retardos.</td></tr>`}</tbody>`;
     }
 
     function renderSapfMotivesTable() {

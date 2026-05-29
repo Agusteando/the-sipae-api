@@ -16,7 +16,7 @@ PLANTEL_MAP = {
         "name": "Primaria Metepec",
         "academic_filters": [{"nivel": "Primaria", "campus": "Metepec"}],
         "sapf_map_campus": "PM",
-        "sapf_data_campuses": ["PMA", "PMB"],
+        "sapf_data_campuses": ["PM", "PMA", "PMB", "Primaria Metepec", "Primaria Alta Metepec", "Primaria Baja Metepec"],
     },
     "PMA": {
         "alias_of": "PM",
@@ -27,7 +27,7 @@ PLANTEL_MAP = {
         "name": "Primaria Metepec",
         "academic_filters": [{"nivel": "Primaria", "campus": "Metepec"}],
         "sapf_map_campus": "PM",
-        "sapf_data_campuses": ["PMA", "PMB"],
+        "sapf_data_campuses": ["PM", "PMA", "PMB", "Primaria Metepec", "Primaria Alta Metepec", "Primaria Baja Metepec"],
     },
     "PMB": {
         "alias_of": "PM",
@@ -38,7 +38,7 @@ PLANTEL_MAP = {
         "name": "Primaria Metepec",
         "academic_filters": [{"nivel": "Primaria", "campus": "Metepec"}],
         "sapf_map_campus": "PM",
-        "sapf_data_campuses": ["PMA", "PMB"],
+        "sapf_data_campuses": ["PM", "PMA", "PMB", "Primaria Metepec", "Primaria Alta Metepec", "Primaria Baja Metepec"],
     },
 
     "PT": {
@@ -49,7 +49,7 @@ PLANTEL_MAP = {
         "name": "Primaria Toluca",
         "academic_filters": [{"nivel": "Primaria", "campus": "Toluca"}],
         "sapf_map_campus": "PT",
-        "sapf_data_campuses": ["PT"],
+        "sapf_data_campuses": ["PT", "Primaria Toluca"],
     },
     "SM": {
         "db_code": "SM",
@@ -59,7 +59,7 @@ PLANTEL_MAP = {
         "name": "Secundaria Metepec",
         "academic_filters": [{"nivel": "Secundaria", "campus": "Metepec"}],
         "sapf_map_campus": "SM",
-        "sapf_data_campuses": ["SM"],
+        "sapf_data_campuses": ["SM", "Secundaria Metepec"],
     },
     "ST": {
         "db_code": "ST",
@@ -69,7 +69,7 @@ PLANTEL_MAP = {
         "name": "Secundaria Toluca",
         "academic_filters": [{"nivel": "Secundaria", "campus": "Toluca"}],
         "sapf_map_campus": "ST",
-        "sapf_data_campuses": ["ST"],
+        "sapf_data_campuses": ["ST", "Secundaria Toluca"],
     },
 
     "PREET": {
@@ -82,7 +82,7 @@ PLANTEL_MAP = {
         "display_name": "Preescolar Toluca (PREET)",
         "academic_filters": [{"nivel": "Preescolar", "campus": "Toluca"}],
         "sapf_map_campus": "PREET",
-        "sapf_data_campuses": ["PREET"],
+        "sapf_data_campuses": ["PREET", "PREES TOL", "PREES-TOL", "PREES_TOL", "Preescolar Toluca", "PREESCOLAR TOLUCA", "CT", "Casita Toluca"],
     },
     "CT": {
         "alias_of": "PREET",
@@ -95,7 +95,7 @@ PLANTEL_MAP = {
         "display_name": "Preescolar Toluca (PREET)",
         "academic_filters": [{"nivel": "Preescolar", "campus": "Toluca"}],
         "sapf_map_campus": "PREET",
-        "sapf_data_campuses": ["PREET"],
+        "sapf_data_campuses": ["PREET", "PREES TOL", "PREES-TOL", "PREES_TOL", "Preescolar Toluca", "PREESCOLAR TOLUCA", "CT", "Casita Toluca"],
     },
 
     "PREEM": {
@@ -107,7 +107,7 @@ PLANTEL_MAP = {
         "display_name": "Preescolar Metepec (PREEM)",
         "academic_filters": [{"nivel": "Preescolar", "campus": "Metepec"}],
         "sapf_map_campus": "PREEM",
-        "sapf_data_campuses": ["PREEM"],
+        "sapf_data_campuses": ["PREEM", "PREES MET", "PREES-MET", "PREES_MET", "Preescolar Metepec", "PREESCOLAR METEPEC", "CM", "Casita Metepec"],
     },
     "CM": {
         "alias_of": "PREEM",
@@ -119,7 +119,7 @@ PLANTEL_MAP = {
         "display_name": "Preescolar Metepec (PREEM)",
         "academic_filters": [{"nivel": "Preescolar", "campus": "Metepec"}],
         "sapf_map_campus": "PREEM",
-        "sapf_data_campuses": ["PREEM"],
+        "sapf_data_campuses": ["PREEM", "PREES MET", "PREES-MET", "PREES_MET", "Preescolar Metepec", "PREESCOLAR METEPEC", "CM", "Casita Metepec"],
     },
 
     # Other plantels that can appear in upstream tools. They remain standalone
@@ -153,7 +153,7 @@ PLANTEL_MAP = {
         "name": "Primaria Toluca (01)",
         "academic_filters": [{"nivel": "Primaria", "campus": "Toluca"}],
         "sapf_map_campus": "PT",
-        "sapf_data_campuses": ["PT"],
+        "sapf_data_campuses": ["PT", "Primaria Toluca"],
     },
 }
 

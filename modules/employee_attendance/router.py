@@ -6,18 +6,19 @@ from core.cache import get_cache, set_cache
 from .service import get_kardex_attendance_report
 from .schemas import EmployeeAttendanceResponse
 
-router = APIRouter(prefix="/api/v1/employee-attendance", tags=["Employee Kardex"])
+router = APIRouter(prefix="/api/v1/employee-attendance", tags=["Employee Labor Attendance"])
 
-@router.get("/kardex-report", response_model=EmployeeAttendanceResponse)
+@router.get("/labor-attendance-report", response_model=EmployeeAttendanceResponse)
+@router.get("/kardex-report", response_model=EmployeeAttendanceResponse, include_in_schema=False)
 async def get_kardex_report(
-    plantel: str = Query(..., description="Código de Sede (Ej: PT, SM) para mapeo a Kardex"),
+    plantel: str = Query(..., description="Código de Sede (Ej: PT, SM) para control de asistencia laboral"),
     scope_params: DateScopeParams = Depends()
 ):
     try:
         cache_key = f"kardex_{plantel}"
         tz_mx = ZoneInfo("America/Mexico_City")
         
-        # Caché rápido en memoria para aliviar la API Externa de Kardex
+        # Caché rápido en memoria para aliviar el servicio externo de asistencia laboral
         if scope_params.scope == "today" and not scope_params.force_refresh:
             cached = get_cache(cache_key)
             if cached:
@@ -40,4 +41,4 @@ async def get_kardex_report(
         return data
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error al integrar con servicio Kardex: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error al integrar con control de asistencia laboral: {str(e)}")
