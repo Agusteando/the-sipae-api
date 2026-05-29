@@ -13,9 +13,11 @@ from modules.academic.service import (
     get_planeaciones_pendientes_report,
     get_planeaciones_report,
 )
+from modules.attendance.repository import fetch_attendance_data
 from modules.attendance.service import get_attendance_detail_report
 from modules.baselines.service import get_global_baseline_report
 from modules.employee_attendance.service import get_kardex_attendance_report
+from modules.husky.repository import fetch_plantel_retardos, get_daily_scans
 from modules.husky.service import calculate_husky_daily_rate, get_plantel_retardos
 from modules.sapf.service import get_sapf_monthly_report, get_sapf_motivos_report, get_sapf_overview_report
 
@@ -449,6 +451,265 @@ async def _collect_daily_retardos_fallback(plantel: str, start_date: date, end_d
         },
     }
 
+
+
+
+def _daily_bucket_range(start_date: date, end_date: date) -> Dict[str, Dict[str, Any]]:
+    buckets: Dict[str, Dict[str, Any]] = {}
+    cursor = start_date
+    while cursor <= end_date:
+        if cursor.weekday() < 5:
+            buckets[cursor.isoformat()] = {
+                "summary": {"total_students": 0, "asistencia": 0, "ausencia": 0, "ausencia2": 0, "presencial": 0, "virt": 0, "girls": 0, "boys": 0},
+                "groups": [],
+                "missing_groups_data": {"is_complete": False, "expected_groups_count": 0, "completed_groups_count": 0, "missing_groups_count": 0, "completion_percent": 0.0, "expected_students_count": 0, "missing_groups": []},
+                "absent_students": [],
+                "internal_actual_set": set(),
+            }
+        cursor += timedelta(days=1)
+    return buckets
+
+
+def _estimated_expected_groups(stats_rows: List[Dict[str, Any]]) -> Tuple[set, Dict[Tuple[str, str], int]]:
+    """Infer expected grade/groups from the period itself when the base-simple bot is unavailable.
+
+    The health-report endpoint uses the external base-simple service for the official
+    expected roster. That dependency is currently returning 520 in production, so the
+    global dashboard must not call it during page load. This fallback uses the union
+    of groups actually seen in the selected month and the largest observed group size
+    as a stable denominator. It is deliberately marked as an estimate in source audit.
+    """
+    expected: set = set()
+    expected_students: Dict[Tuple[str, str], int] = {}
+    for row in stats_rows or []:
+        grade = str(row.get("grado") or "").strip()
+        group = str(row.get("grupo") or "").strip()
+        if not grade and not group:
+            continue
+        key = (grade, group)
+        expected.add(key)
+        expected_students[key] = max(expected_students.get(key, 0), _safe_int(row.get("total_students_per_group")))
+    return expected, expected_students
+
+
+async def _attendance_db_only(plantel: str, start_date: date, end_date: date, scope: str) -> Dict[str, Any]:
+    """Collect attendance directly from DB without the external base-simple bot.
+
+    This avoids the Cloudflare 520 dependency seen in production logs and prevents
+    the global dashboard from becoming a Bad Gateway during cold boot or bot outage.
+    """
+    info = resolve_plantel(plantel)
+    aliases = list(dict.fromkeys(
+        (info.get("db_codes") or [])
+        + (info.get("sapf_data_campuses") or [])
+        + [info.get("resolved_name", ""), info.get("short_name", "")]
+    ))
+    started = time.perf_counter()
+    stats_rows, absent_rows = await fetch_attendance_data(aliases, start_date, end_date)
+    expected_set, expected_students_by_group = _estimated_expected_groups(stats_rows)
+    total_expected = len(expected_set)
+    daily_points = _daily_bucket_range(start_date, end_date)
+
+    for row in stats_rows or []:
+        day_key = str(row.get("d_fecha"))[:10]
+        if day_key not in daily_points:
+            continue
+        grade = str(row.get("grado") or "").strip()
+        group = str(row.get("grupo") or "").strip()
+        grp_data = {
+            "grado": grade,
+            "grupo": group,
+            "total_students_per_group": _safe_int(row.get("total_students_per_group")),
+            "asistencia": _safe_int(row.get("asistencia")),
+            "ausencia": _safe_int(row.get("ausencia")),
+            "ausencia2": _safe_int(row.get("ausencia2")),
+            "presencial": _safe_int(row.get("presencial")),
+            "virt": _safe_int(row.get("virt")),
+            "girls": _safe_int(row.get("girls")),
+            "boys": _safe_int(row.get("boys")),
+        }
+        bucket = daily_points[day_key]
+        bucket["groups"].append(grp_data)
+        bucket["internal_actual_set"].add((grade, group))
+        summary = bucket["summary"]
+        summary["total_students"] += grp_data["total_students_per_group"]
+        summary["asistencia"] += grp_data["asistencia"]
+        summary["ausencia"] += grp_data["ausencia"]
+        summary["ausencia2"] += grp_data["ausencia2"]
+        summary["presencial"] += grp_data["presencial"]
+        summary["virt"] += grp_data["virt"]
+        summary["girls"] += grp_data["girls"]
+        summary["boys"] += grp_data["boys"]
+
+    for row in absent_rows or []:
+        day_key = str(row.get("d_fecha"))[:10]
+        if day_key not in daily_points:
+            continue
+        daily_points[day_key]["absent_students"].append({
+            "id": row.get("id"),
+            "name": row.get("name"),
+            "grado": str(row.get("grado") or "").strip(),
+            "grupo": str(row.get("grupo") or "").strip(),
+            "motivo": row.get("motivo"),
+        })
+
+    for day_key, bucket in daily_points.items():
+        actual_set = bucket.pop("internal_actual_set", set())
+        missing_set = expected_set - actual_set
+        missing_groups = [
+            {"grado": grade, "grupo": group, "expected_students": expected_students_by_group.get((grade, group), 0)}
+            for grade, group in sorted(missing_set)
+        ] if actual_set else []
+        # If there are no rows for the day, leave the day as no-record rather than
+        # fabricating a full missing-list day from an estimated denominator.
+        expected_day = total_expected if actual_set else 0
+        completed_day = len(actual_set) if actual_set else 0
+        missing_day = max(expected_day - completed_day, 0)
+        bucket["missing_groups_data"] = {
+            "is_complete": expected_day > 0 and missing_day == 0,
+            "expected_groups_count": expected_day,
+            "completed_groups_count": completed_day,
+            "missing_groups_count": missing_day,
+            "completion_percent": _pct(completed_day, expected_day) if expected_day else 0.0,
+            "expected_students_count": sum(group["expected_students"] for group in missing_groups),
+            "missing_groups": missing_groups,
+        }
+        bucket["groups"] = sorted(bucket["groups"], key=lambda item: (item.get("grado") or "", item.get("grupo") or ""))
+
+    if start_date == end_date:
+        single = daily_points.get(start_date.isoformat()) or next(iter(daily_points.values()), None) or {
+            "summary": {"total_students": 0, "asistencia": 0, "ausencia": 0, "ausencia2": 0, "presencial": 0, "virt": 0, "girls": 0, "boys": 0},
+            "groups": [],
+            "missing_groups_data": {"expected_groups_count": 0, "completed_groups_count": 0, "missing_groups_count": 0, "completion_percent": 0.0, "expected_students_count": 0, "missing_groups": []},
+            "absent_students": [],
+        }
+        response: Dict[str, Any] = {
+            "plantel_requested": info["plantel_requested"],
+            "resolved_name": info["resolved_name"],
+            "scope": scope,
+            "mode": "daily",
+            "date_range": {"start": start_date, "end": end_date},
+            **single,
+        }
+    else:
+        response = {
+            "plantel_requested": info["plantel_requested"],
+            "resolved_name": info["resolved_name"],
+            "scope": scope,
+            "mode": "range",
+            "date_range": {"start": start_date, "end": end_date},
+            "daily_points": daily_points,
+        }
+
+    row_days = sorted({str(row.get("d_fecha"))[:10] for row in stats_rows or [] if row.get("d_fecha")})
+    response["_source_audit"] = {
+        "source": "attendance_db_only",
+        "status": "ok" if stats_rows else "no_records",
+        "duration_ms": round((time.perf_counter() - started) * 1000, 1),
+        "aliases_used": aliases,
+        "rows_returned": len(stats_rows or []),
+        "absent_rows_returned": len(absent_rows or []),
+        "estimated_denominator": True,
+        "expected_groups_estimated_from_period": total_expected,
+        "first_record_date": row_days[0] if row_days else None,
+        "last_record_date": row_days[-1] if row_days else None,
+    }
+    return response
+
+
+async def _husky_db_only(plantel: str, start_date: date, end_date: date, scope: str) -> Dict[str, Any]:
+    """Collect Husky scans directly from DB without the external base-simple bot."""
+    info = resolve_plantel(plantel)
+    aliases = list(dict.fromkeys(
+        (info.get("husky_db_codes") or [])
+        + (info.get("db_codes") or [])
+        + (info.get("sapf_data_campuses") or [])
+        + [info.get("resolved_name", ""), info.get("short_name", "")]
+    ))
+    started = time.perf_counter()
+    rows = await get_daily_scans(aliases, start_date, end_date)
+    daily_data: Dict[str, Dict[str, Any]] = {}
+    max_daily_entrada = 0
+    row_dates: List[str] = []
+    for row in rows or []:
+        day_key = str(row.get("fecha"))[:10]
+        tipo = str(row.get("tipo_accion") or "").strip().lower()
+        if tipo not in {"entrada", "salida"}:
+            continue
+        if day_key not in daily_data:
+            daily_data[day_key] = {"entrada": 0, "salida": 0, "rate_entrada_percent": 0.0}
+        total = _safe_int(row.get("total_scans"))
+        daily_data[day_key][tipo] += total
+        if tipo == "entrada":
+            max_daily_entrada = max(max_daily_entrada, daily_data[day_key]["entrada"])
+        if total:
+            row_dates.append(day_key)
+    expected_population = max_daily_entrada
+    for point in daily_data.values():
+        point["rate_entrada_percent"] = round(min(_pct(point.get("entrada"), expected_population), 100.0), 2) if expected_population else 0.0
+    return {
+        "plantel_requested": info["plantel_requested"],
+        "resolved_name": info["resolved_name"],
+        "expected_population": expected_population,
+        "scope": scope,
+        "date_range": {"start": start_date, "end": end_date},
+        "daily_datapoints": daily_data,
+        "_source_audit": {
+            "source": "husky_db_only",
+            "status": "ok" if rows else "no_records",
+            "duration_ms": round((time.perf_counter() - started) * 1000, 1),
+            "aliases_used": aliases,
+            "rows_returned": len(rows or []),
+            "expected_population_estimated_from_period": True,
+            "first_record_date": min(row_dates) if row_dates else None,
+            "last_record_date": max(row_dates) if row_dates else None,
+        },
+    }
+
+
+async def _retardos_db_only(plantel: str, start_date: date, end_date: date, scope: str) -> Dict[str, Any]:
+    info = resolve_plantel(plantel)
+    db_code = str(info.get("db_code") or plantel).upper()
+    aliases = list(dict.fromkeys(
+        (info.get("husky_db_codes") or [])
+        + (info.get("db_codes") or [])
+        + (info.get("sapf_data_campuses") or [])
+        + [info.get("resolved_name", ""), info.get("short_name", "")]
+    ))
+    if db_code in ["PM", "PT"]:
+        threshold_time = "08:01:00"
+    elif db_code in ["SM", "ST"]:
+        threshold_time = "07:01:00"
+    else:
+        threshold_time = "09:01:00"
+    started = time.perf_counter()
+    rows = await fetch_plantel_retardos(aliases, start_date, end_date, threshold_time)
+    formatted = [
+        {
+            "id": row.get("id"),
+            "student_fullname": str(row.get("student_fullname") or "Desconocido").strip() or "Desconocido",
+            "matricula": row.get("matricula") or "N/A",
+            "date": row.get("date"),
+            "time": str(row.get("time")),
+        }
+        for row in rows or []
+    ]
+    return {
+        "plantel_requested": info["plantel_requested"],
+        "resolved_name": info["resolved_name"],
+        "scope": scope,
+        "date_range": {"start": start_date, "end": end_date},
+        "total_retardos": len(formatted),
+        "retardos": formatted,
+        "_source_audit": {
+            "source": "retardos_db_only",
+            "status": "ok",
+            "duration_ms": round((time.perf_counter() - started) * 1000, 1),
+            "aliases_used": aliases,
+            "rows_returned": len(rows or []),
+            "threshold": threshold_time,
+        },
+    }
 
 async def _attendance_with_fallback(plantel: str, start_date: date, end_date: date, scope: str) -> Dict[str, Any]:
     primary = await _safe_call("attendance", lambda: get_attendance_detail_report(plantel, start_date, end_date, scope), ATTENDANCE_TIMEOUT_SECONDS)
@@ -1154,11 +1415,13 @@ async def _collect_plantel(plantel: str, start_date: date, end_date: date, scope
         + [info.get("resolved_name", ""), info.get("short_name", "")]
     ))
 
-    # Attendance, access and tardies are the sources that were flattening to zero.
-    # Collect them with health-report-style daily fallback before rendering any value.
-    attendance_task = _attendance_with_fallback(plantel, start_date, end_date, scope)
-    husky_task = _husky_with_fallback(plantel, start_date, end_date, scope)
-    kardex_task = _safe_call("kardex", lambda: get_kardex_attendance_report(plantel, start_date, end_date, scope))
+    # Dashboard reads attendance/access directly from the DB. Do not call the
+    # external base-simple bot here; production logs show that dependency can
+    # return Cloudflare 520 and destabilize page loads. The daily health report
+    # may still use the official roster service for single-day emails.
+    attendance_task = _safe_call("attendance_db_only", lambda: _attendance_db_only(plantel, start_date, end_date, scope), 8.0)
+    husky_task = _safe_call("husky_db_only", lambda: _husky_db_only(plantel, start_date, end_date, scope), 8.0)
+    kardex_task = _safe_call("personal", lambda: get_kardex_attendance_report(plantel, start_date, end_date, scope), 8.0)
     sapf_monthly_task = _safe_call("sapf_monthly", lambda: get_sapf_monthly_report(plantel, start_date, end_date, scope), SAPF_TIMEOUT_SECONDS)
     sapf_motivos_task = _safe_call("sapf_motivos", lambda: get_sapf_motivos_report(plantel, start_date, end_date, scope), SAPF_TIMEOUT_SECONDS)
     sapf_overview_task = _safe_call("sapf_overview", lambda: get_sapf_overview_report(plantel, start_date, end_date, scope), SAPF_TIMEOUT_SECONDS)
@@ -1179,7 +1442,7 @@ async def _collect_plantel(plantel: str, start_date: date, end_date: date, scope
         obs_docentes_task,
         plan_pendientes_task,
     )
-    retardos = await _retardos_with_fallback(plantel, start_date, end_date, scope, husky)
+    retardos = await _safe_call("retardos_db_only", lambda: _retardos_db_only(plantel, start_date, end_date, scope), 8.0)
 
     domains = {
         "attendance": _sum_daily_attendance(attendance, start_date, end_date),

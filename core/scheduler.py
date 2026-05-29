@@ -158,6 +158,9 @@ def start_scheduler():
     configure_health_reports_schedule(get_schedule_config())
     scheduler.start()
     
-    # Detona una primera ejecución asíncrona al arrancar el servidor (Cold Boot pre-warm)
-    asyncio.create_task(refresh_today_metrics())
-    asyncio.create_task(refresh_global_baselines())
+    # No ejecutar pre-warm en cold boot. La precarga hacía llamadas salientes
+    # inmediatas a servicios externos (base-simple/bot y kardex) mientras
+    # Uvicorn todavía estaba arrancando; cuando esos servicios respondían 520 o
+    # se quedaban en TLS handshake, Cloudflare podía ver una respuesta incompleta
+    # del origen. Los jobs quedan agendados y corren en su intervalo normal.
+    logger.info("Scheduler iniciado sin pre-warm de arranque para proteger el origen.")

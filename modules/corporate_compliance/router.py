@@ -10,7 +10,7 @@ from .service import get_corporate_compliance_index
 from .templates import CORPORATE_COMPLIANCE_HTML
 
 router = APIRouter(tags=["Cumplimiento operativo"])
-DASHBOARD_DATA_VERSION = "2026-05-29-source-audit-daily-fallback-1"
+DASHBOARD_DATA_VERSION = "2026-05-29-db-only-no-coldboot-1"
 
 
 @router.get("/corporate-compliance-risk-index", response_class=HTMLResponse, include_in_schema=False)

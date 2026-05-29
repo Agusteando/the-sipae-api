@@ -1,1 +1,1 @@
-Rebuild operational dashboard source validation and metric rendering
+Stabilize operational dashboard by removing live bot dependency from page-load metrics
