@@ -12,6 +12,9 @@ MOTIVE_COLUMNS = ("reason", "motivo", "resolution", "initial_action", "descripci
 STATUS_OPEN_VALUES = ("0", "abierto", "open", "pendiente", "seguimiento")
 STATUS_CLOSED_VALUES = ("1", "cerrado", "closed", "resuelto", "resolved")
 
+_COLUMN_CACHE: Dict[str, set] = {}
+_TABLE_CACHE: Dict[str, bool] = {}
+
 
 def _dedupe(values: Iterable[Any]) -> List[str]:
     seen = set()
@@ -29,7 +32,12 @@ def _dedupe(values: Iterable[Any]) -> List[str]:
 
 
 def _normalize_sql_values(values: Iterable[Any]) -> List[str]:
-    return _dedupe(str(value or "").strip().upper() for value in values or [])
+    normalized = []
+    for value in values or []:
+        clean = " ".join(str(value or "").strip().split()).upper()
+        if clean:
+            normalized.append(clean)
+    return _dedupe(normalized)
 
 
 def _placeholders(count: int) -> str:
@@ -37,6 +45,8 @@ def _placeholders(count: int) -> str:
 
 
 async def _has_table(cur: aiomysql.DictCursor, table_name: str) -> bool:
+    if table_name in _TABLE_CACHE:
+        return _TABLE_CACHE[table_name]
     await cur.execute(
         """
         SELECT 1
@@ -47,14 +57,21 @@ async def _has_table(cur: aiomysql.DictCursor, table_name: str) -> bool:
         """,
         (table_name,),
     )
-    return bool(await cur.fetchone())
+    exists = bool(await cur.fetchone())
+    _TABLE_CACHE[table_name] = exists
+    return exists
 
 
 async def _get_columns(cur: aiomysql.DictCursor, table_name: str) -> set:
+    if table_name in _COLUMN_CACHE:
+        return _COLUMN_CACHE[table_name]
     if not await _has_table(cur, table_name):
+        _COLUMN_CACHE[table_name] = set()
         return set()
     await cur.execute(f"SHOW COLUMNS FROM `{table_name}`")
-    return {str(row.get("Field") or "") for row in await cur.fetchall()}
+    columns = {str(row.get("Field") or "") for row in await cur.fetchall()}
+    _COLUMN_CACHE[table_name] = columns
+    return columns
 
 
 def _first_existing(columns: set, candidates: Sequence[str]) -> Optional[str]:
@@ -66,6 +83,10 @@ def _first_existing(columns: set, candidates: Sequence[str]) -> Optional[str]:
 
 def _nullif_expr(alias: str, column: str) -> str:
     return f"NULLIF(TRIM({alias}.`{column}`), '')"
+
+
+def _normalized_sql_expr(alias: str, column: str) -> str:
+    return f"UPPER(TRIM(REPLACE(REPLACE({alias}.`{column}`, CHAR(9), ' '), '  ', ' ')))"
 
 
 def _coalesce_expr(alias: str, columns: set, candidates: Sequence[str], fallback: str) -> str:
@@ -90,7 +111,7 @@ def _normalized_campus_clause(alias: str, columns: set, campus_values: Iterable[
     params: List[str] = []
     placeholders = _placeholders(len(values))
     for column in candidates:
-        per_column.append(f"TRIM(UPPER({alias}.`{column}`)) IN ({placeholders})")
+        per_column.append(f"{_normalized_sql_expr(alias, column)} IN ({placeholders})")
         params.extend(values)
     return f"({' OR '.join(per_column)})", params
 
@@ -144,7 +165,7 @@ async def _fetch_monthly_for_table(
     join_sql, dept_expr, join_params = _deptos_join_and_expr(table_alias, columns, has_deptos_map, map_campus_values)
 
     sql = f"""
-        SELECT
+        SELECT /*+ MAX_EXECUTION_TIME(5000) */
             {dept_expr} AS department_name,
             YEAR({date_expression}) AS year,
             MONTH({date_expression}) AS month,
@@ -223,7 +244,7 @@ async def _fetch_motivos_for_table(
     join_sql, dept_expr, join_params = _deptos_join_and_expr(table_alias, columns, has_deptos_map, map_campus_values)
 
     sql = f"""
-        SELECT
+        SELECT /*+ MAX_EXECUTION_TIME(5000) */
             {dept_expr} AS department_name,
             {motive_expr} AS motivo,
             %s AS source,
@@ -319,7 +340,7 @@ async def _fetch_fichas_overview(
     )
 
     sql = f"""
-        SELECT
+        SELECT /*+ MAX_EXECUTION_TIME(5000) */
             COUNT(*) AS total_fichas,
             SUM(CASE WHEN {open_case} THEN 1 ELSE 0 END) AS open_cases,
             SUM(CASE WHEN {closed_case} THEN 1 ELSE 0 END) AS closed_cases,
@@ -336,7 +357,7 @@ async def _fetch_fichas_overview(
     kpi = dict(await cur.fetchone() or {})
 
     area_sql = f"""
-        SELECT {dept_expr} AS area, COUNT(*) AS conteo
+        SELECT /*+ MAX_EXECUTION_TIME(5000) */ {dept_expr} AS area, COUNT(*) AS conteo
         FROM fichas_atencion fa
         {join_sql}
         WHERE {campus_clause}
@@ -366,7 +387,7 @@ async def _fetch_followups_count(
     campus_clause, campus_params = _normalized_campus_clause("se", columns, campus_values)
 
     sql = f"""
-        SELECT COUNT(*) AS total_followups
+        SELECT /*+ MAX_EXECUTION_TIME(5000) */ COUNT(*) AS total_followups
         FROM seguimiento se
         WHERE {campus_clause}
           AND {date_expression} >= %s

@@ -29,6 +29,10 @@ DOMAIN_WEIGHTS = {
     "sapf": 11,
 }
 
+SOURCE_TIMEOUT_SECONDS = 8.0
+SAPF_TIMEOUT_SECONDS = 5.0
+ACADEMIC_TIMEOUT_SECONDS = 6.0
+
 
 def _mx_now() -> datetime:
     return datetime.now(ZoneInfo("America/Mexico_City"))
@@ -86,20 +90,21 @@ def _date_range_days(start_date: date, end_date: date) -> int:
 
 
 def _status_from_index(index: float, has_critical_flag: bool = False) -> str:
-    if has_critical_flag or index < 70:
+    # Executive calibration: red is reserved for material/legal risk, not low activity.
+    if has_critical_flag or index < 55:
         return "critical"
-    if index < 85:
+    if index < 78:
         return "warning"
     return "fulfilled"
 
 
 def _risk_label(status: str) -> str:
     return {
-        "fulfilled": "Cumplimiento total / Seguro",
-        "warning": "Riesgo operativo / Atención requerida",
-        "critical": "Incumplimiento crítico / Riesgo legal o financiero",
-        "unavailable": "Sin lectura completa",
-    }.get(status, "Sin lectura completa")
+        "fulfilled": "En orden",
+        "warning": "Atención",
+        "critical": "Brecha alta",
+        "unavailable": "Sin lectura",
+    }.get(status, "Sin lectura")
 
 
 def _normalize_planteles(planteles: Optional[str]) -> List[str]:
@@ -110,11 +115,19 @@ def _normalize_planteles(planteles: Optional[str]) -> List[str]:
     return selected or list(FIXED_PLANTEL_ORDER)
 
 
-async def _safe_call(name: str, fn: Callable[[], Awaitable[Dict[str, Any]]]) -> Dict[str, Any]:
+async def _safe_call(
+    name: str,
+    fn: Callable[[], Awaitable[Dict[str, Any]]],
+    timeout_seconds: float = SOURCE_TIMEOUT_SECONDS,
+) -> Dict[str, Any]:
     try:
-        return await fn()
+        return await asyncio.wait_for(fn(), timeout=timeout_seconds)
+    except asyncio.TimeoutError:
+        message = f"{name} no respondió en {timeout_seconds:.0f}s; se omitió para evitar tumbar el tablero."
+        logger.error("Operational dashboard source timed out: %s", message)
+        return {"error": message, "source": name, "timeout": True}
     except Exception as exc:
-        logger.error("Corporate dashboard source failed: %s: %s", name, exc)
+        logger.error("Operational dashboard source failed: %s: %s", name, exc)
         return {"error": str(exc), "source": name}
 
 
@@ -175,6 +188,12 @@ def _sum_daily_attendance(attendance: Dict[str, Any], start_date: date, end_date
         summary = point.get("summary") or {}
         point_date = point.get("date") or point.get("date_range", {}).get("start") or start_date.isoformat()
         point_date_str = str(point_date)
+        try:
+            point_dt = date.fromisoformat(point_date_str[:10])
+        except Exception:
+            point_dt = None
+        if point_dt and point_dt.weekday() >= 5:
+            continue
 
         expected_day = _safe_int(missing_data.get("expected_groups_count"))
         completed_day = _safe_int(missing_data.get("completed_groups_count"))
@@ -283,14 +302,19 @@ def _sum_daily_attendance(attendance: Dict[str, Any], start_date: date, end_date
         if item["days_missing"] > 1
     ][:20]
 
+    possible_students = total_students + missing_expected_students
+    trace_gap_rate = _pct(missing_expected_students, possible_students) if possible_students else 0.0
+    missing_group_rate = max(0.0, 100.0 - completion)
+    modality_gap_rate = _pct(no_modality_records, total_students) if total_students else 0.0
     risk_score = _clamp(
-        (100 - completion) * 1.65
-        + missing_groups_count * 6
-        + missing_expected_students * 0.08
-        + max(0.0, absence_rate - 8.0) * 0.75
-        + len(repeated_missing_groups) * 4
+        missing_group_rate * 1.10
+        + trace_gap_rate * 0.70
+        + max(0.0, 92.0 - attendance_rate) * 0.45
+        + max(0.0, absence_rate - 12.0) * 0.35
+        + modality_gap_rate * 0.20
+        + len(repeated_missing_groups) * 1.25
     )
-    critical = missing_groups_count > 0 or completion < 90
+    critical = completion < 70 or trace_gap_rate >= 20 or missing_group_rate >= 30
     status = _status_from_index(100 - risk_score, critical)
 
     return {
@@ -310,14 +334,17 @@ def _sum_daily_attendance(attendance: Dict[str, Any], start_date: date, end_date
         "girls_count": girls_count,
         "boys_count": boys_count,
         "legal_risk_units": legal_risk_units,
-        "missing_groups": missing_groups[:120],
-        "repeated_missing_groups": repeated_missing_groups,
+        "trace_gap_rate_percent": _round(trace_gap_rate, 2),
+        "missing_groups_count_detail": missing_groups_count,
+        "repeated_missing_groups_count": len(repeated_missing_groups),
+        "missing_groups": [],
+        "repeated_missing_groups": [],
         "daily_attendance": daily_attendance,
         "absence_motives": absence_motives,
-        "group_absence_hotspots": group_absence_hotspots,
-        "low_attendance_groups": low_attendance_groups[:20],
+        "group_absence_hotspots": [],
+        "low_attendance_groups": [],
         "risk_score": _round(risk_score, 2),
-        "risk_narrative": "Grupos sin pase de lista, rompiendo la continuidad del expediente legal y operativo del alumno, generando riesgo de compliance.",
+        "risk_narrative": "Listas faltantes y brecha de registro de asistencia.",
     }
 
 def _sum_husky(husky: Dict[str, Any], retardos: Dict[str, Any], start_date: date, end_date: date) -> Dict[str, Any]:
@@ -372,8 +399,9 @@ def _sum_husky(husky: Dict[str, Any], retardos: Dict[str, Any], start_date: date
     tardy_rate_per_population = _pct(student_tardies, expected_population * _business_days(start_date, end_date)) if expected_population else 0.0
     avg_tardies_per_business_day = _round(student_tardies / _business_days(start_date, end_date), 2)
 
-    risk_score = _clamp(max(0.0, 90 - scan_rate) * 1.75 + student_tardies * 0.8 + len(repeat_tardy_students) * 1.5)
-    status = _status_from_index(100 - risk_score, scan_rate < 60)
+    risk_score = _clamp(max(0.0, 75 - scan_rate) * 0.35 + student_tardies * 0.08 + len(repeat_tardy_students) * 0.35)
+    material_scan_gap = expected_population > 0 and scan_rate < 25 and scan_gap > expected_population * 5
+    status = _status_from_index(100 - risk_score, material_scan_gap)
     return {
         "status": status,
         "expected_population": expected_population,
@@ -386,10 +414,11 @@ def _sum_husky(husky: Dict[str, Any], retardos: Dict[str, Any], start_date: date
         "student_tardy_rate_percent": _round(tardy_rate_per_population, 2),
         "avg_tardies_per_business_day": avg_tardies_per_business_day,
         "daily_tardies": daily_tardies,
-        "repeat_tardy_students": repeat_tardy_students,
-        "late_arrivals_sample": tardy_rows[:60],
+        "repeat_tardy_students_count": len(repeat_tardy_students),
+        "repeat_tardy_students": [],
+        "late_arrivals_sample": [],
         "risk_score": _round(risk_score, 2),
-        "risk_narrative": "Vulnerabilidad de seguridad y cadena de custodia en accesos.",
+        "risk_narrative": "Uso de escaneo y brecha de acceso registrada.",
     }
 
 def _sum_employee(kardex: Dict[str, Any]) -> Dict[str, Any]:
@@ -410,17 +439,17 @@ def _sum_employee(kardex: Dict[str, Any]) -> Dict[str, Any]:
     absences = kardex.get("ausencias") or []
     payroll_minutes = sum(_safe_int(item.get("minutos_descontar")) for item in tardies)
     incidents = employee_tardies + employee_absences
-    risk_score = _clamp(employee_absences * 24 + employee_tardies * 8 + payroll_minutes * 0.22)
-    status = _status_from_index(100 - risk_score, employee_absences > 0)
+    risk_score = _clamp(employee_absences * 4.0 + employee_tardies * 1.25 + payroll_minutes * 0.02)
+    status = _status_from_index(100 - risk_score, employee_absences >= 12 or payroll_minutes >= 1600)
     return {
         "status": status,
         "employee_tardies": employee_tardies,
         "employee_absences": employee_absences,
         "employee_incidents": incidents,
         "payroll_waste_minutes": payroll_minutes,
-        "incident_sample": (absences + tardies)[:60],
+        "incident_sample": [],
         "risk_score": _round(risk_score, 2),
-        "risk_narrative": "Fuga de capital humano y horas no laboradas.",
+        "risk_narrative": "Faltas, retardos y minutos registrados del personal.",
     }
 
 
@@ -455,13 +484,14 @@ def _sum_academic(
     supervision_backlog = docentes_sin_observacion + planeaciones_pendientes_count
 
     risk_score = _clamp(
-        observation_gap_rate * 0.42
-        + pending_teacher_rate * 0.32
-        + planeaciones_pendientes_count * 2.4
-        + docentes_nunca_observados * 4.0
-        + max(0.0, 75 - plan_feedback_rate) * 0.10
+        observation_gap_rate * 0.25
+        + pending_teacher_rate * 0.22
+        + planeaciones_pendientes_count * 1.15
+        + docentes_nunca_observados * 2.0
+        + max(0.0, 70 - plan_feedback_rate) * 0.06
     )
-    status = "unavailable" if source_errors and not any([total_observaciones, total_planeaciones, docentes_activos, planeaciones_pendientes_count]) else _status_from_index(100 - risk_score, supervision_backlog > 0)
+    academic_critical = supervision_backlog >= 18 or docentes_nunca_observados >= 8 or observation_gap_rate >= 75
+    status = "unavailable" if source_errors and not any([total_observaciones, total_planeaciones, docentes_activos, planeaciones_pendientes_count]) else _status_from_index(100 - risk_score, academic_critical)
 
     return {
         "status": status,
@@ -480,10 +510,10 @@ def _sum_academic(
         "docentes_con_planeaciones_pendientes": docentes_con_pendientes,
         "pending_teacher_rate_percent": pending_teacher_rate,
         "supervision_backlog": supervision_backlog,
-        "docentes_sin_observacion_sample": (observaciones_docentes.get("docentes_sin_observacion") or [])[:60] if not observaciones_docentes.get("error") else [],
-        "planeaciones_pendientes_sample": (planeaciones_pendientes.get("planeaciones_pendientes") or [])[:60] if not planeaciones_pendientes.get("error") else [],
+        "docentes_sin_observacion_sample": [],
+        "planeaciones_pendientes_sample": [],
         "risk_score": _round(risk_score, 2),
-        "risk_narrative": "Negligencia de supervisión académica por parte de Dirección/Coordinación.",
+        "risk_narrative": "Revisión de planeaciones y observación docente pendientes.",
     }
 
 
@@ -521,12 +551,12 @@ def _sum_sapf(monthly: Dict[str, Any], motivos: Dict[str, Any], overview: Dict[s
 
     zero_data_risk = parent_interactions == 0
     risk_score = _clamp(
-        (45.0 if zero_data_risk else 0.0)
-        + open_case_rate * 0.28
-        + complaints * 1.4
-        + max(0.0, followup_ratio - 120.0) * 0.06
+        (18.0 if zero_data_risk else 0.0)
+        + open_case_rate * 0.18
+        + complaints * 0.9
+        + max(0.0, followup_ratio - 140.0) * 0.04
     )
-    status = _status_from_index(100 - risk_score, zero_data_risk)
+    status = _status_from_index(100 - risk_score, False)
     return {
         "status": status,
         "parent_interactions": parent_interactions,
@@ -550,7 +580,7 @@ def _sum_sapf(monthly: Dict[str, Any], motivos: Dict[str, Any], overview: Dict[s
 def _build_index(domains: Dict[str, Dict[str, Any]]) -> Dict[str, Any]:
     weighted_risk = 0.0
     total_weight = 0.0
-    has_critical_flag = False
+    critical_domains = 0
 
     for key, weight in DOMAIN_WEIGHTS.items():
         domain = domains.get(key) or {}
@@ -558,11 +588,12 @@ def _build_index(domains: Dict[str, Dict[str, Any]]) -> Dict[str, Any]:
         weighted_risk += risk * weight
         total_weight += weight
         if domain.get("status") == "critical":
-            has_critical_flag = True
+            critical_domains += 1
 
     index = 100.0 - (weighted_risk / total_weight if total_weight else 100.0)
     index = _clamp(index)
-    status = _status_from_index(index, has_critical_flag)
+    material = critical_domains >= 2 and index < 70
+    status = _status_from_index(index, material)
     return {
         "score": _round(index, 1),
         "risk_score": _round(100.0 - index, 1),
@@ -580,13 +611,13 @@ async def _collect_plantel(plantel: str, start_date: date, end_date: date, scope
         _safe_call("husky", lambda: calculate_husky_daily_rate(plantel, start_date, end_date, scope)),
         _safe_call("husky_retardos", lambda: get_plantel_retardos(plantel, start_date, end_date, scope)),
         _safe_call("kardex", lambda: get_kardex_attendance_report(plantel, start_date, end_date, scope)),
-        _safe_call("sapf_monthly", lambda: get_sapf_monthly_report(plantel, start_date, end_date, scope)),
-        _safe_call("sapf_motivos", lambda: get_sapf_motivos_report(plantel, start_date, end_date, scope)),
-        _safe_call("sapf_overview", lambda: get_sapf_overview_report(plantel, start_date, end_date, scope)),
-        _safe_call("observaciones", lambda: get_observaciones_report(plantel, start_date, end_date, scope)),
-        _safe_call("planeaciones", lambda: get_planeaciones_report(plantel, start_date, end_date, scope)),
-        _safe_call("observaciones_docentes", lambda: get_observaciones_docentes_report(plantel)),
-        _safe_call("planeaciones_pendientes", lambda: get_planeaciones_pendientes_report(plantel, week_start, end_date, "range")),
+        _safe_call("sapf_monthly", lambda: get_sapf_monthly_report(plantel, start_date, end_date, scope), SAPF_TIMEOUT_SECONDS),
+        _safe_call("sapf_motivos", lambda: get_sapf_motivos_report(plantel, start_date, end_date, scope), SAPF_TIMEOUT_SECONDS),
+        _safe_call("sapf_overview", lambda: get_sapf_overview_report(plantel, start_date, end_date, scope), SAPF_TIMEOUT_SECONDS),
+        _safe_call("observaciones", lambda: get_observaciones_report(plantel, start_date, end_date, scope), ACADEMIC_TIMEOUT_SECONDS),
+        _safe_call("planeaciones", lambda: get_planeaciones_report(plantel, start_date, end_date, scope), ACADEMIC_TIMEOUT_SECONDS),
+        _safe_call("observaciones_docentes", lambda: get_observaciones_docentes_report(plantel), ACADEMIC_TIMEOUT_SECONDS),
+        _safe_call("planeaciones_pendientes", lambda: get_planeaciones_pendientes_report(plantel, week_start, end_date, "range"), ACADEMIC_TIMEOUT_SECONDS),
     )
 
     attendance, husky, retardos, kardex, sapf_monthly, sapf_motivos, sapf_overview, observaciones, planeaciones, obs_docentes, plan_pendientes = results
@@ -634,14 +665,14 @@ def _aggregate(planteles: List[Dict[str, Any]], start_date: date, end_date: date
         "students_without_legal_attendance_trace": sum(_safe_int(p["domains"]["attendance"].get("missing_expected_students")) for p in planteles),
         "absent_students": sum(_safe_int(p["domains"]["attendance"].get("absent_students_count")) for p in planteles),
         "attendance_no_modality_records": sum(_safe_int(p["domains"]["attendance"].get("no_modality_records")) for p in planteles),
-        "repeated_missing_groups": sum(len(p["domains"]["attendance"].get("repeated_missing_groups") or []) for p in planteles),
+        "repeated_missing_groups": sum(_safe_int(p["domains"]["attendance"].get("repeated_missing_groups_count")) for p in planteles),
         "employee_incidents": sum(_safe_int(p["domains"]["employee"].get("employee_incidents")) for p in planteles),
         "employee_absences": sum(_safe_int(p["domains"]["employee"].get("employee_absences")) for p in planteles),
         "employee_tardies": sum(_safe_int(p["domains"]["employee"].get("employee_tardies")) for p in planteles),
         "payroll_waste_minutes": sum(_safe_int(p["domains"]["employee"].get("payroll_waste_minutes")) for p in planteles),
         "security_scan_gap": sum(_safe_int(p["domains"]["husky"].get("scan_gap")) for p in planteles),
         "student_tardies": sum(_safe_int(p["domains"]["husky"].get("student_tardies")) for p in planteles),
-        "repeat_tardy_students": sum(len(p["domains"]["husky"].get("repeat_tardy_students") or []) for p in planteles),
+        "repeat_tardy_students": sum(_safe_int(p["domains"]["husky"].get("repeat_tardy_students_count")) for p in planteles),
         "academic_backlog": sum(_safe_int(p["domains"]["academic"].get("supervision_backlog")) for p in planteles),
         "pending_lesson_reviews": sum(_safe_int(p["domains"]["academic"].get("planeaciones_pendientes")) for p in planteles),
         "teachers_without_observation": sum(_safe_int(p["domains"]["academic"].get("docentes_sin_observacion_30_dias")) for p in planteles),
@@ -658,7 +689,7 @@ def _aggregate(planteles: List[Dict[str, Any]], start_date: date, end_date: date
         worst = min(planteles, key=lambda p: _safe_float(p.get("index", {}).get("score"), 0.0))
         best = max(planteles, key=lambda p: _safe_float(p.get("index", {}).get("score"), 0.0))
 
-    status = _status_from_index(avg_index, critical_count > 0)
+    status = _status_from_index(avg_index, critical_count >= max(2, math.ceil(count / 2)))
     return {
         "corporate_index": {
             "score": _round(avg_index, 1),
@@ -726,7 +757,7 @@ async def get_corporate_compliance_index(
     include_baselines: bool = True,
 ) -> Dict[str, Any]:
     selected_planteles = _normalize_planteles(planteles)
-    semaphore = asyncio.Semaphore(2)
+    semaphore = asyncio.Semaphore(3)
 
     async def collect(code: str) -> Dict[str, Any]:
         async with semaphore:
@@ -751,8 +782,8 @@ async def get_corporate_compliance_index(
             _attach_baselines(plantel_payloads, baseline_payload)
 
     return {
-        "title": "SIPAE Corporate Compliance & Risk Index",
-        "subtitle": "Índice Corporativo de Cumplimiento SIPAE",
+        "title": "Cumplimiento operativo",
+        "subtitle": "Tablero por plantel",
         "generated_at": _mx_now().isoformat(),
         "timezone": "America/Mexico_City",
         "scope": scope,
@@ -763,10 +794,10 @@ async def get_corporate_compliance_index(
             "fulfilled": _risk_label("fulfilled"),
             "warning": _risk_label("warning"),
             "critical": _risk_label("critical"),
-            "attendance": "Grupos sin pase de lista, rompiendo la continuidad del expediente legal y operativo del alumno, generando riesgo de compliance.",
-            "employee": "Fuga de capital humano y horas no laboradas.",
-            "academic": "Negligencia de supervisión académica por parte de Dirección/Coordinación.",
-            "husky": "Vulnerabilidad de seguridad y cadena de custodia en accesos.",
+            "attendance": "Listas faltantes y brecha de registro de asistencia.",
+            "employee": "Faltas, retardos y minutos registrados del personal.",
+            "academic": "Revisión de planeaciones y observación docente pendientes.",
+            "husky": "Uso de escaneo y brecha de acceso registrada.",
         },
         "aggregate": _aggregate(plantel_payloads, start_date, end_date),
         "planteles": plantel_payloads,
