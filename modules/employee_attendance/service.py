@@ -51,6 +51,8 @@ async def get_kardex_attendance_report(plantel: str, start_date: date, end_date:
     logger.info(f"Sub-áreas internas a consultar en Crossover API: {mapped_areas}")
 
     crossover_empleados = []
+    raw_records = []
+    source_records_processed = 0
     used_fallback = False
     unmapped_areas = []
     
@@ -117,8 +119,6 @@ async def get_kardex_attendance_report(plantel: str, start_date: date, end_date:
         # 2. Intento de Respaldo (Fallback Puro de Kardex)
         logger.warning("Carga de Crossover vacía. Iniciando extracción cruda de Kardex (Fallback).")
         used_fallback = True
-        raw_records = []
-        
         areas = await fetch_kardex_unique_areas()
         target_areas = []
         
@@ -164,6 +164,8 @@ async def get_kardex_attendance_report(plantel: str, start_date: date, end_date:
             elif any(kw in raw_status for kw in ["falta", "ausencia", "injustificada", "no checo", "omision"]):
                 ausencias_list.append(detail_obj)
 
+    source_records_processed = len(crossover_empleados) if not used_fallback else len(raw_records)
+
     return {
         "plantel": norm_plantel,
         "source_plantel_requested": plantel_info["plantel_requested"],
@@ -174,7 +176,9 @@ async def get_kardex_attendance_report(plantel: str, start_date: date, end_date:
         },
         "summary": {
             "retardos_count": len(retardos_list),
-            "ausencias_count": len(ausencias_list)
+            "ausencias_count": len(ausencias_list),
+            "records_processed": source_records_processed,
+            "has_source_records": source_records_processed > 0
         },
         "retardos": retardos_list,
         "ausencias": ausencias_list,
@@ -185,7 +189,8 @@ async def get_kardex_attendance_report(plantel: str, start_date: date, end_date:
                 "end_date": end_date.isoformat(),
                 "requested_plantel": norm_plantel,
                 "used_fallback": used_fallback,
-                "mapped_kardex_areas": mapped_areas
+                "mapped_kardex_areas": mapped_areas,
+                "records_processed": source_records_processed
             }
         }
     }

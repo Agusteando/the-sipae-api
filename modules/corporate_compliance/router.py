@@ -10,6 +10,7 @@ from .service import get_corporate_compliance_index
 from .templates import CORPORATE_COMPLIANCE_HTML
 
 router = APIRouter(tags=["Cumplimiento operativo"])
+DASHBOARD_DATA_VERSION = "2026-05-29-source-audit-daily-fallback-1"
 
 
 @router.get("/corporate-compliance-risk-index", response_class=HTMLResponse, include_in_schema=False)
@@ -95,12 +96,13 @@ async def get_corporate_compliance_dashboard_data(
     force_refresh: bool = Query(False, description="Omitir caché del tablero."),
 ):
     resolved_scope, resolved_start, resolved_end = _resolve_corporate_dates(scope, start_date, end_date)
-    cache_key = "corp_index:{}:{}:{}:{}:{}".format(
+    cache_key = "corp_index:{}:{}:{}:{}:{}:{}".format(
         resolved_scope,
         resolved_start.isoformat(),
         resolved_end.isoformat(),
         planteles or "ALL",
         "baseline" if include_baselines else "no-baseline",
+        DASHBOARD_DATA_VERSION,
     )
 
     if not force_refresh:
@@ -120,3 +122,35 @@ async def get_corporate_compliance_dashboard_data(
     data["meta"] = {"is_cached": False, "cached_at": datetime.now(ZoneInfo("America/Mexico_City")).isoformat()}
     set_cache(cache_key, data)
     return data
+
+
+@router.get("/api/v1/corporate-compliance-risk-index/debug")
+async def get_corporate_compliance_source_debug(
+    planteles: Optional[str] = Query(None, description="Lista separada por comas en orden fijo: PT,PM,ST,SM,PREET,PREEM"),
+    scope: Optional[str] = Query("month", description="Alcance: month por defecto; también acepta today, range, ciclo_escolar."),
+    start_date: Optional[date] = Query(None, description="Fecha de inicio si scope=range"),
+    end_date: Optional[date] = Query(None, description="Fecha de fin si scope=range"),
+):
+    resolved_scope, resolved_start, resolved_end = _resolve_corporate_dates(scope, start_date, end_date)
+    data = await get_corporate_compliance_index(
+        planteles=planteles,
+        start_date=resolved_start,
+        end_date=resolved_end,
+        scope=resolved_scope,
+        include_baselines=False,
+    )
+    return {
+        "scope": data.get("scope"),
+        "window": (data.get("aggregate") or {}).get("window"),
+        "selected_planteles": data.get("selected_planteles"),
+        "source_audit": data.get("source_audit") or (data.get("aggregate") or {}).get("source_audit"),
+        "planteles": [
+            {
+                "plantel": item.get("plantel"),
+                "resolved_name": item.get("resolved_name"),
+                "source_audit": item.get("source_audit"),
+                "source_errors": item.get("source_errors"),
+            }
+            for item in data.get("planteles") or []
+        ],
+    }

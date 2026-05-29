@@ -10,7 +10,7 @@
 PLANTEL_MAP = {
     "PM": {
         "db_code": "PM",
-        "db_codes": ["PM"],
+        "db_codes": ["PM", "PMA", "PMB", "4 - PM", "04 - PM", "PRIMARIA METEPEC", "PRIMARIA ALTA METEPEC", "PRIMARIA BAJA METEPEC"],
         "sheets_code": "PM",
         "sheets_codes": ["PM"],
         "name": "Primaria Metepec",
@@ -21,7 +21,7 @@ PLANTEL_MAP = {
     "PMA": {
         "alias_of": "PM",
         "db_code": "PM",
-        "db_codes": ["PM"],
+        "db_codes": ["PM", "PMA", "PMB", "4 - PM", "04 - PM", "PRIMARIA METEPEC", "PRIMARIA ALTA METEPEC", "PRIMARIA BAJA METEPEC"],
         "sheets_code": "PM",
         "sheets_codes": ["PM"],
         "name": "Primaria Metepec",
@@ -32,7 +32,7 @@ PLANTEL_MAP = {
     "PMB": {
         "alias_of": "PM",
         "db_code": "PM",
-        "db_codes": ["PM"],
+        "db_codes": ["PM", "PMA", "PMB", "4 - PM", "04 - PM", "PRIMARIA METEPEC", "PRIMARIA ALTA METEPEC", "PRIMARIA BAJA METEPEC"],
         "sheets_code": "PM",
         "sheets_codes": ["PM"],
         "name": "Primaria Metepec",
@@ -43,7 +43,7 @@ PLANTEL_MAP = {
 
     "PT": {
         "db_code": "PT",
-        "db_codes": ["PT"],
+        "db_codes": ["PT", "01", "1", "1 - PT", "14 - PT", "PRIMARIA TOLUCA"],
         "sheets_code": "PT",
         "sheets_codes": ["PT"],
         "name": "Primaria Toluca",
@@ -53,7 +53,7 @@ PLANTEL_MAP = {
     },
     "SM": {
         "db_code": "SM",
-        "db_codes": ["SM"],
+        "db_codes": ["SM", "5 - SM", "05 - SM", "SECUNDARIA METEPEC"],
         "sheets_code": "SM",
         "sheets_codes": ["SM"],
         "name": "Secundaria Metepec",
@@ -63,7 +63,7 @@ PLANTEL_MAP = {
     },
     "ST": {
         "db_code": "ST",
-        "db_codes": ["ST"],
+        "db_codes": ["ST", "2 - ST", "02 - ST", "SECUNDARIA TOLUCA"],
         "sheets_code": "ST",
         "sheets_codes": ["ST"],
         "name": "Secundaria Toluca",
@@ -74,8 +74,8 @@ PLANTEL_MAP = {
 
     "PREET": {
         "db_code": "PREET",
-        "db_codes": ["PREET"],
-        "husky_db_codes": ["PREET", "CT"],
+        "db_codes": ["PREET", "CT", "PREES TOL", "PREES-TOL", "PREESCOLAR TOLUCA", "CASITA TOLUCA"],
+        "husky_db_codes": ["PREET", "CT", "PREES TOL", "PREESCOLAR TOLUCA", "CASITA TOLUCA"],
         "sheets_code": "PREET",
         "sheets_codes": ["PREET"],
         "name": "PREET",
@@ -87,8 +87,8 @@ PLANTEL_MAP = {
     "CT": {
         "alias_of": "PREET",
         "db_code": "PREET",
-        "db_codes": ["PREET"],
-        "husky_db_codes": ["PREET", "CT"],
+        "db_codes": ["PREET", "CT", "PREES TOL", "PREES-TOL", "PREESCOLAR TOLUCA", "CASITA TOLUCA"],
+        "husky_db_codes": ["PREET", "CT", "PREES TOL", "PREESCOLAR TOLUCA", "CASITA TOLUCA"],
         "sheets_code": "PREET",
         "sheets_codes": ["PREET"],
         "name": "PREET",
@@ -100,7 +100,8 @@ PLANTEL_MAP = {
 
     "PREEM": {
         "db_code": "PREEM",
-        "db_codes": ["PREEM"],
+        "db_codes": ["PREEM", "CM", "PREES MET", "PREES-MET", "PREESCOLAR METEPEC", "CASITA METEPEC"],
+        "husky_db_codes": ["PREEM", "CM", "PREES MET", "PREESCOLAR METEPEC", "CASITA METEPEC"],
         "sheets_code": "PREEM",
         "sheets_codes": ["PREEM"],
         "name": "PREEM",
@@ -112,7 +113,8 @@ PLANTEL_MAP = {
     "CM": {
         "alias_of": "PREEM",
         "db_code": "PREEM",
-        "db_codes": ["PREEM"],
+        "db_codes": ["PREEM", "CM", "PREES MET", "PREES-MET", "PREESCOLAR METEPEC", "CASITA METEPEC"],
+        "husky_db_codes": ["PREEM", "CM", "PREES MET", "PREESCOLAR METEPEC", "CASITA METEPEC"],
         "sheets_code": "PREEM",
         "sheets_codes": ["PREEM"],
         "name": "PREEM",

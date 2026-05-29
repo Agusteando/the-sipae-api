@@ -24,46 +24,76 @@ def _normalize_codes(db_codes: Iterable[str] | str) -> List[str]:
 def _plantel_like_clause(alias: str, db_codes: Iterable[str] | str) -> Tuple[str, List[str]]:
     """Tolerant Husky campus filter.
 
-    Historical Husky records can store `users.plantel` as a short code, a long
-    label, or a prefixed label. Exact normalized comparisons keep labels safe;
-    LIKE catches legacy strings such as "1 - PT" or PMA/PMB variants.
+    Husky users.plantel has changed between short codes, prefixed codes, and
+    school names. Match exact, prefix, and contained aliases so missing aliases
+    become unavailable data instead of fake zero activity.
     """
     codes = _normalize_codes(db_codes)
     expr = f"TRIM(UPPER({alias}.plantel))"
     exact = ", ".join(["%s" for _ in codes])
-    like_codes = [code for code in codes if len(code) <= 12]
-    like_clause = " OR ".join([f"{expr} LIKE %s" for _ in like_codes])
-    clause = f"({expr} IN ({exact})"
+    parts = [f"{expr} IN ({exact})"]
     params: List[str] = list(codes)
-    if like_clause:
-        clause += f" OR {like_clause}"
-        params.extend([f"%{code}%" for code in like_codes])
-    clause += ")"
-    return clause, params
+    for code in codes:
+        parts.append(f"{expr} LIKE %s")
+        params.append(f"{code}%")
+        parts.append(f"{expr} LIKE %s")
+        params.append(f"%{code}%")
+    return "(" + " OR ".join(parts) + ")", params
 
 
 async def get_daily_scans(db_codes: Iterable[str] | str, start_date: date, end_date: date) -> list:
-    """Obtain scan statistics from Husky Pass using tolerant plantel aliases."""
-    plantel_clause, plantel_params = _plantel_like_clause("B", db_codes)
+    """Obtain scan statistics from Husky Pass using both identity paths.
+
+    Existing reports historically used a direct acceso.ss_id -> users.id path
+    for student tardies, while other scans can use acceso.ss_id ->
+    personas_autorizadas.id -> users.id. Unioning both and counting distinct
+    users per day/type prevents a single join assumption from flattening the
+    access charts to zero.
+    """
+    direct_clause, direct_params = _plantel_like_clause("B", db_codes)
+    chain_clause, chain_params = _plantel_like_clause("B", db_codes)
     query = f"""
         SELECT
-            DATE(A.timestamp) as fecha,
-            A.type as tipo_accion,
-            COUNT(DISTINCT B.id) as total_scans
-        FROM acceso A
-        LEFT JOIN personas_autorizadas pa ON pa.id = A.ss_id
-        LEFT JOIN users B ON pa.user_id = B.id
-        WHERE {plantel_clause}
-          AND DATE(A.timestamp) BETWEEN %s AND %s
-          AND A.timestamp IS NOT NULL
-        GROUP BY DATE(A.timestamp), A.type
-        ORDER BY DATE(A.timestamp) ASC
+            DATE(src.timestamp) AS fecha,
+            LOWER(TRIM(src.tipo_accion)) AS tipo_accion,
+            COUNT(DISTINCT src.user_id) AS total_scans
+        FROM (
+            SELECT
+                A.timestamp,
+                A.type AS tipo_accion,
+                B.id AS user_id
+            FROM acceso A
+            JOIN users B ON B.id = A.ss_id
+            WHERE {direct_clause}
+              AND DATE(A.timestamp) BETWEEN %s AND %s
+              AND A.timestamp IS NOT NULL
+              AND A.type IS NOT NULL
+
+            UNION ALL
+
+            SELECT
+                A.timestamp,
+                A.type AS tipo_accion,
+                B.id AS user_id
+            FROM acceso A
+            JOIN personas_autorizadas pa ON pa.id = A.ss_id
+            JOIN users B ON pa.user_id = B.id
+            WHERE {chain_clause}
+              AND DATE(A.timestamp) BETWEEN %s AND %s
+              AND A.timestamp IS NOT NULL
+              AND A.type IS NOT NULL
+        ) src
+        WHERE src.user_id IS NOT NULL
+          AND LOWER(TRIM(src.tipo_accion)) IN ('entrada', 'salida')
+        GROUP BY DATE(src.timestamp), LOWER(TRIM(src.tipo_accion))
+        ORDER BY DATE(src.timestamp) ASC
     """
 
     conn = await get_husky_db_connection()
     try:
         async with conn.cursor(aiomysql.DictCursor) as cur:
-            await cur.execute(query, (*plantel_params, start_date, end_date))
+            params = (*direct_params, start_date, end_date, *chain_params, start_date, end_date)
+            await cur.execute(query, params)
             return await cur.fetchall()
     finally:
         conn.close()
@@ -72,69 +102,68 @@ async def get_daily_scans(db_codes: Iterable[str] | str, start_date: date, end_d
 async def fetch_plantel_retardos(db_codes: Iterable[str] | str, start_date: date, end_date: date, threshold_time: str) -> list:
     """Fetch student tardies using both known Husky identity paths.
 
-    The health report historically got tardies through `alumno_pa.user_id =
-    acceso.ss_id`. Some newer scan aggregations use `acceso.ss_id ->
-    personas_autorizadas.id -> users.id`. The global dashboard must not depend
-    on only one of those shapes, so both are unioned and then deduplicated to the
-    first valid entrance per student per day.
+    The result is deduplicated to the first entrance per student per day before
+    applying the tardy threshold, matching the health-report intent while still
+    supporting newer authorized-person scans.
     """
     direct_clause, direct_params = _plantel_like_clause("B", db_codes)
     chain_clause, chain_params = _plantel_like_clause("B", db_codes)
     query = f"""
         SELECT
-            MIN(src.id) AS id,
+            MIN(first_scan.id) AS id,
             COALESCE(
-                NULLIF(TRIM(CONCAT_WS(' ', MAX(src.nombreA), MAX(src.paternoA), MAX(src.maternoA))), ''),
-                NULLIF(TRIM(MAX(src.username)), ''),
+                NULLIF(TRIM(CONCAT_WS(' ', MAX(first_scan.nombreA), MAX(first_scan.paternoA), MAX(first_scan.maternoA))), ''),
+                NULLIF(TRIM(MAX(first_scan.username)), ''),
                 'Desconocido'
             ) AS student_fullname,
-            COALESCE(NULLIF(TRIM(MAX(src.username)), ''), 'N/A') AS matricula,
-            DATE(MIN(src.timestamp)) AS date,
-            TIME(MIN(src.timestamp)) AS time
+            COALESCE(NULLIF(TRIM(MAX(first_scan.username)), ''), 'N/A') AS matricula,
+            DATE(MIN(first_scan.timestamp)) AS date,
+            TIME(MIN(first_scan.timestamp)) AS time
         FROM (
-            SELECT
-                A.id,
-                A.timestamp,
-                B.id AS user_id,
-                B.username,
-                ap.nombreA,
-                ap.paternoA,
-                ap.maternoA
-            FROM acceso A
-            JOIN alumno_pa ap ON ap.user_id = A.ss_id
-            JOIN users B ON ap.user_id = B.id
-            WHERE {direct_clause}
-              AND DATE(A.timestamp) BETWEEN %s AND %s
-              AND A.timestamp IS NOT NULL
-              AND LOWER(A.type) = 'entrada'
-              AND COALESCE(A.suspension_efectiva, 0) = 0
-              AND DAYOFWEEK(A.timestamp) NOT IN (1, 7)
+            SELECT src.*
+            FROM (
+                SELECT
+                    A.id,
+                    A.timestamp,
+                    B.id AS user_id,
+                    B.username,
+                    ap.nombreA,
+                    ap.paternoA,
+                    ap.maternoA
+                FROM acceso A
+                JOIN users B ON B.id = A.ss_id
+                LEFT JOIN alumno_pa ap ON ap.user_id = B.id
+                WHERE {direct_clause}
+                  AND DATE(A.timestamp) BETWEEN %s AND %s
+                  AND A.timestamp IS NOT NULL
+                  AND LOWER(TRIM(A.type)) = 'entrada'
+                  AND DAYOFWEEK(A.timestamp) NOT IN (1, 7)
 
-            UNION ALL
+                UNION ALL
 
-            SELECT
-                A.id,
-                A.timestamp,
-                B.id AS user_id,
-                B.username,
-                ap.nombreA,
-                ap.paternoA,
-                ap.maternoA
-            FROM acceso A
-            LEFT JOIN personas_autorizadas pa ON pa.id = A.ss_id
-            LEFT JOIN users B ON pa.user_id = B.id
-            LEFT JOIN alumno_pa ap ON ap.user_id = B.id
-            WHERE {chain_clause}
-              AND DATE(A.timestamp) BETWEEN %s AND %s
-              AND A.timestamp IS NOT NULL
-              AND LOWER(A.type) = 'entrada'
-              AND COALESCE(A.suspension_efectiva, 0) = 0
-              AND DAYOFWEEK(A.timestamp) NOT IN (1, 7)
-              AND B.id IS NOT NULL
-        ) src
-        GROUP BY DATE(src.timestamp), src.user_id
-        HAVING TIME(MIN(src.timestamp)) > %s
-        ORDER BY MIN(src.timestamp) ASC
+                SELECT
+                    A.id,
+                    A.timestamp,
+                    B.id AS user_id,
+                    B.username,
+                    ap.nombreA,
+                    ap.paternoA,
+                    ap.maternoA
+                FROM acceso A
+                JOIN personas_autorizadas pa ON pa.id = A.ss_id
+                JOIN users B ON pa.user_id = B.id
+                LEFT JOIN alumno_pa ap ON ap.user_id = B.id
+                WHERE {chain_clause}
+                  AND DATE(A.timestamp) BETWEEN %s AND %s
+                  AND A.timestamp IS NOT NULL
+                  AND LOWER(TRIM(A.type)) = 'entrada'
+                  AND DAYOFWEEK(A.timestamp) NOT IN (1, 7)
+            ) src
+            WHERE src.user_id IS NOT NULL
+        ) first_scan
+        GROUP BY DATE(first_scan.timestamp), first_scan.user_id
+        HAVING TIME(MIN(first_scan.timestamp)) > %s
+        ORDER BY MIN(first_scan.timestamp) ASC
     """
 
     conn = await get_husky_db_connection()

@@ -25,23 +25,25 @@ def _normalize_values(values: Iterable[str] | str) -> List[str]:
 def _plantel_clause(alias: str, plantel_values: Iterable[str] | str) -> Tuple[str, List[str]]:
     """Build a tolerant campus clause for attendance records.
 
-    The attendance database has used short codes, legacy aliases, and long
-    campus labels across different periods. Exact normalized matches are tried
-    first, while short-code LIKE matching catches values such as "1 - PT".
+    Attendance records have appeared as short codes (PT), prefixed codes
+    (1 - PT / 14 - PT), and long school names. The dashboard must not turn
+    an alias miss into a fake 0%, so each alias is tested as exact, prefix,
+    and contained text against the normalized plantel column.
     """
     values = _normalize_values(plantel_values)
     prefix = f"{alias}." if alias else ""
     expr = f"TRIM(UPPER({prefix}plantel))"
     exact = ", ".join(["%s" for _ in values])
-    like_values = [value for value in values if len(value) <= 8]
-    like_clause = " OR ".join([f"{expr} LIKE %s" for _ in like_values])
-    clause = f"({expr} IN ({exact})"
+    clause_parts = [f"{expr} IN ({exact})"]
     params: List[str] = list(values)
-    if like_clause:
-        clause += f" OR {like_clause}"
-        params.extend([f"%{value}%" for value in like_values])
-    clause += ")"
-    return clause, params
+
+    for value in values:
+        clause_parts.append(f"{expr} LIKE %s")
+        params.append(f"{value}%")
+        clause_parts.append(f"{expr} LIKE %s")
+        params.append(f"%{value}%")
+
+    return "(" + " OR ".join(clause_parts) + ")", params
 
 
 async def fetch_attendance_data(plantel_values: Iterable[str] | str, start_date: date, end_date: date) -> Tuple[List[Dict], List[Dict]]:

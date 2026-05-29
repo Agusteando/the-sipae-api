@@ -41,14 +41,14 @@ CORPORATE_COMPLIANCE_HTML = """
     .loading, .error-box, .card, .section { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); }
     .loading, .error-box { padding: 22px; font-weight: 760; color: var(--muted); }
     .error-box { color: #991b1b; background: #fff7f7; border-color: rgba(239,68,68,.35); }
-    .hero { display: grid; grid-template-columns: 1.4fr .6fr; gap: 16px; margin-bottom: 16px; }
-    .card { padding: 20px; }
-    h1 { margin: 0; font-size: clamp(28px, 4vw, 46px); letter-spacing: -.05em; line-height: 1; }
-    .lead { margin: 10px 0 0; max-width: 880px; color: #334155; font-size: 14px; font-weight: 560; }
+    .hero { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(420px, .85fr); gap: 18px; margin-bottom: 18px; }
+    .card { padding: 22px; }
+    h1 { margin: 0; font-size: clamp(30px, 4vw, 48px); letter-spacing: -.05em; line-height: 1; }
+    .lead { margin: 12px 0 0; max-width: 960px; color: #334155; font-size: 15px; font-weight: 560; }
     .stamp-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 17px; }
     .stamp { display: inline-flex; align-items: center; gap: 7px; border: 1px solid var(--line); background: #fff; border-radius: 999px; padding: 7px 10px; font-size: 12px; font-weight: 780; color: #334155; }
-    .quick { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 12px; }
-    .quick-card { padding: 16px; border-left: 5px solid var(--line); }
+    .quick { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 12px; }
+    .quick-card { padding: 16px; border-left: 5px solid var(--line); min-height: 122px; }
     .quick-card.fulfilled { border-left-color: var(--green); }
     .quick-card.warning { border-left-color: var(--yellow); }
     .quick-card.critical { border-left-color: var(--red); }
@@ -56,20 +56,32 @@ CORPORATE_COMPLIANCE_HTML = """
     .quick-label, .kpi-label, .section-kicker { color: var(--muted); font-size: 11px; font-weight: 850; letter-spacing: .10em; text-transform: uppercase; }
     .quick-value { margin-top: 8px; font-size: 20px; font-weight: 880; letter-spacing: -.03em; }
     .quick-detail { margin-top: 7px; color: #475569; font-size: 13px; font-weight: 560; }
-    .kpis { display: grid; grid-template-columns: repeat(8, minmax(0,1fr)); gap: 12px; margin: 16px 0; }
-    .kpi { min-height: 118px; padding: 15px; }
+    .kpis { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 12px; margin: 18px 0; }
+    .source-health { margin: 0 0 18px; padding: 14px; background: #fff; border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); display: grid; grid-template-columns: repeat(6, minmax(0,1fr)); gap: 10px; }
+    .source-chip { border: 1px solid var(--line); border-radius: 14px; padding: 12px; background: #f8fafc; min-height: 78px; }
+    .source-chip.ok { border-left: 5px solid var(--green); }
+    .source-chip.partial { border-left: 5px solid var(--yellow); }
+    .source-chip.bad { border-left: 5px solid var(--red); }
+    .source-chip.none { border-left: 5px solid var(--gray); }
+    .source-label { font-size: 11px; font-weight: 850; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); }
+    .source-value { margin-top: 6px; font-size: 20px; font-weight: 900; letter-spacing: -.035em; }
+    .source-detail { margin-top: 4px; font-size: 11px; color: #64748b; font-weight: 680; }
+    .kpi { min-height: 118px; padding: 17px; }
     .kpi-value { margin-top: 10px; font-size: 28px; font-weight: 900; letter-spacing: -.045em; }
     .kpi-note { margin-top: 5px; font-size: 12px; color: var(--muted); font-weight: 650; }
-    .layout { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 16px; }
+    .layout { display: grid; grid-template-columns: repeat(2, minmax(560px,1fr)); gap: 18px; align-items: start; }
     .section { overflow: hidden; }
     .section.wide { grid-column: 1 / -1; }
     .section-head { padding: 16px 18px; border-bottom: 1px solid var(--line); display: flex; justify-content: space-between; gap: 14px; align-items: flex-start; }
     .section-title { margin-top: 3px; font-size: 20px; font-weight: 860; letter-spacing: -.025em; }
     .section-sub { margin-top: 3px; font-size: 12px; color: var(--muted); font-weight: 620; }
-    .section-body { padding: 18px; display: grid; grid-template-columns: minmax(0,1.7fr) minmax(240px,.55fr); gap: 16px; }
-    .chart-box { height: 390px; min-height: 340px; border: 1px solid var(--line); border-radius: 14px; background: #fff; padding: 14px; position: relative; }
-    .chart-box.tall { height: 440px; }
-    .note-box { border: 1px solid var(--line); border-radius: 14px; background: #f8fafc; padding: 15px; min-height: 132px; border-left: 5px solid var(--line); }
+    .section-body { padding: 18px; display: grid; grid-template-columns: minmax(0,2.25fr) minmax(340px,.75fr); gap: 18px; }
+    .layout > .section:not(.wide) .section-body { grid-template-columns: 1fr; }
+    .chart-box { height: 460px; min-height: 420px; border: 1px solid var(--line); border-radius: 14px; background: #fff; padding: 16px; position: relative; }
+    .chart-box.tall { height: 560px; }
+    .chart-box.empty canvas { display: none; }
+    .empty-state { position: absolute; inset: 16px; display: flex; align-items: center; justify-content: center; text-align: center; border: 1px dashed #cbd5e1; border-radius: 12px; color: #64748b; font-weight: 800; background: #f8fafc; padding: 24px; }
+    .note-box { border: 1px solid var(--line); border-radius: 14px; background: #f8fafc; padding: 16px; min-height: 132px; border-left: 5px solid var(--line); }
     .note-box.fulfilled { border-left-color: var(--green); }
     .note-box.warning { border-left-color: var(--yellow); }
     .note-box.critical { border-left-color: var(--red); }
@@ -77,8 +89,8 @@ CORPORATE_COMPLIANCE_HTML = """
     .note-title { font-size: 11px; font-weight: 850; letter-spacing: .10em; text-transform: uppercase; color: #334155; }
     .note-line { margin-top: 10px; font-size: 14px; font-weight: 610; color: #334155; }
     .selector { border: 1px solid var(--line); border-radius: 999px; padding: 8px 12px; font-size: 12px; font-weight: 800; background: #fff; color: #334155; }
-    .matrix { display: grid; grid-template-columns: 76px repeat(7, minmax(110px, 1fr)); gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; }
-    .mcell { background: #fff; min-height: 66px; padding: 10px; display: flex; flex-direction: column; justify-content: center; }
+    .matrix { display: grid; grid-template-columns: 128px repeat(7, minmax(170px, 1fr)); gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: 14px; overflow-x: auto; }
+    .mcell { background: #fff; min-height: 76px; padding: 12px; display: flex; flex-direction: column; justify-content: center; }
     .mhead { background: #f8fafc; color: #475569; font-size: 11px; font-weight: 850; text-transform: uppercase; letter-spacing: .08em; }
     .mplantel { font-size: 15px; font-weight: 900; }
     .mvalue { font-size: 18px; font-weight: 890; letter-spacing: -.035em; }
@@ -87,8 +99,8 @@ CORPORATE_COMPLIANCE_HTML = """
     .tone-warning { box-shadow: inset 5px 0 0 var(--yellow); }
     .tone-critical { box-shadow: inset 5px 0 0 var(--red); }
     .tone-unavailable { box-shadow: inset 5px 0 0 var(--gray); color: #64748b; }
-    @media (max-width: 1240px) { .topbar-inner, .hero, .section-body { grid-template-columns: 1fr; } .filters { justify-content: flex-start; } .quick { grid-template-columns: repeat(2,minmax(0,1fr)); } .kpis { grid-template-columns: repeat(4,minmax(0,1fr)); } .layout { grid-template-columns: 1fr; } .section.wide { grid-column: auto; } .matrix { grid-template-columns: 90px repeat(7, minmax(128px,1fr)); overflow-x: auto; } }
-    @media (max-width: 760px) { .page { padding: 16px 12px 42px; } .topbar-inner { padding: 12px; } .quick, .kpis { grid-template-columns: repeat(2,minmax(0,1fr)); } .section-head { display:block; } .chart-box { height: 320px; } }
+    @media (max-width: 1240px) { .topbar-inner, .hero, .section-body { grid-template-columns: 1fr; } .filters { justify-content: flex-start; } .quick { grid-template-columns: repeat(2,minmax(0,1fr)); } .kpis { grid-template-columns: repeat(4,minmax(0,1fr)); } .source-health { grid-template-columns: repeat(3,minmax(0,1fr)); } .layout { grid-template-columns: 1fr; } .section.wide { grid-column: auto; } .matrix { grid-template-columns: 128px repeat(7, minmax(170px,1fr)); overflow-x: auto; } }
+    @media (max-width: 760px) { .page { padding: 16px 12px 42px; } .topbar-inner { padding: 12px; } .quick, .kpis, .source-health { grid-template-columns: repeat(2,minmax(0,1fr)); } .section-head { display:block; } .chart-box { height: 360px; min-height: 340px; } }
   </style>
 </head>
 <body>
@@ -139,6 +151,8 @@ CORPORATE_COMPLIANCE_HTML = """
         <div class="card kpi"><div class="kpi-label">Personal</div><div id="kpiPeople" class="kpi-value">--</div><div class="kpi-note">Incidencias</div></div>
         <div class="card kpi"><div class="kpi-label">SAPF</div><div id="kpiSapf" class="kpi-value">--</div><div class="kpi-note">Fichas</div></div>
       </section>
+
+      <section id="sourceHealth" class="source-health" aria-label="Lectura de fuentes"></section>
 
       <div class="layout">
         <section class="section wide">
@@ -224,6 +238,8 @@ CORPORATE_COMPLIANCE_HTML = """
     const fmt = (value, digits = 0) => isMissing(value) ? "s/d" : Number(value).toLocaleString("es-MX", { maximumFractionDigits: digits, minimumFractionDigits: digits });
     const pct = (value, digits = 1) => isMissing(value) ? "s/d" : `${fmt(value, digits)}%`;
     const chartValue = value => isMissing(value) ? null : Number(value);
+    const hasAnyNumber = values => (values || []).some(v => !isMissing(v));
+    const allNumbersZero = values => { const nums = (values || []).filter(v => !isMissing(v)).map(Number); return nums.length > 0 && nums.every(v => Math.abs(v) < 0.000001); };
     const statusColor = status => status === "critical" ? RED : status === "warning" ? YELLOW : status === "fulfilled" ? GREEN : GRAY;
     const lowGoodColor = (value, warning, critical) => isMissing(value) ? GRAY : Number(value) >= critical ? RED : Number(value) >= warning ? YELLOW : GREEN;
     const highGoodColor = (value, warning, critical) => isMissing(value) ? GRAY : Number(value) <= critical ? RED : Number(value) <= warning ? YELLOW : GREEN;
@@ -296,6 +312,7 @@ CORPORATE_COMPLIANCE_HTML = """
       renderStamps();
       renderQuickRead();
       renderKpis();
+      renderSourceHealth();
       renderMatrix();
       renderTrendChart();
       renderListsChart();
@@ -329,14 +346,40 @@ CORPORATE_COMPLIANCE_HTML = """
 
     function renderKpis() {
       const n = network();
-      $("kpiLists").textContent = pct(n.attendance_lists_completion_pct || 0);
-      $("kpiMissingLists").textContent = fmt(n.attendance_lists_missing || 0);
-      $("kpiAttendance").textContent = pct(n.student_attendance_pct || 0);
-      $("kpiAbsence").textContent = fmt(n.absences_per_100 || 0, 1);
-      $("kpiTardies").textContent = fmt(n.tardies_per_100_entries || 0, 1);
-      $("kpiAccess").textContent = pct(n.access_coverage_pct || 0);
-      $("kpiPeople").textContent = fmt(n.employee_incidents || 0);
-      $("kpiSapf").textContent = fmt(n.sapf_tickets || 0);
+      $("kpiLists").textContent = pct(n.attendance_lists_completion_pct);
+      $("kpiMissingLists").textContent = fmt(n.attendance_lists_missing);
+      $("kpiAttendance").textContent = pct(n.student_attendance_pct);
+      $("kpiAbsence").textContent = fmt(n.absences_per_100, 1);
+      $("kpiTardies").textContent = fmt(n.tardies_per_100_entries, 1);
+      $("kpiAccess").textContent = pct(n.access_coverage_pct);
+      $("kpiPeople").textContent = fmt(n.employee_incidents);
+      $("kpiSapf").textContent = fmt(n.sapf_tickets);
+    }
+
+    function renderSourceHealth() {
+      const holder = $("sourceHealth");
+      const audit = (state.data.source_audit || ((state.data.aggregate || {}).source_audit || {}));
+      const validity = audit.validity || {};
+      const config = [
+        ["attendance", "Listas"],
+        ["husky", "Accesos"],
+        ["retardos", "Retardos"],
+        ["employee", "Personal"],
+        ["academic", "Académico"],
+        ["sapf", "SAPF"],
+      ];
+      holder.innerHTML = config.map(([key, label]) => {
+        const item = validity[key] || {};
+        const readable = Number(item.readable_planteles || 0);
+        const total = Number(item.selected_planteles || matrixRows().length || state.selected.size || 0);
+        const cls = readable === total && total > 0 ? "ok" : readable > 0 ? "partial" : "none";
+        const domainAudit = audit[key] || {};
+        const timeouts = Number(domainAudit.timeout || 0);
+        const errors = Number(domainAudit.source_error || 0);
+        const noRecords = Number(domainAudit.no_records || 0);
+        const detail = timeouts || errors ? `${timeouts} timeout · ${errors} error` : noRecords ? `${noRecords} sin registros` : "lectura disponible";
+        return `<div class="source-chip ${cls}"><div class="source-label">${label}</div><div class="source-value">${readable}/${total}</div><div class="source-detail">${escapeHtml(detail)}</div></div>`;
+      }).join("");
     }
 
     function renderMatrix() {
@@ -348,13 +391,13 @@ CORPORATE_COMPLIANCE_HTML = """
       const body = rows.map(r => {
         const cells = [
           `<div class="mcell"><div class="mplantel">${r.plantel}</div><span class="msub">${escapeHtml(r.resolved_name || "")}</span></div>`,
-          matrixCell(r.attendance_lists.completion_pct, "%", r.attendance_lists.status, isMissing(r.attendance_lists.completion_pct) ? "sin registros" : `${r.attendance_lists.missing} faltantes`),
-          matrixCell(r.student_attendance.attendance_pct, "%", r.student_attendance.status, isMissing(r.student_attendance.attendance_pct) ? "sin registros" : `${fmt(r.student_attendance.absences_per_100,1)} aus./100`),
-          matrixCell(r.student_tardies.tardies_per_100_entries, "", r.student_tardies.status, isMissing(r.student_tardies.tardies_per_100_entries) ? "sin entradas" : `${r.student_tardies.tardies} retardos`),
-          matrixCell(r.access.coverage_pct, "%", r.access.status, isMissing(r.access.coverage_pct) ? "sin registros" : `${r.access.gap} brecha`),
-          matrixCell(r.employee_attendance.incidents, "", r.employee_attendance.status, `${r.employee_attendance.absences} faltas`),
-          matrixCell(r.academic.backlog, "", r.academic.status, `${r.academic.pending_lesson_reviews} planeaciones`),
-          matrixCell(r.sapf.open_cases, "", r.sapf.status, `${r.sapf.tickets} fichas`),
+          matrixCell(r.attendance_lists.completion_pct, "%", r.attendance_lists.status, isMissing(r.attendance_lists.completion_pct) ? "sin lectura" : `${fmt(r.attendance_lists.missing)} faltantes`),
+          matrixCell(r.student_attendance.attendance_pct, "%", r.student_attendance.status, isMissing(r.student_attendance.attendance_pct) ? "sin lectura" : `${fmt(r.student_attendance.absences_per_100,1)} aus./100`),
+          matrixCell(r.student_tardies.tardies_per_100_entries, "", r.student_tardies.status, isMissing(r.student_tardies.tardies_per_100_entries) ? "sin entradas" : `${fmt(r.student_tardies.tardies)} retardos`),
+          matrixCell(r.access.coverage_pct, "%", r.access.status, isMissing(r.access.coverage_pct) ? "sin lectura" : `${fmt(r.access.gap)} brecha`),
+          matrixCell(r.employee_attendance.incidents, "", r.employee_attendance.status, isMissing(r.employee_attendance.incidents) ? "sin lectura" : `${fmt(r.employee_attendance.absences)} faltas`),
+          matrixCell(r.academic.backlog, "", r.academic.status, isMissing(r.academic.backlog) ? "sin lectura" : `${fmt(r.academic.pending_lesson_reviews)} planeaciones`),
+          matrixCell(r.sapf.open_cases, "", r.sapf.status, isMissing(r.sapf.open_cases) ? "sin lectura" : `${fmt(r.sapf.tickets)} fichas`),
         ];
         return cells.join("");
       }).join("");
@@ -377,9 +420,31 @@ CORPORATE_COMPLIANCE_HTML = """
       }, extra);
     }
 
+    function clearChartBox(id) {
+      const canvas = $(id);
+      const box = canvas.parentElement;
+      box.classList.remove("empty");
+      canvas.style.display = "block";
+      box.querySelectorAll(".empty-state").forEach(el => el.remove());
+    }
+
     function renderChart(id, config) {
       if (charts[id]) charts[id].destroy();
+      clearChartBox(id);
       charts[id] = new Chart($(id), config);
+    }
+
+    function renderEmptyChart(id, message) {
+      if (charts[id]) charts[id].destroy();
+      const canvas = $(id);
+      const box = canvas.parentElement;
+      box.classList.add("empty");
+      canvas.style.display = "none";
+      box.querySelectorAll(".empty-state").forEach(el => el.remove());
+      const empty = document.createElement("div");
+      empty.className = "empty-state";
+      empty.textContent = message;
+      box.appendChild(empty);
     }
 
     function setNote(id, title, lines, status = "fulfilled") {
@@ -395,6 +460,10 @@ CORPORATE_COMPLIANCE_HTML = """
       const series = (metric.series || []).filter(s => state.selected.has(s.plantel));
       const values = series.flatMap(s => (s.values || []).filter(v => !isMissing(v)).map(Number));
       const highBad = metricKey === "tardies_per_100";
+      if (!values.length) {
+        renderEmptyChart("trendChart", "Sin denominador suficiente para este indicador.");
+        return setNote("trendNote", "Lectura", "Sin datos suficientes para comparar este indicador en el periodo.", "unavailable");
+      }
       renderChart("trendChart", {
         type: "line",
         data: { labels: tr.labels || [], datasets: series.map((s, i) => ({
@@ -419,11 +488,14 @@ CORPORATE_COMPLIANCE_HTML = """
     function renderListsChart() {
       const rows = matrixRows();
       const valid = rows.filter(r => !isMissing(r.attendance_lists.completion_pct));
+      if (!valid.length) {
+        renderEmptyChart("listsChart", "Sin lectura confiable de listas esperadas/capturadas.");
+        return setNote("listsNote", "Lectura", "Sin denominador suficiente de pase de lista para el periodo.", "unavailable");
+      }
       renderChart("listsChart", { type: "bar", data: { labels: labels(), datasets: [
         { label: "Capturadas", data: rows.map(r=>isMissing(r.attendance_lists.completion_pct) ? null : r.attendance_lists.captured), backgroundColor: GREEN, borderRadius: 8, stack: "lists" },
         { label: "Faltantes", data: rows.map(r=>isMissing(r.attendance_lists.completion_pct) ? null : r.attendance_lists.missing), backgroundColor: rows.map(r=>isMissing(r.attendance_lists.completion_pct) ? GRAY : r.attendance_lists.missing > 0 ? YELLOW : GREEN), borderRadius: 8, stack: "lists" }
       ]}, options: chartBase({ indexAxis: "y", scales: { x: { stacked: true, beginAtZero: true, grid: { color: "#e5e7eb" }, ticks: { color: "#334155", font: { weight: "bold" } } }, y: { stacked: true, grid: { display: false }, ticks: { color: "#111827", font: { weight: "bold" } } } } }) });
-      if (!valid.length) return setNote("listsNote", "Lectura", "Sin registros confiables de pase de lista para el periodo.", "unavailable");
       const worst = valid.reduce((a,b)=>a.attendance_lists.completion_pct < b.attendance_lists.completion_pct ? a : b, valid[0]);
       setNote("listsNote", "Lectura", [`${worst.plantel}: ${fmt(worst.attendance_lists.missing)} listas faltantes.`, `${fmt(worst.attendance_lists.captured)} de ${fmt(worst.attendance_lists.expected)} listas capturadas (${pct(worst.attendance_lists.completion_pct)}).`], worst.attendance_lists.status);
     }
@@ -432,8 +504,11 @@ CORPORATE_COMPLIANCE_HTML = """
       const rows = matrixRows();
       const valid = rows.filter(r => !isMissing(r.student_attendance.absences_per_100));
       const values = valid.map(r => Number(r.student_attendance.absences_per_100));
+      if (!valid.length) {
+        renderEmptyChart("attendanceChart", "Sin registros capturados para calcular ausencias.");
+        return setNote("attendanceNote", "Lectura", "Sin registros de asistencia para calcular ausencias del periodo.", "unavailable");
+      }
       renderChart("attendanceChart", { type: "bar", data: { labels: labels(), datasets: [{ label: "Ausencias por 100 registros", data: rows.map(r=>chartValue(r.student_attendance.absences_per_100)), backgroundColor: rows.map(r=>lowGoodColor(r.student_attendance.absences_per_100, 8, 12)), borderRadius: 8 }] }, options: chartBase({ indexAxis: "y", scales: { x: { beginAtZero: true, suggestedMax: values.length ? Math.max(5, Math.max(...values) * 1.25) : 5, grid: { color: "#e5e7eb" }, ticks: { color: "#334155", font: { weight: "bold" } } }, y: { grid: { display: false }, ticks: { color: "#111827", font: { weight: "bold" } } } } }) });
-      if (!valid.length) return setNote("attendanceNote", "Lectura", "Sin registros de asistencia capturados para calcular ausencias.", "unavailable");
       const worst = valid.reduce((a,b)=>a.student_attendance.absences_per_100 > b.student_attendance.absences_per_100 ? a : b, valid[0]);
       setNote("attendanceNote", "Lectura", [`${worst.plantel}: ${fmt(worst.student_attendance.absences_per_100,1)} ausencias por cada 100 registros.`, `Asistencia registrada: ${pct(worst.student_attendance.attendance_pct)}.`], worst.student_attendance.status);
     }
@@ -442,8 +517,15 @@ CORPORATE_COMPLIANCE_HTML = """
       const rows = matrixRows();
       const valid = rows.filter(r => !isMissing(r.student_tardies.tardies_per_100_entries));
       const values = valid.map(r => Number(r.student_tardies.tardies_per_100_entries));
+      if (!valid.length) {
+        renderEmptyChart("tardyChart", "Sin entradas registradas para calcular retardos.");
+        return setNote("tardyNote", "Lectura", "No se convierte la falta de denominador en 0 retardos.", "unavailable");
+      }
+      if (allNumbersZero(values)) {
+        renderEmptyChart("tardyChart", "La consulta devolvió 0 retardos para todos los planteles. Revisar extracción de Husky antes de interpretar.");
+        return setNote("tardyNote", "Lectura", "Resultado plano en 0. Se marca como lectura no confiable para evitar una conclusión falsa.", "unavailable");
+      }
       renderChart("tardyChart", { type: "bar", data: { labels: labels(), datasets: [{ label: "Retardos por 100 entradas", data: rows.map(r=>chartValue(r.student_tardies.tardies_per_100_entries)), backgroundColor: rows.map(r=>lowGoodColor(r.student_tardies.tardies_per_100_entries, 4, 9)), borderRadius: 8 }] }, options: chartBase({ indexAxis: "y", scales: { x: { beginAtZero: true, suggestedMax: values.length ? Math.max(5, Math.max(...values) * 1.35) : 5, grid: { color: "#e5e7eb" }, ticks: { color: "#334155", font: { weight: "bold" } } }, y: { grid: { display: false }, ticks: { color: "#111827", font: { weight: "bold" } } } } }) });
-      if (!valid.length) return setNote("tardyNote", "Lectura", "Sin entradas registradas para calcular retardos. No se muestra como 0.", "unavailable");
       const worst = valid.reduce((a,b)=>a.student_tardies.tardies_per_100_entries > b.student_tardies.tardies_per_100_entries ? a : b, valid[0]);
       setNote("tardyNote", "Lectura", [`${worst.plantel}: ${fmt(worst.student_tardies.tardies_per_100_entries,1)} retardos por 100 entradas.`, `${fmt(worst.student_tardies.tardies)} retardos; ${fmt(worst.student_tardies.unique_students)} alumnos distintos; ${pct(worst.student_tardies.repeat_share_pct)} reincidencia.`], worst.student_tardies.status);
     }
@@ -451,43 +533,66 @@ CORPORATE_COMPLIANCE_HTML = """
     function renderAccessChart() {
       const rows = matrixRows();
       const valid = rows.filter(r => !isMissing(r.access.coverage_pct));
+      const values = valid.map(r => Number(r.access.coverage_pct));
+      if (!valid.length) {
+        renderEmptyChart("accessChart", "Sin denominador confiable para cobertura de entrada.");
+        return setNote("accessNote", "Lectura", "Sin entradas registradas o población esperada para calcular cobertura.", "unavailable");
+      }
+      if (allNumbersZero(values)) {
+        renderEmptyChart("accessChart", "La cobertura aparece en 0 para todos los planteles. Revisar extracción de accesos antes de interpretar.");
+        return setNote("accessNote", "Lectura", "Resultado plano en 0. Se marca como lectura no confiable para evitar una conclusión falsa.", "unavailable");
+      }
       renderChart("accessChart", { type: "bar", data: { labels: labels(), datasets: [{ label: "% cobertura de entrada", data: rows.map(r=>chartValue(r.access.coverage_pct)), backgroundColor: rows.map(r=>highGoodColor(r.access.coverage_pct, 75, 55)), borderRadius: 8 }] }, options: chartBase({ indexAxis: "y", scales: { x: { beginAtZero: true, max: 100, grid: { color: "#e5e7eb" }, ticks: { color: "#334155", font: { weight: "bold" } } }, y: { grid: { display: false }, ticks: { color: "#111827", font: { weight: "bold" } } } } }) });
-      if (!valid.length) return setNote("accessNote", "Lectura", "Sin registros de entrada para calcular cobertura de accesos.", "unavailable");
       const worst = valid.reduce((a,b)=>a.access.coverage_pct < b.access.coverage_pct ? a : b, valid[0]);
       setNote("accessNote", "Lectura", [`${worst.plantel}: ${pct(worst.access.coverage_pct)} cobertura de entrada.`, `${fmt(worst.access.scans)} entradas con scan; brecha estimada ${fmt(worst.access.gap)}.`], worst.access.status);
     }
 
     function renderPeopleChart() {
       const rows = matrixRows();
+      const valid = rows.filter(r => r.employee_attendance.has_data);
+      if (!valid.length) {
+        renderEmptyChart("peopleChart", "Sin lectura confiable de asistencia laboral.");
+        return setNote("peopleNote", "Lectura", "La fuente no devolvió empleados procesados para el periodo.", "unavailable");
+      }
       renderChart("peopleChart", { type: "bar", data: { labels: labels(), datasets: [
-        { label: "Faltas", data: rows.map(r=>r.employee_attendance.absences), backgroundColor: RED, borderRadius: 8, stack: "p" },
-        { label: "Retardos", data: rows.map(r=>r.employee_attendance.tardies), backgroundColor: YELLOW, borderRadius: 8, stack: "p" }
+        { label: "Faltas", data: rows.map(r=>r.employee_attendance.has_data ? r.employee_attendance.absences : null), backgroundColor: RED, borderRadius: 8, stack: "p" },
+        { label: "Retardos", data: rows.map(r=>r.employee_attendance.has_data ? r.employee_attendance.tardies : null), backgroundColor: YELLOW, borderRadius: 8, stack: "p" }
       ] }, options: chartBase({ indexAxis: "y", scales: { x: { stacked: true, beginAtZero: true, grid: { color: "#e5e7eb" }, ticks: { color: "#334155", font: { weight: "bold" } } }, y: { stacked: true, grid: { display: false }, ticks: { color: "#111827", font: { weight: "bold" } } } } }) });
-      const worst = rows.reduce((a,b)=>a.employee_attendance.incidents > b.employee_attendance.incidents ? a : b, rows[0]);
+      const worst = valid.reduce((a,b)=>a.employee_attendance.incidents > b.employee_attendance.incidents ? a : b, valid[0]);
       setNote("peopleNote", "Lectura", [`${worst.plantel}: ${fmt(worst.employee_attendance.incidents)} incidencias.`, `${fmt(worst.employee_attendance.absences)} faltas y ${fmt(worst.employee_attendance.tardies)} retardos.`], worst.employee_attendance.status);
     }
 
     function renderAcademicChart() {
       const rows = matrixRows();
+      const valid = rows.filter(r => r.academic.has_data);
+      if (!valid.length) {
+        renderEmptyChart("academicChart", "Sin lectura confiable de revisión académica.");
+        return setNote("academicNote", "Lectura", "La fuente académica no devolvió denominadores suficientes para el periodo.", "unavailable");
+      }
       renderChart("academicChart", { type: "bar", data: { labels: labels(), datasets: [
-        { label: "Planeaciones pendientes", data: rows.map(r=>r.academic.pending_lesson_reviews), backgroundColor: YELLOW, borderRadius: 8 },
-        { label: "Docentes sin observación", data: rows.map(r=>r.academic.teachers_without_observation), backgroundColor: RED, borderRadius: 8 }
+        { label: "Planeaciones pendientes", data: rows.map(r=>r.academic.has_data ? r.academic.pending_lesson_reviews : null), backgroundColor: YELLOW, borderRadius: 8 },
+        { label: "Docentes sin observación", data: rows.map(r=>r.academic.has_data ? r.academic.teachers_without_observation : null), backgroundColor: RED, borderRadius: 8 }
       ] }, options: chartBase({ indexAxis: "y", scales: { x: { beginAtZero: true, grid: { color: "#e5e7eb" }, ticks: { color: "#334155", font: { weight: "bold" } } }, y: { grid: { display: false }, ticks: { color: "#111827", font: { weight: "bold" } } } } }) });
-      const worst = rows.reduce((a,b)=>a.academic.backlog > b.academic.backlog ? a : b, rows[0]);
+      const worst = valid.reduce((a,b)=>a.academic.backlog > b.academic.backlog ? a : b, valid[0]);
       setNote("academicNote", "Lectura", [`${worst.plantel}: ${fmt(worst.academic.backlog)} pendientes académicos.`, `${fmt(worst.academic.pending_lesson_reviews)} planeaciones y ${fmt(worst.academic.teachers_without_observation)} docentes sin observación reciente.`], worst.academic.status);
     }
 
     function renderSapfChart() {
       const rows = matrixRows();
+      const valid = rows.filter(r => r.sapf.has_data);
+      if (!valid.length) {
+        renderEmptyChart("sapfChart", "Sin lectura SAPF para el periodo.");
+        return setNote("sapfNote", "Lectura", "No se muestran ceros cuando la fuente no devuelve registros confiables.", "unavailable");
+      }
       renderChart("sapfChart", { type: "bar", data: { labels: labels(), datasets: [
-        { label: "Fichas", data: rows.map(r=>r.sapf.tickets), backgroundColor: INK, borderRadius: 8 },
-        { label: "Seguimientos", data: rows.map(r=>r.sapf.followups), backgroundColor: GREEN, borderRadius: 8 },
-        { label: "Abiertos", data: rows.map(r=>r.sapf.open_cases), backgroundColor: rows.map(r=>r.sapf.open_cases > 0 ? YELLOW : GREEN), borderRadius: 8 }
+        { label: "Fichas", data: rows.map(r=>r.sapf.has_data ? r.sapf.tickets : null), backgroundColor: INK, borderRadius: 8 },
+        { label: "Seguimientos", data: rows.map(r=>r.sapf.has_data ? r.sapf.followups : null), backgroundColor: GREEN, borderRadius: 8 },
+        { label: "Abiertos", data: rows.map(r=>r.sapf.has_data ? r.sapf.open_cases : null), backgroundColor: rows.map(r=>r.sapf.open_cases > 0 ? YELLOW : GREEN), borderRadius: 8 }
       ] }, options: chartBase({ scales: { x: { grid: { display: false }, ticks: { color: "#111827", font: { weight: "bold" } } }, y: { beginAtZero: true, grid: { color: "#e5e7eb" }, ticks: { color: "#334155", font: { weight: "bold" } } } } }) });
-      const mostOpen = rows.reduce((a,b)=>a.sapf.open_cases > b.sapf.open_cases ? a : b, rows[0]);
-      const noData = rows.filter(r=>Number(r.sapf.interactions || 0) === 0).map(r=>r.plantel);
+      const mostOpen = valid.reduce((a,b)=>a.sapf.open_cases > b.sapf.open_cases ? a : b, valid[0]);
+      const noData = rows.filter(r=>!r.sapf.has_data).map(r=>r.plantel);
       const lines = [`${mostOpen.plantel}: ${fmt(mostOpen.sapf.open_cases)} casos abiertos.`, `${fmt(mostOpen.sapf.tickets)} fichas y ${fmt(mostOpen.sapf.followups)} seguimientos.`];
-      if (noData.length) lines.push(`Sin registros en el periodo: ${noData.join(", ")}.`);
+      if (noData.length) lines.push(`Sin lectura SAPF: ${noData.join(", ")}.`);
       setNote("sapfNote", "Lectura", lines, mostOpen.sapf.status);
     }
 

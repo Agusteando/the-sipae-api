@@ -1,7 +1,8 @@
 import asyncio
 import math
+import time
 from datetime import date, datetime, timedelta
-from typing import Any, Awaitable, Callable, Dict, List, Optional
+from typing import Any, Awaitable, Callable, Dict, List, Optional, Tuple
 from zoneinfo import ZoneInfo
 
 from core.logger import get_logger
@@ -29,9 +30,12 @@ DOMAIN_WEIGHTS = {
     "sapf": 11,
 }
 
-SOURCE_TIMEOUT_SECONDS = 8.0
-SAPF_TIMEOUT_SECONDS = 5.0
-ACADEMIC_TIMEOUT_SECONDS = 6.0
+SOURCE_TIMEOUT_SECONDS = 18.0
+ATTENDANCE_TIMEOUT_SECONDS = 22.0
+HUSKY_TIMEOUT_SECONDS = 18.0
+DAILY_FALLBACK_TIMEOUT_SECONDS = 7.0
+SAPF_TIMEOUT_SECONDS = 8.0
+ACADEMIC_TIMEOUT_SECONDS = 10.0
 
 
 def _mx_now() -> datetime:
@@ -120,16 +124,372 @@ async def _safe_call(
     fn: Callable[[], Awaitable[Dict[str, Any]]],
     timeout_seconds: float = SOURCE_TIMEOUT_SECONDS,
 ) -> Dict[str, Any]:
+    started = time.perf_counter()
     try:
-        return await asyncio.wait_for(fn(), timeout=timeout_seconds)
+        payload = await asyncio.wait_for(fn(), timeout=timeout_seconds)
+        if not isinstance(payload, dict):
+            payload = {"value": payload}
+        payload.setdefault("_source_audit", {})
+        payload["_source_audit"].update({
+            "source": name,
+            "status": "returned",
+            "duration_ms": round((time.perf_counter() - started) * 1000, 1),
+            "timeout_seconds": timeout_seconds,
+        })
+        return payload
     except asyncio.TimeoutError:
         message = f"{name} no respondió en {timeout_seconds:.0f}s; se omitió para evitar tumbar el tablero."
         logger.error("Operational dashboard source timed out: %s", message)
-        return {"error": message, "source": name, "timeout": True}
+        return {
+            "error": message,
+            "source": name,
+            "timeout": True,
+            "_source_audit": {
+                "source": name,
+                "status": "timeout",
+                "duration_ms": round((time.perf_counter() - started) * 1000, 1),
+                "timeout_seconds": timeout_seconds,
+            },
+        }
     except Exception as exc:
         logger.error("Operational dashboard source failed: %s: %s", name, exc)
-        return {"error": str(exc), "source": name}
+        return {
+            "error": str(exc),
+            "source": name,
+            "_source_audit": {
+                "source": name,
+                "status": "source_error",
+                "duration_ms": round((time.perf_counter() - started) * 1000, 1),
+                "error": str(exc),
+            },
+        }
 
+
+
+def _business_date_list(start_date: date, end_date: date) -> List[date]:
+    days: List[date] = []
+    cursor = start_date
+    while cursor <= end_date:
+        if cursor.weekday() < 5:
+            days.append(cursor)
+        cursor += timedelta(days=1)
+    return days
+
+
+def _raw_attendance_has_rows(payload: Dict[str, Any]) -> bool:
+    if not isinstance(payload, dict) or payload.get("error"):
+        return False
+    if payload.get("mode") == "daily" or payload.get("summary"):
+        summary = payload.get("summary") or {}
+        missing = payload.get("missing_groups_data") or {}
+        return bool(
+            _safe_int(summary.get("total_students")) > 0
+            or len(payload.get("groups") or []) > 0
+            or _safe_int(missing.get("completed_groups_count")) > 0
+        )
+    for point in (payload.get("daily_points") or {}).values():
+        summary = point.get("summary") or {}
+        missing = point.get("missing_groups_data") or {}
+        if _safe_int(summary.get("total_students")) > 0 or len(point.get("groups") or []) > 0 or _safe_int(missing.get("completed_groups_count")) > 0:
+            return True
+    return False
+
+
+def _raw_husky_has_rows(payload: Dict[str, Any]) -> bool:
+    if not isinstance(payload, dict) or payload.get("error"):
+        return False
+    for point in (payload.get("daily_datapoints") or {}).values():
+        if _safe_int(point.get("entrada")) > 0 or _safe_int(point.get("salida")) > 0:
+            return True
+    return False
+
+
+def _raw_retardos_has_rows(payload: Dict[str, Any]) -> bool:
+    if not isinstance(payload, dict) or payload.get("error"):
+        return False
+    return _safe_int(payload.get("total_retardos")) > 0 or bool(payload.get("retardos"))
+
+
+def _attendance_audit(payload: Dict[str, Any], aliases: List[str]) -> Dict[str, Any]:
+    audit = dict(payload.get("_source_audit") or {}) if isinstance(payload, dict) else {}
+    daily_points = payload.get("daily_points") or {} if isinstance(payload, dict) else {}
+    total_group_rows = 0
+    total_students = 0
+    completed_groups = 0
+    expected_groups_samples: List[int] = []
+    dates_with_records: List[str] = []
+    if payload.get("mode") == "daily" or payload.get("summary"):
+        daily_points = {str((payload.get("date_range") or {}).get("start") or "daily"): payload}
+    for day, point in daily_points.items():
+        summary = point.get("summary") or {}
+        missing = point.get("missing_groups_data") or {}
+        groups = point.get("groups") or []
+        group_count = len(groups)
+        students = _safe_int(summary.get("total_students"))
+        completed = _safe_int(missing.get("completed_groups_count"))
+        expected = _safe_int(missing.get("expected_groups_count"))
+        total_group_rows += group_count
+        total_students += students
+        completed_groups += completed
+        if expected:
+            expected_groups_samples.append(expected)
+        if group_count or students or completed:
+            dates_with_records.append(str(day)[:10])
+    if payload.get("error"):
+        status = "source_error" if not payload.get("timeout") else "timeout"
+    elif total_group_rows or total_students or completed_groups:
+        status = "ok"
+    else:
+        status = "no_records"
+    audit.update({
+        "status": status,
+        "aliases_used": aliases,
+        "daily_points": len(daily_points),
+        "dates_with_records": len(dates_with_records),
+        "first_record_date": min(dates_with_records) if dates_with_records else None,
+        "last_record_date": max(dates_with_records) if dates_with_records else None,
+        "group_rows": total_group_rows,
+        "students_recorded": total_students,
+        "completed_group_rows": completed_groups,
+        "expected_groups_sample": max(expected_groups_samples) if expected_groups_samples else None,
+        "error": payload.get("error"),
+    })
+    return audit
+
+
+def _husky_audit(payload: Dict[str, Any], aliases: List[str]) -> Dict[str, Any]:
+    audit = dict(payload.get("_source_audit") or {}) if isinstance(payload, dict) else {}
+    points = payload.get("daily_datapoints") or {} if isinstance(payload, dict) else {}
+    entrada = 0
+    salida = 0
+    dates = []
+    for day, point in points.items():
+        e = _safe_int(point.get("entrada"))
+        s = _safe_int(point.get("salida"))
+        entrada += e
+        salida += s
+        if e or s:
+            dates.append(str(day)[:10])
+    if payload.get("error"):
+        status = "source_error" if not payload.get("timeout") else "timeout"
+    elif entrada or salida:
+        status = "ok"
+    else:
+        status = "no_records"
+    audit.update({
+        "status": status,
+        "aliases_used": aliases,
+        "daily_points": len(points),
+        "dates_with_records": len(dates),
+        "first_record_date": min(dates) if dates else None,
+        "last_record_date": max(dates) if dates else None,
+        "expected_population": _safe_int(payload.get("expected_population")),
+        "entrada_scans": entrada,
+        "salida_scans": salida,
+        "error": payload.get("error"),
+    })
+    return audit
+
+
+def _retardos_audit(payload: Dict[str, Any], aliases: List[str], threshold: Optional[str] = None) -> Dict[str, Any]:
+    audit = dict(payload.get("_source_audit") or {}) if isinstance(payload, dict) else {}
+    rows = payload.get("retardos") or [] if isinstance(payload, dict) else []
+    dates = sorted({str(row.get("date") or "")[:10] for row in rows if row.get("date")})
+    if payload.get("error"):
+        status = "source_error" if not payload.get("timeout") else "timeout"
+    else:
+        status = "ok"  # zero tardies is a valid result only when access denominator exists.
+    audit.update({
+        "status": status,
+        "aliases_used": aliases,
+        "threshold": threshold,
+        "rows": len(rows),
+        "total_retardos": _safe_int(payload.get("total_retardos")),
+        "days_with_retardos": len(dates),
+        "first_record_date": dates[0] if dates else None,
+        "last_record_date": dates[-1] if dates else None,
+        "error": payload.get("error"),
+    })
+    return audit
+
+
+async def _collect_daily_attendance_fallback(plantel: str, start_date: date, end_date: date) -> Dict[str, Any]:
+    dates = _business_date_list(start_date, end_date)
+    sem = asyncio.Semaphore(4)
+    errors: List[Dict[str, Any]] = []
+    daily_points: Dict[str, Dict[str, Any]] = {}
+    started = time.perf_counter()
+
+    async def one_day(day: date) -> Tuple[str, Dict[str, Any]]:
+        async with sem:
+            payload = await _safe_call(
+                f"attendance_daily:{plantel}:{day.isoformat()}",
+                lambda: get_attendance_detail_report(plantel, day, day, "today"),
+                DAILY_FALLBACK_TIMEOUT_SECONDS,
+            )
+            return day.isoformat(), payload
+
+    results = await asyncio.gather(*(one_day(day) for day in dates))
+    for day_key, payload in results:
+        if payload.get("error"):
+            errors.append({"date": day_key, "error": payload.get("error"), "timeout": bool(payload.get("timeout"))})
+            continue
+        daily_points[day_key] = {
+            "summary": payload.get("summary") or {"total_students": 0, "asistencia": 0, "ausencia": 0, "ausencia2": 0, "presencial": 0, "virt": 0, "girls": 0, "boys": 0},
+            "groups": payload.get("groups") or [],
+            "missing_groups_data": payload.get("missing_groups_data") or {"expected_groups_count": 0, "completed_groups_count": 0, "missing_groups_count": 0, "completion_percent": 0.0, "expected_students_count": 0, "missing_groups": []},
+            "absent_students": payload.get("absent_students") or [],
+        }
+    return {
+        "plantel_requested": plantel,
+        "scope": "range",
+        "mode": "range",
+        "date_range": {"start": start_date, "end": end_date},
+        "daily_points": daily_points,
+        "_fallback_used": "daily_health_attendance",
+        "_fallback_errors": errors[:12],
+        "_source_audit": {
+            "source": "attendance_daily_fallback",
+            "status": "returned",
+            "duration_ms": round((time.perf_counter() - started) * 1000, 1),
+            "days_requested": len(dates),
+            "days_returned": len(daily_points),
+            "errors": len(errors),
+        },
+    }
+
+
+async def _collect_daily_husky_fallback(plantel: str, start_date: date, end_date: date) -> Dict[str, Any]:
+    dates = _business_date_list(start_date, end_date)
+    sem = asyncio.Semaphore(4)
+    errors: List[Dict[str, Any]] = []
+    daily_points: Dict[str, Dict[str, Any]] = {}
+    expected_population = 0
+    started = time.perf_counter()
+
+    async def one_day(day: date) -> Tuple[str, Dict[str, Any]]:
+        async with sem:
+            payload = await _safe_call(
+                f"husky_daily:{plantel}:{day.isoformat()}",
+                lambda: calculate_husky_daily_rate(plantel, day, day, "today"),
+                DAILY_FALLBACK_TIMEOUT_SECONDS,
+            )
+            return day.isoformat(), payload
+
+    results = await asyncio.gather(*(one_day(day) for day in dates))
+    for day_key, payload in results:
+        if payload.get("error"):
+            errors.append({"date": day_key, "error": payload.get("error"), "timeout": bool(payload.get("timeout"))})
+            continue
+        expected_population = max(expected_population, _safe_int(payload.get("expected_population")))
+        point = (payload.get("daily_datapoints") or {}).get(day_key) or {}
+        daily_points[day_key] = {"entrada": _safe_int(point.get("entrada")), "salida": _safe_int(point.get("salida")), "rate_entrada_percent": _safe_float(point.get("rate_entrada_percent"))}
+    return {
+        "plantel_requested": plantel,
+        "scope": "range",
+        "date_range": {"start": start_date, "end": end_date},
+        "expected_population": expected_population,
+        "daily_datapoints": daily_points,
+        "_fallback_used": "daily_health_husky",
+        "_fallback_errors": errors[:12],
+        "_source_audit": {
+            "source": "husky_daily_fallback",
+            "status": "returned",
+            "duration_ms": round((time.perf_counter() - started) * 1000, 1),
+            "days_requested": len(dates),
+            "days_returned": len(daily_points),
+            "errors": len(errors),
+        },
+    }
+
+
+async def _collect_daily_retardos_fallback(plantel: str, start_date: date, end_date: date) -> Dict[str, Any]:
+    dates = _business_date_list(start_date, end_date)
+    sem = asyncio.Semaphore(4)
+    errors: List[Dict[str, Any]] = []
+    retardos: List[Dict[str, Any]] = []
+    started = time.perf_counter()
+
+    async def one_day(day: date) -> Tuple[str, Dict[str, Any]]:
+        async with sem:
+            payload = await _safe_call(
+                f"retardos_daily:{plantel}:{day.isoformat()}",
+                lambda: get_plantel_retardos(plantel, day, day, "today"),
+                DAILY_FALLBACK_TIMEOUT_SECONDS,
+            )
+            return day.isoformat(), payload
+
+    results = await asyncio.gather(*(one_day(day) for day in dates))
+    seen = set()
+    for day_key, payload in results:
+        if payload.get("error"):
+            errors.append({"date": day_key, "error": payload.get("error"), "timeout": bool(payload.get("timeout"))})
+            continue
+        for row in payload.get("retardos") or []:
+            key = (str(row.get("date") or day_key)[:10], str(row.get("matricula") or row.get("student_fullname") or ""), str(row.get("time") or ""))
+            if key in seen:
+                continue
+            seen.add(key)
+            retardos.append(row)
+    return {
+        "plantel_requested": plantel,
+        "scope": "range",
+        "date_range": {"start": start_date, "end": end_date},
+        "total_retardos": len(retardos),
+        "retardos": retardos,
+        "_fallback_used": "daily_health_retardos",
+        "_fallback_errors": errors[:12],
+        "_source_audit": {
+            "source": "retardos_daily_fallback",
+            "status": "returned",
+            "duration_ms": round((time.perf_counter() - started) * 1000, 1),
+            "days_requested": len(dates),
+            "days_returned": len(dates) - len(errors),
+            "errors": len(errors),
+        },
+    }
+
+
+async def _attendance_with_fallback(plantel: str, start_date: date, end_date: date, scope: str) -> Dict[str, Any]:
+    primary = await _safe_call("attendance", lambda: get_attendance_detail_report(plantel, start_date, end_date, scope), ATTENDANCE_TIMEOUT_SECONDS)
+    if _raw_attendance_has_rows(primary) or start_date == end_date:
+        return primary
+    fallback = await _collect_daily_attendance_fallback(plantel, start_date, end_date)
+    if _raw_attendance_has_rows(fallback):
+        fallback["_primary_audit"] = primary.get("_source_audit") or {}
+        return fallback
+    primary["_fallback_audit"] = fallback.get("_source_audit") or {}
+    primary["_fallback_errors"] = fallback.get("_fallback_errors") or []
+    return primary
+
+
+async def _husky_with_fallback(plantel: str, start_date: date, end_date: date, scope: str) -> Dict[str, Any]:
+    primary = await _safe_call("husky", lambda: calculate_husky_daily_rate(plantel, start_date, end_date, scope), HUSKY_TIMEOUT_SECONDS)
+    if _raw_husky_has_rows(primary) or start_date == end_date:
+        return primary
+    fallback = await _collect_daily_husky_fallback(plantel, start_date, end_date)
+    if _raw_husky_has_rows(fallback):
+        fallback["_primary_audit"] = primary.get("_source_audit") or {}
+        return fallback
+    primary["_fallback_audit"] = fallback.get("_source_audit") or {}
+    primary["_fallback_errors"] = fallback.get("_fallback_errors") or []
+    return primary
+
+
+async def _retardos_with_fallback(plantel: str, start_date: date, end_date: date, scope: str, husky_payload: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    primary = await _safe_call("husky_retardos", lambda: get_plantel_retardos(plantel, start_date, end_date, scope), HUSKY_TIMEOUT_SECONDS)
+    # Zero tardies can be valid only when Husky produced an entry denominator. If the
+    # access source is also blank, re-use the health-report daily pattern before showing s/d.
+    has_denominator = _raw_husky_has_rows(husky_payload or {})
+    if _raw_retardos_has_rows(primary) or has_denominator or start_date == end_date:
+        return primary
+    fallback = await _collect_daily_retardos_fallback(plantel, start_date, end_date)
+    if _raw_retardos_has_rows(fallback):
+        fallback["_primary_audit"] = primary.get("_source_audit") or {}
+        return fallback
+    primary["_fallback_audit"] = fallback.get("_source_audit") or {}
+    primary["_fallback_errors"] = fallback.get("_fallback_errors") or []
+    return primary
 
 def _sum_daily_attendance(attendance: Dict[str, Any], start_date: date, end_date: date) -> Dict[str, Any]:
     if attendance.get("error"):
@@ -513,19 +873,38 @@ def _sum_employee(kardex: Dict[str, Any]) -> Dict[str, Any]:
         return {
             "status": "unavailable",
             "error": kardex.get("error"),
-            "employee_tardies": 0,
-            "employee_absences": 0,
-            "payroll_waste_minutes": 0,
-            "risk_score": 45.0,
+            "employee_tardies": None,
+            "employee_absences": None,
+            "employee_incidents": None,
+            "payroll_waste_minutes": None,
+            "has_data": False,
+            "records_processed": 0,
+            "risk_score": 0.0,
         }
 
     summary = kardex.get("summary") or {}
+    records_processed = _safe_int(summary.get("records_processed"))
     employee_tardies = _safe_int(summary.get("retardos_count"))
     employee_absences = _safe_int(summary.get("ausencias_count"))
     tardies = kardex.get("retardos") or []
-    absences = kardex.get("ausencias") or []
     payroll_minutes = sum(_safe_int(item.get("minutos_descontar")) for item in tardies)
     incidents = employee_tardies + employee_absences
+
+    # If the upstream integration returned zero employee rows for a whole period,
+    # this is not evidence of zero incidences. Surface it as unavailable.
+    if records_processed == 0 and incidents == 0:
+        return {
+            "status": "unavailable",
+            "employee_tardies": None,
+            "employee_absences": None,
+            "employee_incidents": None,
+            "payroll_waste_minutes": None,
+            "has_data": False,
+            "records_processed": 0,
+            "risk_score": 0.0,
+            "risk_narrative": "Sin lectura suficiente de asistencia laboral.",
+        }
+
     risk_score = _clamp(employee_absences * 4.0 + employee_tardies * 1.25 + payroll_minutes * 0.02)
     status = _status_from_index(100 - risk_score, employee_absences >= 12 or payroll_minutes >= 1600)
     return {
@@ -535,6 +914,8 @@ def _sum_employee(kardex: Dict[str, Any]) -> Dict[str, Any]:
         "employee_incidents": incidents,
         "payroll_waste_minutes": payroll_minutes,
         "incident_sample": [],
+        "has_data": True,
+        "records_processed": records_processed,
         "risk_score": _round(risk_score, 2),
         "risk_narrative": "Faltas, retardos y minutos registrados del personal.",
     }
@@ -569,6 +950,40 @@ def _sum_academic(
     observation_gap_rate = _pct(docentes_sin_observacion, docentes_activos)
     pending_teacher_rate = _pct(docentes_con_pendientes, docentes_activos_planeacion)
     supervision_backlog = docentes_sin_observacion + planeaciones_pendientes_count
+    has_data = any([
+        total_observaciones,
+        total_planeaciones,
+        docentes_activos,
+        docentes_activos_planeacion,
+        planeaciones_pendientes_count,
+        docentes_sin_observacion,
+        docentes_nunca_observados,
+    ])
+
+    if not has_data:
+        return {
+            "status": "unavailable",
+            "errors": source_errors,
+            "total_observaciones": None,
+            "observaciones_con_comentarios": None,
+            "observaciones_comment_rate_percent": None,
+            "total_planeaciones": None,
+            "planeaciones_con_feedback": None,
+            "planeaciones_feedback_rate_percent": None,
+            "docentes_activos": None,
+            "docentes_sin_observacion_30_dias": None,
+            "docentes_nunca_observados_ciclo": None,
+            "observation_gap_rate_percent": None,
+            "planeaciones_pendientes": None,
+            "docentes_con_planeaciones_pendientes": None,
+            "pending_teacher_rate_percent": None,
+            "supervision_backlog": None,
+            "has_data": False,
+            "docentes_sin_observacion_sample": [],
+            "planeaciones_pendientes_sample": [],
+            "risk_score": 0.0,
+            "risk_narrative": "Sin lectura suficiente de revisión académica.",
+        }
 
     risk_score = _clamp(
         observation_gap_rate * 0.25
@@ -597,6 +1012,7 @@ def _sum_academic(
         "docentes_con_planeaciones_pendientes": docentes_con_pendientes,
         "pending_teacher_rate_percent": pending_teacher_rate,
         "supervision_backlog": supervision_backlog,
+        "has_data": True,
         "docentes_sin_observacion_sample": [],
         "planeaciones_pendientes_sample": [],
         "risk_score": _round(risk_score, 2),
@@ -609,8 +1025,13 @@ def _sum_sapf(monthly: Dict[str, Any], motivos: Dict[str, Any], overview: Dict[s
         return {
             "status": "unavailable",
             "error": monthly.get("error") or motivos.get("error") or overview.get("error"),
-            "parent_interactions": 0,
-            "risk_score": 35.0,
+            "parent_interactions": None,
+            "tickets_created": None,
+            "followups": None,
+            "open_cases": None,
+            "closed_cases": None,
+            "has_data": False,
+            "risk_score": 0.0,
         }
 
     areas = monthly.get("data") or [] if not monthly.get("error") else []
@@ -636,6 +1057,29 @@ def _sum_sapf(monthly: Dict[str, Any], motivos: Dict[str, Any], overview: Dict[s
         reverse=True,
     )[:14]
 
+    has_data = any([parent_interactions, total_fichas, total_followups, open_cases, closed_cases, complaints])
+    if not has_data:
+        return {
+            "status": "unavailable",
+            "parent_interactions": None,
+            "tickets_created": None,
+            "followups": None,
+            "open_cases": None,
+            "closed_cases": None,
+            "complaints": None,
+            "parent_origin_cases": None,
+            "open_case_rate_percent": None,
+            "followup_ratio_percent": None,
+            "avg_resolution_hours": None,
+            "areas": [],
+            "top_motives": [],
+            "matched_campus_values": overview.get("matched_campus_values") or monthly.get("data_campuses") or [],
+            "source_breakdown": monthly.get("source_breakdown") or {},
+            "has_data": False,
+            "risk_score": 0.0,
+            "risk_narrative": "Sin lectura SAPF para el periodo.",
+        }
+
     zero_data_risk = parent_interactions == 0
     risk_score = _clamp(
         (18.0 if zero_data_risk else 0.0)
@@ -660,6 +1104,7 @@ def _sum_sapf(monthly: Dict[str, Any], motivos: Dict[str, Any], overview: Dict[s
         "top_motives": top_motives,
         "matched_campus_values": overview.get("matched_campus_values") or monthly.get("data_campuses") or [],
         "source_breakdown": monthly.get("source_breakdown") or {},
+        "has_data": True,
         "risk_score": _round(risk_score, 2),
         "risk_narrative": "Trazabilidad de atención a padres y concentración de motivos de presión operativa.",
     }
@@ -697,22 +1142,45 @@ def _build_index(domains: Dict[str, Dict[str, Any]]) -> Dict[str, Any]:
 async def _collect_plantel(plantel: str, start_date: date, end_date: date, scope: str) -> Dict[str, Any]:
     week_start = start_date - timedelta(days=start_date.weekday())
     info = resolve_plantel(plantel)
+    attendance_aliases = list(dict.fromkeys(
+        (info.get("db_codes") or [])
+        + (info.get("sapf_data_campuses") or [])
+        + [info.get("resolved_name", ""), info.get("short_name", "")]
+    ))
+    husky_aliases = list(dict.fromkeys(
+        (info.get("husky_db_codes") or [])
+        + (info.get("db_codes") or [])
+        + (info.get("sapf_data_campuses") or [])
+        + [info.get("resolved_name", ""), info.get("short_name", "")]
+    ))
 
-    results = await asyncio.gather(
-        _safe_call("attendance", lambda: get_attendance_detail_report(plantel, start_date, end_date, scope)),
-        _safe_call("husky", lambda: calculate_husky_daily_rate(plantel, start_date, end_date, scope)),
-        _safe_call("husky_retardos", lambda: get_plantel_retardos(plantel, start_date, end_date, scope)),
-        _safe_call("kardex", lambda: get_kardex_attendance_report(plantel, start_date, end_date, scope)),
-        _safe_call("sapf_monthly", lambda: get_sapf_monthly_report(plantel, start_date, end_date, scope), SAPF_TIMEOUT_SECONDS),
-        _safe_call("sapf_motivos", lambda: get_sapf_motivos_report(plantel, start_date, end_date, scope), SAPF_TIMEOUT_SECONDS),
-        _safe_call("sapf_overview", lambda: get_sapf_overview_report(plantel, start_date, end_date, scope), SAPF_TIMEOUT_SECONDS),
-        _safe_call("observaciones", lambda: get_observaciones_report(plantel, start_date, end_date, scope), ACADEMIC_TIMEOUT_SECONDS),
-        _safe_call("planeaciones", lambda: get_planeaciones_report(plantel, start_date, end_date, scope), ACADEMIC_TIMEOUT_SECONDS),
-        _safe_call("observaciones_docentes", lambda: get_observaciones_docentes_report(plantel), ACADEMIC_TIMEOUT_SECONDS),
-        _safe_call("planeaciones_pendientes", lambda: get_planeaciones_pendientes_report(plantel, week_start, end_date, "range"), ACADEMIC_TIMEOUT_SECONDS),
+    # Attendance, access and tardies are the sources that were flattening to zero.
+    # Collect them with health-report-style daily fallback before rendering any value.
+    attendance_task = _attendance_with_fallback(plantel, start_date, end_date, scope)
+    husky_task = _husky_with_fallback(plantel, start_date, end_date, scope)
+    kardex_task = _safe_call("kardex", lambda: get_kardex_attendance_report(plantel, start_date, end_date, scope))
+    sapf_monthly_task = _safe_call("sapf_monthly", lambda: get_sapf_monthly_report(plantel, start_date, end_date, scope), SAPF_TIMEOUT_SECONDS)
+    sapf_motivos_task = _safe_call("sapf_motivos", lambda: get_sapf_motivos_report(plantel, start_date, end_date, scope), SAPF_TIMEOUT_SECONDS)
+    sapf_overview_task = _safe_call("sapf_overview", lambda: get_sapf_overview_report(plantel, start_date, end_date, scope), SAPF_TIMEOUT_SECONDS)
+    observaciones_task = _safe_call("observaciones", lambda: get_observaciones_report(plantel, start_date, end_date, scope), ACADEMIC_TIMEOUT_SECONDS)
+    planeaciones_task = _safe_call("planeaciones", lambda: get_planeaciones_report(plantel, start_date, end_date, scope), ACADEMIC_TIMEOUT_SECONDS)
+    obs_docentes_task = _safe_call("observaciones_docentes", lambda: get_observaciones_docentes_report(plantel), ACADEMIC_TIMEOUT_SECONDS)
+    plan_pendientes_task = _safe_call("planeaciones_pendientes", lambda: get_planeaciones_pendientes_report(plantel, week_start, end_date, "range"), ACADEMIC_TIMEOUT_SECONDS)
+
+    attendance, husky, kardex, sapf_monthly, sapf_motivos, sapf_overview, observaciones, planeaciones, obs_docentes, plan_pendientes = await asyncio.gather(
+        attendance_task,
+        husky_task,
+        kardex_task,
+        sapf_monthly_task,
+        sapf_motivos_task,
+        sapf_overview_task,
+        observaciones_task,
+        planeaciones_task,
+        obs_docentes_task,
+        plan_pendientes_task,
     )
+    retardos = await _retardos_with_fallback(plantel, start_date, end_date, scope, husky)
 
-    attendance, husky, retardos, kardex, sapf_monthly, sapf_motivos, sapf_overview, observaciones, planeaciones, obs_docentes, plan_pendientes = results
     domains = {
         "attendance": _sum_daily_attendance(attendance, start_date, end_date),
         "husky": _sum_husky(husky, retardos, start_date, end_date),
@@ -720,17 +1188,27 @@ async def _collect_plantel(plantel: str, start_date: date, end_date: date, scope
         "academic": _sum_academic(observaciones, planeaciones, obs_docentes, plan_pendientes),
         "sapf": _sum_sapf(sapf_monthly, sapf_motivos, sapf_overview),
     }
+    source_audit = {
+        "attendance": _attendance_audit(attendance, attendance_aliases),
+        "husky": _husky_audit(husky, husky_aliases),
+        "retardos": _retardos_audit(retardos, husky_aliases),
+        "employee": dict(kardex.get("_source_audit") or {}, status=("timeout" if kardex.get("timeout") else "source_error" if kardex.get("error") else "ok" if domains["employee"].get("has_data") else "no_records"), records_processed=domains["employee"].get("records_processed"), error=kardex.get("error")),
+        "academic": {"status": "ok" if domains["academic"].get("has_data") else "no_records", "errors": domains["academic"].get("errors") or [], "active_teachers": domains["academic"].get("docentes_activos"), "backlog": domains["academic"].get("supervision_backlog")},
+        "sapf": {"status": "ok" if domains["sapf"].get("has_data") else "no_records", "matched_campus_values": domains["sapf"].get("matched_campus_values") or [], "tickets": domains["sapf"].get("tickets_created"), "followups": domains["sapf"].get("followups"), "error": domains["sapf"].get("error")},
+    }
     index = _build_index(domains)
+    raw_results = [attendance, husky, retardos, kardex, sapf_monthly, sapf_motivos, sapf_overview, observaciones, planeaciones, obs_docentes, plan_pendientes]
 
     return {
         "plantel": plantel,
         "plantel_order": FIXED_PLANTEL_ORDER.index(plantel),
         "resolved_name": info["resolved_name"],
+        "source_audit": source_audit,
         "index": index,
         "domain_scores": {
             key: {
-                "compliance_score": _round(100.0 - _safe_float(domain.get("risk_score"), 45.0), 1),
-                "risk_score": _round(_safe_float(domain.get("risk_score"), 45.0), 1),
+                "compliance_score": _round(100.0 - _safe_float(domain.get("risk_score"), 45.0), 1) if domain.get("status") != "unavailable" else None,
+                "risk_score": _round(_safe_float(domain.get("risk_score"), 45.0), 1) if domain.get("status") != "unavailable" else None,
                 "status": domain.get("status") or "unavailable",
                 "label": _risk_label(domain.get("status") or "unavailable"),
             }
@@ -738,8 +1216,8 @@ async def _collect_plantel(plantel: str, start_date: date, end_date: date, scope
         },
         "domains": domains,
         "source_errors": [
-            {"source": item.get("source"), "error": item.get("error")}
-            for item in results
+            {"source": item.get("source") or (item.get("_source_audit") or {}).get("source"), "error": item.get("error")}
+            for item in raw_results
             if item.get("error")
         ],
     }
@@ -846,49 +1324,52 @@ def _plantel_metric_row(plantel_payload: Dict[str, Any], business_days: int) -> 
     sapf = domains.get("sapf") or {}
 
     attendance_has_data = bool(attendance.get("has_data"))
-    expected_lists = _safe_int(attendance.get("expected_groups_count"))
-    captured_lists = _safe_int(attendance.get("completed_groups_count"))
-    missing_lists = max(expected_lists - captured_lists, 0) if attendance_has_data else 0
-    completion_pct = attendance.get("completion_percent") if attendance_has_data else None
+    expected_lists = _safe_int(attendance.get("expected_groups_count")) if attendance_has_data else None
+    captured_lists = _safe_int(attendance.get("completed_groups_count")) if attendance_has_data else None
+    missing_lists = max(_safe_int(expected_lists) - _safe_int(captured_lists), 0) if attendance_has_data and expected_lists else None
+    completion_pct = attendance.get("completion_percent") if attendance_has_data and expected_lists else None
 
-    recorded_students = _safe_int(attendance.get("total_students_recorded"))
-    present_students = max(recorded_students - _safe_int(attendance.get("absent_students_count")), 0)
-    absent_students = _safe_int(attendance.get("absent_students_count"))
+    recorded_students = _safe_int(attendance.get("total_students_recorded")) if attendance_has_data else None
+    present_students = max(_safe_int(recorded_students) - _safe_int(attendance.get("absent_students_count")), 0) if recorded_students else None
+    absent_students = _safe_int(attendance.get("absent_students_count")) if recorded_students else None
     attendance_pct = attendance.get("attendance_rate_percent") if recorded_students else None
     absences_per_100 = attendance.get("absence_rate_percent") if recorded_students else None
 
     husky_has_scan_data = bool(husky.get("has_scan_data"))
-    first_entries = _safe_int(husky.get("first_entries") or husky.get("entrada_scans"))
-    student_tardies = _safe_int(husky.get("student_tardies"))
+    first_entries = _safe_int(husky.get("first_entries") or husky.get("entrada_scans")) if husky_has_scan_data else None
+    student_tardies = _safe_int(husky.get("student_tardies")) if husky.get("student_tardies") is not None else None
     tardies_raw = husky.get("student_tardies_per_100_entries") if husky.get("student_tardies_per_100_entries") is not None else husky.get("student_tardy_rate_percent")
     tardies_per_100_entries = tardies_raw if first_entries else None
-    unique_tardy_students = _safe_int(husky.get("unique_tardy_students_count"))
-    repeat_share = _safe_float(husky.get("repeat_tardy_share_percent"))
+    unique_tardy_students = _safe_int(husky.get("unique_tardy_students_count")) if student_tardies is not None else None
+    repeat_share = _safe_float(husky.get("repeat_tardy_share_percent")) if student_tardies is not None else None
 
-    expected_access = _safe_int(husky.get("expected_scan_ops"))
-    access_scans = _safe_int(husky.get("entrada_scans"))
-    access_gap = max(expected_access - access_scans, 0) if husky_has_scan_data else 0
-    access_rate = husky.get("scan_rate_percent") if husky_has_scan_data else None
+    expected_access = _safe_int(husky.get("expected_scan_ops")) if husky_has_scan_data else None
+    access_scans = _safe_int(husky.get("entrada_scans")) if husky_has_scan_data else None
+    access_gap = max(_safe_int(expected_access) - _safe_int(access_scans), 0) if husky_has_scan_data and expected_access else None
+    access_rate = husky.get("scan_rate_percent") if husky_has_scan_data and expected_access else None
 
-    employee_absences = _safe_int(employee.get("employee_absences"))
-    employee_tardies = _safe_int(employee.get("employee_tardies"))
-    employee_incidents = _safe_int(employee.get("employee_incidents"))
-    employee_incidents_per_day = _round(employee_incidents / max(business_days, 1), 2)
+    employee_has_data = bool(employee.get("has_data"))
+    employee_absences = _safe_int(employee.get("employee_absences")) if employee_has_data else None
+    employee_tardies = _safe_int(employee.get("employee_tardies")) if employee_has_data else None
+    employee_incidents = _safe_int(employee.get("employee_incidents")) if employee_has_data else None
+    employee_incidents_per_day = _round(_safe_int(employee_incidents) / max(business_days, 1), 2) if employee_has_data else None
 
-    active_teachers = max(_safe_int(academic.get("docentes_activos")), _safe_int(academic.get("docentes_activos_planeacion")), 0)
-    teachers_without_observation = _safe_int(academic.get("docentes_sin_observacion_30_dias"))
-    pending_lesson_reviews = _safe_int(academic.get("planeaciones_pendientes"))
-    academic_backlog = _safe_int(academic.get("supervision_backlog"))
-    observed_teacher_pct = _round(max(0.0, 100.0 - _safe_float(academic.get("observation_gap_rate_percent"))), 2)
-    lesson_feedback_pct = _safe_float(academic.get("planeaciones_feedback_rate_percent"))
+    academic_has_data = bool(academic.get("has_data"))
+    active_teachers = max(_safe_int(academic.get("docentes_activos")), _safe_int(academic.get("docentes_activos_planeacion")), 0) if academic_has_data else None
+    teachers_without_observation = _safe_int(academic.get("docentes_sin_observacion_30_dias")) if academic_has_data else None
+    pending_lesson_reviews = _safe_int(academic.get("planeaciones_pendientes")) if academic_has_data else None
+    academic_backlog = _safe_int(academic.get("supervision_backlog")) if academic_has_data else None
+    observed_teacher_pct = _round(max(0.0, 100.0 - _safe_float(academic.get("observation_gap_rate_percent"))), 2) if academic_has_data else None
+    lesson_feedback_pct = _safe_float(academic.get("planeaciones_feedback_rate_percent")) if academic_has_data else None
 
-    sapf_tickets = _safe_int(sapf.get("tickets_created"))
-    sapf_followups = _safe_int(sapf.get("followups"))
-    sapf_open = _safe_int(sapf.get("open_cases"))
-    sapf_closed = _safe_int(sapf.get("closed_cases"))
-    sapf_interactions = _safe_int(sapf.get("parent_interactions"))
-    followups_per_ticket = _round(sapf_followups / sapf_tickets, 2) if sapf_tickets else 0.0
-    open_case_share = _pct(sapf_open, sapf_open + sapf_closed) if (sapf_open + sapf_closed) else 0.0
+    sapf_has_data = bool(sapf.get("has_data"))
+    sapf_tickets = _safe_int(sapf.get("tickets_created")) if sapf_has_data else None
+    sapf_followups = _safe_int(sapf.get("followups")) if sapf_has_data else None
+    sapf_open = _safe_int(sapf.get("open_cases")) if sapf_has_data else None
+    sapf_closed = _safe_int(sapf.get("closed_cases")) if sapf_has_data else None
+    sapf_interactions = _safe_int(sapf.get("parent_interactions")) if sapf_has_data else None
+    followups_per_ticket = _round(_safe_int(sapf_followups) / _safe_int(sapf_tickets), 2) if sapf_tickets else None
+    open_case_share = _pct(_safe_int(sapf_open), _safe_int(sapf_open) + _safe_int(sapf_closed)) if (_safe_int(sapf_open) + _safe_int(sapf_closed)) else None
 
     return {
         "plantel": code,
@@ -902,7 +1383,7 @@ def _plantel_metric_row(plantel_payload: Dict[str, Any], business_days: int) -> 
             "missing": missing_lists,
             "completion_pct": _round(completion_pct, 2),
             "status": _status_for_threshold(completion_pct, high_bad=False, warning=92.0, critical=82.0),
-            "has_data": attendance_has_data,
+            "has_data": attendance_has_data and completion_pct is not None,
         },
         "student_attendance": {
             "records": recorded_students,
@@ -911,7 +1392,7 @@ def _plantel_metric_row(plantel_payload: Dict[str, Any], business_days: int) -> 
             "attendance_pct": _round(attendance_pct, 2),
             "absences_per_100": _round(absences_per_100, 2),
             "status": _status_for_threshold(attendance_pct, high_bad=False, warning=92.0, critical=88.0),
-            "has_data": recorded_students > 0,
+            "has_data": bool(recorded_students),
         },
         "student_tardies": {
             "first_entries": first_entries,
@@ -922,7 +1403,7 @@ def _plantel_metric_row(plantel_payload: Dict[str, Any], business_days: int) -> 
             "avg_daily": husky.get("avg_tardies_per_business_day"),
             "recurrence_buckets": husky.get("tardy_recurrence_buckets") or {"one": 0, "two_three": 0, "four_plus": 0},
             "status": _status_for_threshold(tardies_per_100_entries, high_bad=True, warning=4.0, critical=9.0),
-            "has_data": first_entries > 0,
+            "has_data": bool(first_entries),
         },
         "access": {
             "expected_entries": expected_access,
@@ -930,15 +1411,16 @@ def _plantel_metric_row(plantel_payload: Dict[str, Any], business_days: int) -> 
             "gap": access_gap,
             "coverage_pct": _round(access_rate, 2),
             "status": _status_for_threshold(access_rate, high_bad=False, warning=75.0, critical=55.0),
-            "has_data": husky_has_scan_data,
+            "has_data": husky_has_scan_data and access_rate is not None,
         },
         "employee_attendance": {
             "absences": employee_absences,
             "tardies": employee_tardies,
             "incidents": employee_incidents,
             "incidents_per_business_day": employee_incidents_per_day,
-            "minutes": _safe_int(employee.get("payroll_waste_minutes")),
-            "status": _status_for_threshold(employee_incidents_per_day or 0, high_bad=True, warning=1.0, critical=3.0),
+            "minutes": _safe_int(employee.get("payroll_waste_minutes")) if employee_has_data else None,
+            "status": _status_for_threshold(employee_incidents_per_day, high_bad=True, warning=1.0, critical=3.0),
+            "has_data": employee_has_data,
         },
         "academic": {
             "active_teachers": active_teachers,
@@ -948,6 +1430,7 @@ def _plantel_metric_row(plantel_payload: Dict[str, Any], business_days: int) -> 
             "observed_teacher_pct": observed_teacher_pct,
             "lesson_feedback_pct": _round(lesson_feedback_pct, 2),
             "status": _status_for_threshold(academic_backlog, high_bad=True, warning=8.0, critical=24.0),
+            "has_data": academic_has_data,
         },
         "sapf": {
             "tickets": sapf_tickets,
@@ -957,7 +1440,8 @@ def _plantel_metric_row(plantel_payload: Dict[str, Any], business_days: int) -> 
             "closed_cases": sapf_closed,
             "followups_per_ticket": followups_per_ticket,
             "open_case_share_pct": _round(open_case_share, 2),
-            "status": "warning" if sapf_interactions == 0 else _status_for_threshold(open_case_share, high_bad=True, warning=35.0, critical=65.0),
+            "status": _status_for_threshold(open_case_share, high_bad=True, warning=35.0, critical=65.0) if sapf_has_data else "unavailable",
+            "has_data": sapf_has_data,
         },
     }
 
@@ -969,6 +1453,9 @@ def _network_from_matrix(matrix: List[Dict[str, Any]]) -> Dict[str, Any]:
     valid_attendance = [r for r in matrix if r["student_attendance"].get("has_data")]
     valid_tardies = [r for r in matrix if r["student_tardies"].get("has_data")]
     valid_access = [r for r in matrix if r["access"].get("has_data")]
+    valid_employee = [r for r in matrix if r["employee_attendance"].get("has_data")]
+    valid_academic = [r for r in matrix if r["academic"].get("has_data")]
+    valid_sapf = [r for r in matrix if r["sapf"].get("has_data")]
     expected_lists = sum(_safe_int(r["attendance_lists"].get("expected")) for r in valid_lists)
     captured_lists = sum(_safe_int(r["attendance_lists"].get("captured")) for r in valid_lists)
     records = sum(_safe_int(r["student_attendance"].get("records")) for r in valid_attendance)
@@ -978,12 +1465,12 @@ def _network_from_matrix(matrix: List[Dict[str, Any]]) -> Dict[str, Any]:
     tardies = sum(_safe_int(r["student_tardies"].get("tardies")) for r in valid_tardies)
     access_expected = sum(_safe_int(r["access"].get("expected_entries")) for r in valid_access)
     access_scans = sum(_safe_int(r["access"].get("scans")) for r in valid_access)
-    employee_incidents = sum(_safe_int(r["employee_attendance"].get("incidents")) for r in matrix)
-    academic_backlog = sum(_safe_int(r["academic"].get("backlog")) for r in matrix)
-    sapf_tickets = sum(_safe_int(r["sapf"].get("tickets")) for r in matrix)
-    sapf_followups = sum(_safe_int(r["sapf"].get("followups")) for r in matrix)
-    sapf_open = sum(_safe_int(r["sapf"].get("open_cases")) for r in matrix)
-    sapf_closed = sum(_safe_int(r["sapf"].get("closed_cases")) for r in matrix)
+    employee_incidents = sum(_safe_int(r["employee_attendance"].get("incidents")) for r in valid_employee)
+    academic_backlog = sum(_safe_int(r["academic"].get("backlog")) for r in valid_academic)
+    sapf_tickets = sum(_safe_int(r["sapf"].get("tickets")) for r in valid_sapf)
+    sapf_followups = sum(_safe_int(r["sapf"].get("followups")) for r in valid_sapf)
+    sapf_open = sum(_safe_int(r["sapf"].get("open_cases")) for r in valid_sapf)
+    sapf_closed = sum(_safe_int(r["sapf"].get("closed_cases")) for r in valid_sapf)
     return {
         "attendance_lists_completion_pct": _round(_pct(captured_lists, expected_lists), 2) if expected_lists else None,
         "attendance_lists_missing": max(expected_lists - captured_lists, 0) if expected_lists else None,
@@ -999,13 +1486,13 @@ def _network_from_matrix(matrix: List[Dict[str, Any]]) -> Dict[str, Any]:
             "tardies": len(valid_tardies),
             "access": len(valid_access),
         },
-        "employee_incidents": employee_incidents,
-        "academic_backlog": academic_backlog,
-        "sapf_tickets": sapf_tickets,
-        "sapf_followups": sapf_followups,
-        "sapf_open_cases": sapf_open,
-        "sapf_followups_per_ticket": _round(sapf_followups / sapf_tickets, 2) if sapf_tickets else 0.0,
-        "sapf_open_case_share_pct": _round(_pct(sapf_open, sapf_open + sapf_closed), 2) if (sapf_open + sapf_closed) else 0.0,
+        "employee_incidents": employee_incidents if valid_employee else None,
+        "academic_backlog": academic_backlog if valid_academic else None,
+        "sapf_tickets": sapf_tickets if valid_sapf else None,
+        "sapf_followups": sapf_followups if valid_sapf else None,
+        "sapf_open_cases": sapf_open if valid_sapf else None,
+        "sapf_followups_per_ticket": _round(sapf_followups / sapf_tickets, 2) if sapf_tickets else None,
+        "sapf_open_case_share_pct": _round(_pct(sapf_open, sapf_open + sapf_closed), 2) if (sapf_open + sapf_closed) else None,
     }
 
 
@@ -1019,36 +1506,62 @@ def _domain_gaps_for_row(row: Dict[str, Any]) -> Dict[str, float]:
         gaps["Retardos"] = _safe_float(row["student_tardies"].get("tardies_per_100_entries"))
     if row["access"].get("coverage_pct") is not None:
         gaps["Accesos"] = max(0.0, 100.0 - _safe_float(row["access"].get("coverage_pct")))
-    gaps["Personal"] = _safe_float(row["employee_attendance"].get("incidents_per_business_day")) * 6.0
-    gaps["Académico"] = min(100.0, _safe_float(row["academic"].get("backlog")) * 2.5)
-    gaps["SAPF"] = _safe_float(row["sapf"].get("open_case_share_pct"))
+    if row["employee_attendance"].get("has_data") and row["employee_attendance"].get("incidents_per_business_day") is not None:
+        gaps["Personal"] = _safe_float(row["employee_attendance"].get("incidents_per_business_day")) * 6.0
+    if row["academic"].get("has_data") and row["academic"].get("backlog") is not None:
+        gaps["Académico"] = min(100.0, _safe_float(row["academic"].get("backlog")) * 2.5)
+    if row["sapf"].get("has_data") and row["sapf"].get("open_case_share_pct") is not None:
+        gaps["SAPF"] = _safe_float(row["sapf"].get("open_case_share_pct"))
     return gaps
 
 
 def _build_quick_read(matrix: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     if not matrix:
         return []
+    cards: List[Dict[str, Any]] = []
+    source_labels = [
+        ("Listas", "attendance_lists"),
+        ("Asistencia", "student_attendance"),
+        ("Retardos", "student_tardies"),
+        ("Accesos", "access"),
+        ("Personal", "employee_attendance"),
+        ("Académico", "academic"),
+    ]
+    unreadable = []
+    for label, key in source_labels:
+        if not any((row.get(key) or {}).get("has_data") for row in matrix):
+            unreadable.append(label)
+    if unreadable:
+        cards.append({
+            "label": "Fuentes sin lectura",
+            "value": ", ".join(unreadable[:3]) + ("…" if len(unreadable) > 3 else ""),
+            "detail": "No se muestran ceros cuando falta denominador. Abrir /api/v1/corporate-compliance-risk-index/debug para revisar alias, fechas y fuente.",
+            "status": "unavailable",
+        })
+
     gap_items = []
     for row in matrix:
         for label, value in _domain_gaps_for_row(row).items():
             gap_items.append({"plantel": row["plantel"], "area": label, "value": value})
-    if not gap_items:
-        return [{"label": "Datos", "value": "Sin lectura suficiente", "detail": "No hay denominadores confiables para comparar el periodo.", "status": "unavailable"}]
-    top_gap = max(gap_items, key=lambda x: x["value"])
+    if gap_items:
+        top_gap = max(gap_items, key=lambda x: x["value"])
+        cards.append({
+            "label": "Principal brecha",
+            "value": f"{top_gap['plantel']} · {top_gap['area']}",
+            "detail": f"Indicador con mayor separación relativa: {top_gap['value']:.1f}.",
+            "status": "warning" if top_gap["value"] < 45 else "critical",
+        })
+    else:
+        cards.append({"label": "Datos", "value": "Sin lectura suficiente", "detail": "No hay denominadores confiables para comparar el periodo.", "status": "unavailable"})
+
     list_rows = [r for r in matrix if r["attendance_lists"].get("completion_pct") is not None]
     tardy_rows = [r for r in matrix if r["student_tardies"].get("tardies_per_100_entries") is not None]
     access_rows = [r for r in matrix if r["access"].get("coverage_pct") is not None]
     best_lists = max(list_rows, key=lambda r: _safe_float(r["attendance_lists"].get("completion_pct"))) if list_rows else None
     worst_tardy = max(tardy_rows, key=lambda r: _safe_float(r["student_tardies"].get("tardies_per_100_entries"))) if tardy_rows else None
     weakest_access = min(access_rows, key=lambda r: _safe_float(r["access"].get("coverage_pct"))) if access_rows else None
-    no_sapf = [r["plantel"] for r in matrix if _safe_int(r["sapf"].get("interactions")) == 0]
-    return [
-        {
-            "label": "Principal brecha",
-            "value": f"{top_gap['plantel']} · {top_gap['area']}",
-            "detail": f"Indicador con mayor separación relativa: {top_gap['value']:.1f}.",
-            "status": "warning" if top_gap["value"] < 45 else "critical",
-        },
+
+    cards.extend([
         {
             "label": "Mejor registro de listas",
             "value": f"{best_lists['plantel']} · {best_lists['attendance_lists'].get('completion_pct'):.1f}%" if best_lists else "Sin lectura",
@@ -1064,10 +1577,11 @@ def _build_quick_read(matrix: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         {
             "label": "Menor cobertura de accesos",
             "value": f"{weakest_access['plantel']} · {weakest_access['access'].get('coverage_pct'):.1f}%" if weakest_access else "Sin lectura",
-            "detail": ("SAPF sin registros: " + ", ".join(no_sapf)) if no_sapf else "SAPF tiene registros en los planteles seleccionados.",
+            "detail": f"{weakest_access['access'].get('scans')} entradas registradas sobre {weakest_access['access'].get('expected_entries')} esperadas." if weakest_access else "Sin denominador de entradas para calcular accesos.",
             "status": weakest_access["access"].get("status") if weakest_access else "unavailable",
         },
-    ]
+    ])
+    return cards[:4]
 
 
 def _bucket_label(day: date, start_date: date, end_date: date) -> str:
@@ -1186,6 +1700,37 @@ def _build_operational_model(planteles: List[Dict[str, Any]], start_date: date, 
         "trend": _build_trend(planteles, start_date, end_date),
     }
 
+
+def _build_source_audit_summary(planteles: List[Dict[str, Any]]) -> Dict[str, Any]:
+    domains = ["attendance", "husky", "retardos", "employee", "academic", "sapf"]
+    summary: Dict[str, Any] = {domain: {"ok": 0, "no_records": 0, "timeout": 0, "source_error": 0, "other": 0, "planteles": {}} for domain in domains}
+    for plantel in planteles:
+        code = plantel.get("plantel")
+        audits = plantel.get("source_audit") or {}
+        for domain in domains:
+            audit = audits.get(domain) or {}
+            status = str(audit.get("status") or "other")
+            bucket = status if status in summary[domain] else "other"
+            summary[domain][bucket] += 1
+            summary[domain]["planteles"][code] = {
+                "status": status,
+                "rows": audit.get("group_rows") or audit.get("entrada_scans") or audit.get("rows") or audit.get("records_processed") or audit.get("tickets"),
+                "dates_with_records": audit.get("dates_with_records") or audit.get("days_with_retardos"),
+                "first_record_date": audit.get("first_record_date"),
+                "last_record_date": audit.get("last_record_date"),
+                "error": audit.get("error"),
+                "fallback": audit.get("source") if "fallback" in str(audit.get("source") or "") else None,
+            }
+    summary["validity"] = {
+        domain: {
+            "readable_planteles": summary[domain]["ok"],
+            "selected_planteles": len(planteles),
+            "is_usable": summary[domain]["ok"] > 0,
+        }
+        for domain in domains
+    }
+    return summary
+
 def _aggregate(planteles: List[Dict[str, Any]], start_date: date, end_date: date) -> Dict[str, Any]:
     scored = [p for p in planteles if p.get("index", {}).get("score") is not None]
     count = max(len(scored), 1)
@@ -1258,6 +1803,7 @@ def _aggregate(planteles: List[Dict[str, Any]], start_date: date, end_date: date
         },
         "daily_series": _aggregate_daily_series(planteles, start_date, end_date),
         "operational": _build_operational_model(planteles, start_date, end_date),
+        "source_audit": _build_source_audit_summary(planteles),
     }
 
 
@@ -1338,6 +1884,7 @@ async def get_corporate_compliance_index(
         },
         "aggregate": _aggregate(plantel_payloads, start_date, end_date),
         "operational": _build_operational_model(plantel_payloads, start_date, end_date),
+        "source_audit": _build_source_audit_summary(plantel_payloads),
         "planteles": plantel_payloads,
         "baselines": baseline_payload if include_baselines else None,
     }
