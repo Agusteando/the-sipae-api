@@ -1,1 +1,1 @@
-Corrige Reporte SIPAE con planeaciones por creación y ceros reales
+Corrige seguimientos por carga relativa poblacional

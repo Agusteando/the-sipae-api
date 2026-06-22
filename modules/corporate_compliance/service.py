@@ -752,32 +752,55 @@ async def _academic_metrics(plantel_info: Dict[str, Any], start_date: date, end_
 
 
 def _sapf_metric(payload: Dict[str, Any], population_result: Dict[str, Any], start_date: date, end_date: date) -> Dict[str, Any]:
+    """Seguimientos normalized by student population.
+
+    This is a positive executive score: 100 means no seguimiento burden in the
+    period; lower values mean a larger seguimiento load relative to total
+    students. It intentionally does not use an arbitrary monthly target.
+    """
+    del start_date, end_date
     if not payload.get("_ok", True) or payload.get("error"):
         return _unavailable("—", "Seguimientos no respondió")
     population = safe_int(population_result.get("value")) if population_result.get("_ok") else 0
     total_followups = safe_int(payload.get("total_fichas"))
     if total_followups <= 0:
         total_followups = safe_int(payload.get("open_cases")) + safe_int(payload.get("closed_cases"))
-    calendar_days = max((end_date - start_date).days + 1, 1)
-    month_start, month_end = _month_window_for(end_date)
-    month_days = max((month_end.replace(day=28) + timedelta(days=4)).replace(day=1).toordinal() - month_start.toordinal(), 28)
-    monthly_rate = 0.05
-    target = round(population * monthly_rate * min(calendar_days, month_days) / month_days, 1) if population > 0 else 0
-    score = pct(min(total_followups, target), target)
+
+    if population <= 0:
+        return _metric(
+            None,
+            "—",
+            "Sin población para normalizar seguimientos",
+            {
+                "total_followups": total_followups,
+                "population": population,
+                "followups_per_100_students": None,
+                "load_pct": None,
+                "open_cases": safe_int(payload.get("open_cases")),
+                "closed_cases": safe_int(payload.get("closed_cases")),
+                "total_fichas": safe_int(payload.get("total_fichas")),
+                "complaints": safe_int(payload.get("complaints")),
+                "basis": "population_normalized_followup_load",
+            },
+        )
+
+    load_pct = (total_followups / population) * 100.0
+    followups_per_100 = round(load_pct, 1)
+    score = clamp_score(100.0 - load_pct)
     return _metric(
         score,
-        f"{total_followups:,} seguimientos de {target:,.1f} esperados" if target > 0 else "—",
-        f"Referencia {monthly_rate:.0%} mensual de población · población {population:,}" if target > 0 else "Sin población para referencia",
+        f"{total_followups:,} seguimientos · {followups_per_100:.1f} por 100 alumnos",
+        f"Carga relativa sobre población {population:,}",
         {
             "total_followups": total_followups,
-            "target_followups": target,
             "population": population,
-            "monthly_rate": monthly_rate,
+            "followups_per_100_students": followups_per_100,
+            "load_pct": round(load_pct, 2),
             "open_cases": safe_int(payload.get("open_cases")),
             "closed_cases": safe_int(payload.get("closed_cases")),
             "total_fichas": safe_int(payload.get("total_fichas")),
             "complaints": safe_int(payload.get("complaints")),
-            "basis": "population_reference_5pct_month_prorated",
+            "basis": "population_normalized_followup_load",
         },
     )
 
@@ -1022,12 +1045,12 @@ def _diagnostic(planteles: List[Dict[str, Any]], start_date: date, end_date: dat
                 "planeaciones": _metric_evidence(metrics.get("planning") or {}, ["submitted", "reviewed", "pending", "raw_rows", "active_teachers", "submitted_teachers", "created_at_start", "created_at_end", "min_created_at", "max_created_at", "basis"]),
                 "observaciones": _metric_evidence(metrics.get("observations") or {}, ["total_observations", "monthly_goal", "active_teachers", "window_start", "window_end", "active_window_start", "active_window_end", "basis"]),
                 "cobertura_observaciones": _metric_evidence(metrics.get("observation_coverage") or {}, ["active_teachers", "observed_teachers", "teachers_with_2plus", "without_observation", "window_start", "window_end", "basis"]),
-                "seguimientos": _metric_evidence(metrics.get("sapf") or {}, ["total_followups", "target_followups", "population", "monthly_rate", "basis"]),
+                "seguimientos": _metric_evidence(metrics.get("sapf") or {}, ["total_followups", "population", "followups_per_100_students", "load_pct", "open_cases", "closed_cases", "basis"]),
             },
             "general": _metric_evidence(metrics.get("general") or {}, ["weights_used", "weights_total", "metrics_used", "minimum_weight", "minimum_metrics"]),
         }
     return {
-        "v": "corp-diagnostic-v8",
+        "v": "corp-diagnostic-v9",
         "range": {"start": start_date.isoformat(), "end": end_date.isoformat(), "business_days": len(business_days)},
         "planteles": rows,
     }
@@ -1184,7 +1207,7 @@ async def get_corporate_compliance_index(
         "source_audit": {p["plantel"]: p.get("source_audit") for p in plantel_payloads},
         "diagnostic": _diagnostic(plantel_payloads, start_date, end_date, business_days),
         "meta": {
-            "logic_version": "2026-06-22-reporte-sipae-v9",
+            "logic_version": "2026-06-22-reporte-sipae-v10",
             "start_date": start_date.isoformat(),
             "end_date": end_date.isoformat(),
             "business_days": len(business_days),
