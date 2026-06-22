@@ -10,7 +10,7 @@ from .service import get_corporate_compliance_index
 from .templates import CORPORATE_COMPLIANCE_HTML
 
 router = APIRouter(tags=["Cumplimiento operativo"])
-DASHBOARD_DATA_VERSION = "2026-05-29-db-only-no-coldboot-1"
+DASHBOARD_DATA_VERSION = "2026-06-22-executive-0-100-v1"
 
 
 @router.get("/corporate-compliance-risk-index", response_class=HTMLResponse, include_in_schema=False)
@@ -109,7 +109,9 @@ async def get_corporate_compliance_dashboard_data(
         cached = get_cache(cache_key)
         if cached and _cache_age_seconds(cached) < 120:
             data = dict(cached["data"])
-            data["meta"] = {"is_cached": True, "cached_at": cached["timestamp"].isoformat()}
+            meta = dict(data.get("meta") or {})
+            meta.update({"is_cached": True, "cached_at": cached["timestamp"].isoformat()})
+            data["meta"] = meta
             return data
 
     data = await get_corporate_compliance_index(
@@ -119,7 +121,9 @@ async def get_corporate_compliance_dashboard_data(
         scope=resolved_scope,
         include_baselines=include_baselines,
     )
-    data["meta"] = {"is_cached": False, "cached_at": datetime.now(ZoneInfo("America/Mexico_City")).isoformat()}
+    meta = dict(data.get("meta") or {})
+    meta.update({"is_cached": False, "cached_at": datetime.now(ZoneInfo("America/Mexico_City")).isoformat()})
+    data["meta"] = meta
     set_cache(cache_key, data)
     return data
 
