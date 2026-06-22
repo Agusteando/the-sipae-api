@@ -70,7 +70,7 @@ CORPORATE_COMPLIANCE_HTML = r'''
     .section-body { padding: 17px; }
     .matrix-wrap { overflow-x: auto; }
     table { border-collapse: collapse; width: 100%; }
-    .matrix { min-width: 1280px; border: 1px solid var(--line); border-radius: 14px; overflow: hidden; border-collapse: separate; border-spacing: 0; }
+    .matrix { min-width: 1460px; border: 1px solid var(--line); border-radius: 14px; overflow: hidden; border-collapse: separate; border-spacing: 0; }
     .matrix th, .matrix td { padding: 12px; border-bottom: 1px solid var(--line); border-right: 1px solid var(--line); text-align: left; }
     .matrix tr:last-child td { border-bottom: 0; }
     .matrix th:last-child, .matrix td:last-child { border-right: 0; }
@@ -222,8 +222,8 @@ CORPORATE_COMPLIANCE_HTML = r'''
 
   <script>
     var PLANTELES = ["PT", "PM", "ST", "SM", "PREET", "PREEM"];
-    var METRIC_ORDER = ["general", "roll_call", "student_attendance", "scans", "student_punctuality", "staff_attendance", "planning", "observations", "sapf"];
-    var METRIC_LABELS = { general: "General", roll_call: "Pase de lista", student_attendance: "Asistencia alumnos", scans: "Escaneos", student_punctuality: "Puntualidad alumnos", staff_attendance: "Asistencia personal", planning: "Planeaciones", observations: "Observaciones", sapf: "SAPF" };
+    var METRIC_ORDER = ["general", "roll_call", "student_attendance", "scans", "student_punctuality", "staff_attendance", "planning", "observations", "observation_coverage", "sapf"];
+    var METRIC_LABELS = { general: "General", roll_call: "Pase de lista", student_attendance: "Asistencia alumnos", scans: "Escaneos", student_punctuality: "Puntualidad alumnos", staff_attendance: "Asistencia personal", planning: "Planeaciones", observations: "Observaciones", observation_coverage: "Cobertura obs.", sapf: "SAPF" };
     var LINE_COLORS = ["#111827", "#15803d", "#b91c1c", "#b45309", "#2563eb", "#7c3aed"];
     var state = { scope: "month", planteles: {}, data: null, selectedPlantel: null };
     for (var p0 = 0; p0 < PLANTELES.length; p0 += 1) state.planteles[PLANTELES[p0]] = true;

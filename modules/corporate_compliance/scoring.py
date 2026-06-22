@@ -23,13 +23,14 @@ TRAFFIC_COLORS = {
 }
 
 METRIC_WEIGHTS = {
-    "roll_call": 20,
+    "roll_call": 15,
     "student_attendance": 15,
     "scans": 10,
     "student_punctuality": 10,
     "staff_attendance": 10,
     "planning": 15,
-    "observations": 15,
+    "observations": 10,
+    "observation_coverage": 10,
     "sapf": 5,
 }
 

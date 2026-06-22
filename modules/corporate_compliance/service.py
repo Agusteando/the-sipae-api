@@ -18,7 +18,7 @@ from .report_repository import (
     fetch_attendance_rollup,
     fetch_husky_daily_scan_counts,
     fetch_husky_tardy_daily_counts,
-    fetch_observation_teacher_totals,
+    fetch_observation_monthly_totals,
     fetch_planning_review_totals,
 )
 from .scoring import (
@@ -45,6 +45,7 @@ DISPLAY_METRICS = [
     "staff_attendance",
     "planning",
     "observations",
+    "observation_coverage",
     "sapf",
 ]
 TREND_METRICS = ["general", "roll_call", "student_attendance", "scans", "student_punctuality"]
@@ -83,6 +84,17 @@ def _business_days(start_date: date, end_date: date) -> List[date]:
 def _weeks_touched(days: Iterable[date]) -> int:
     weeks = {(day.isocalendar().year, day.isocalendar().week) for day in days}
     return len(weeks)
+
+
+def _week_window_for_period(start_date: date, end_date: date) -> tuple[date, date]:
+    """Full planning-week window touched by the selected report period."""
+    start_week = start_date - timedelta(days=start_date.weekday())
+    end_week = end_date + timedelta(days=6 - end_date.weekday())
+    return start_week, end_week
+
+
+def _month_window_for(value: date) -> tuple[date, date]:
+    return value.replace(day=1), value
 
 
 def _date_key(value: Any) -> Optional[str]:
@@ -553,22 +565,30 @@ async def _planning_metric(plantel_info: Dict[str, Any], start_date: date, end_d
     if not academic_filters:
         return _unavailable("—", "Plantel sin filtro académico")
     active_teachers = await count_active_academic_teachers(academic_filters)
-    weeks = _weeks_touched(business_days)
+    period_week_start, period_week_end = _week_window_for_period(start_date, end_date)
+    weeks = _weeks_touched(_business_days(period_week_start, period_week_end))
     expected_by_teacher_week = active_teachers * weeks
-    totals = await fetch_planning_review_totals(academic_filters, start_date, end_date)
+    totals = await fetch_planning_review_totals(
+        academic_filters,
+        start_date,
+        end_date,
+        period_week_start,
+        period_week_end,
+    )
     reviewed = safe_int(totals.get("reviewed_units"))
     submitted = safe_int(totals.get("submitted_units"))
     pending_submitted = max(submitted - reviewed, 0)
     submitted_teachers = safe_int(totals.get("docentes_con_planeacion"))
+    created_at_fallback_rows = safe_int(totals.get("created_at_fallback_rows"))
 
-    # Planeaciones measures review completion for submitted plans.
-    # Teacher-week expectation remains in diagnostic only; using it as the denominator
-    # falsely punished campuses when the actual source only exposes submitted plans.
+    # Planeaciones measures review completion for plans whose planning week
+    # belongs to the selected period, including the current week. It does not
+    # count future-week plans just because they were created during the period.
     score = pct(min(reviewed, submitted), submitted)
     return _metric(
         score,
-        f"{reviewed:,} revisadas de {submitted:,} entregadas" if submitted > 0 else "—",
-        f"{pending_submitted:,} entregadas sin revisión" if submitted > 0 else "Sin planeaciones entregadas en el periodo",
+        f"{reviewed:,} revisadas de {submitted:,} del periodo" if submitted > 0 else "—",
+        f"{pending_submitted:,} del periodo sin revisión" if submitted > 0 else "Sin planeaciones del periodo",
         {
             "active_teachers": active_teachers,
             "weeks": weeks,
@@ -577,42 +597,89 @@ async def _planning_metric(plantel_info: Dict[str, Any], start_date: date, end_d
             "submitted": submitted,
             "pending": pending_submitted,
             "submitted_teachers": submitted_teachers,
-            "basis": "reviewed_submitted_plans",
+            "period_week_start": period_week_start.isoformat(),
+            "period_week_end": period_week_end.isoformat(),
+            "created_at_fallback_rows": created_at_fallback_rows,
+            "basis": "reviewed_period_plans",
         },
     )
 
 
-async def _observations_metric(plantel_info: Dict[str, Any], end_date: date) -> Dict[str, Any]:
+async def _observation_metrics(plantel_info: Dict[str, Any], end_date: date) -> Dict[str, Dict[str, Any]]:
     academic_filters = plantel_info.get("academic_filters") or []
     if not academic_filters:
-        return _unavailable("—", "Plantel sin filtro académico")
-    observation_start = end_date - timedelta(days=29)
-    totals = await fetch_observation_teacher_totals(academic_filters, observation_start, end_date)
+        return {
+            "observations": _unavailable("—", "Plantel sin filtro académico"),
+            "observation_coverage": _unavailable("—", "Plantel sin filtro académico"),
+        }
+    active_start = end_date - timedelta(days=20)
+    month_start, month_end = _month_window_for(end_date)
+    monthly_goal = 40
+    totals = await fetch_observation_monthly_totals(
+        academic_filters,
+        active_start,
+        end_date,
+        month_start,
+        month_end,
+    )
     active_teachers = safe_int(totals.get("active_teachers"))
     observed_teachers = safe_int(totals.get("observed_teachers"))
+    teachers_with_2plus = safe_int(totals.get("teachers_with_2plus"))
     total_observations = safe_int(totals.get("total_observations"))
     without_observation = max(active_teachers - observed_teachers, 0)
-    score = pct(min(observed_teachers, active_teachers), active_teachers)
-    return _metric(
-        score,
-        f"{observed_teachers:,} de {active_teachers:,} docentes observados" if active_teachers > 0 else "—",
-        f"{without_observation:,} sin observación reciente · {total_observations:,} observaciones" if active_teachers > 0 else "Sin docentes activos",
-        {"active_teachers": active_teachers, "observed_teachers": observed_teachers, "without_observation": without_observation, "total_observations": total_observations, "window_start": observation_start.isoformat(), "window_end": end_date.isoformat()},
+
+    observation_score = pct(min(total_observations, monthly_goal), monthly_goal) if active_teachers > 0 else None
+    observations = _metric(
+        observation_score,
+        f"{total_observations:,} de {monthly_goal:,} observaciones" if active_teachers > 0 else "—",
+        f"Meta mensual · {active_teachers:,} docentes activos" if active_teachers > 0 else "Sin docentes activos recientes",
+        {
+            "active_teachers": active_teachers,
+            "observed_teachers": observed_teachers,
+            "without_observation": without_observation,
+            "teachers_with_2plus": teachers_with_2plus,
+            "total_observations": total_observations,
+            "monthly_goal": monthly_goal,
+            "active_window_start": active_start.isoformat(),
+            "active_window_end": end_date.isoformat(),
+            "window_start": month_start.isoformat(),
+            "window_end": month_end.isoformat(),
+            "basis": "monthly_observation_goal_active_teachers",
+        },
     )
+
+    coverage_score = pct(min(teachers_with_2plus, active_teachers), active_teachers)
+    coverage = _metric(
+        coverage_score,
+        f"{teachers_with_2plus:,} de {active_teachers:,} docentes con 2+" if active_teachers > 0 else "—",
+        f"{without_observation:,} sin observación mensual" if active_teachers > 0 else "Sin docentes activos recientes",
+        {
+            "active_teachers": active_teachers,
+            "observed_teachers": observed_teachers,
+            "teachers_with_2plus": teachers_with_2plus,
+            "without_observation": without_observation,
+            "total_observations": total_observations,
+            "window_start": month_start.isoformat(),
+            "window_end": month_end.isoformat(),
+            "basis": "teachers_observed_twice_monthly",
+        },
+    )
+    return {"observations": observations, "observation_coverage": coverage}
 
 
 async def _academic_metrics(plantel_info: Dict[str, Any], start_date: date, end_date: date, business_days: List[date]) -> Dict[str, Dict[str, Any]]:
     try:
-        planning, observations = await asyncio.gather(
+        planning, observation_payload = await asyncio.gather(
             _planning_metric(plantel_info, start_date, end_date, business_days),
-            _observations_metric(plantel_info, end_date),
+            _observation_metrics(plantel_info, end_date),
         )
-        return {"planning": planning, "observations": observations, "_ok": True}
+        return {"planning": planning, **observation_payload, "_ok": True}
     except Exception as exc:
         logger.error("Corporate academic metrics failed for %s: %s", plantel_info.get("db_code"), exc)
         return {
             "planning": _unavailable("—", f"Error en planeaciones: {exc}"),
             "observations": _unavailable("—", f"Error en observaciones: {exc}"),
+            "observation_coverage": _unavailable("—", f"Error en cobertura docente: {exc}"),
             "shape": {},
             "_ok": False,
             "error": str(exc),
@@ -645,7 +712,7 @@ def _general_metric(metrics: Dict[str, Dict[str, Any]]) -> Dict[str, Any]:
     minimum_weight = 50
     minimum_metrics = 3
     has_operational_base = any(key in usable_keys for key in ("roll_call", "student_attendance", "scans", "student_punctuality"))
-    has_followup_base = any(key in usable_keys for key in ("planning", "observations", "staff_attendance", "sapf"))
+    has_followup_base = any(key in usable_keys for key in ("planning", "observations", "observation_coverage", "staff_attendance", "sapf"))
     has_enough_evidence = (
         used_weight >= minimum_weight
         and len(usable_keys) >= minimum_metrics
@@ -816,6 +883,7 @@ async def _collect_plantel(code: str, start_date: date, end_date: date, scope: s
     academic_payload = source_map["academic"] if isinstance(source_map["academic"], dict) else {}
     planning = academic_payload.get("planning") if isinstance(academic_payload.get("planning"), dict) else _unavailable("—", "Sin cálculo de planeaciones")
     observations = academic_payload.get("observations") if isinstance(academic_payload.get("observations"), dict) else _unavailable("—", "Sin cálculo de observaciones")
+    observation_coverage = academic_payload.get("observation_coverage") if isinstance(academic_payload.get("observation_coverage"), dict) else _unavailable("—", "Sin cálculo de cobertura docente")
     sapf = _sapf_metric(source_map["sapf"])
 
     metrics = {
@@ -826,6 +894,7 @@ async def _collect_plantel(code: str, start_date: date, end_date: date, scope: s
         "staff_attendance": staff_attendance,
         "planning": planning,
         "observations": observations,
+        "observation_coverage": observation_coverage,
         "sapf": sapf,
     }
     general = _general_metric(metrics)
@@ -869,14 +938,15 @@ def _diagnostic(planteles: List[Dict[str, Any]], start_date: date, end_date: dat
                 "escaneos": _metric_evidence(metrics.get("scans") or {}, ["entries", "expected", "expected_population", "observed_max_entries", "basis"]),
                 "puntualidad_alumnos": _metric_evidence(metrics.get("student_punctuality") or {}, ["tardies", "opportunities", "basis"]),
                 "asistencia_personal": _metric_evidence(metrics.get("staff_attendance") or {}, ["records", "absences", "tardies", "incidents"]),
-                "planeaciones": _metric_evidence(metrics.get("planning") or {}, ["submitted", "reviewed", "pending", "active_teachers", "submitted_teachers", "weeks", "expected", "basis"]),
-                "observaciones": _metric_evidence(metrics.get("observations") or {}, ["active_teachers", "observed_teachers", "without_observation", "total_observations", "window_start", "window_end"]),
+                "planeaciones": _metric_evidence(metrics.get("planning") or {}, ["submitted", "reviewed", "pending", "active_teachers", "submitted_teachers", "weeks", "expected", "period_week_start", "period_week_end", "created_at_fallback_rows", "basis"]),
+                "observaciones": _metric_evidence(metrics.get("observations") or {}, ["total_observations", "monthly_goal", "active_teachers", "window_start", "window_end", "active_window_start", "active_window_end", "basis"]),
+                "cobertura_observaciones": _metric_evidence(metrics.get("observation_coverage") or {}, ["active_teachers", "observed_teachers", "teachers_with_2plus", "without_observation", "window_start", "window_end", "basis"]),
                 "sapf": _metric_evidence(metrics.get("sapf") or {}, ["open_cases", "closed_cases", "total_cases", "total_fichas", "complaints"]),
             },
             "general": _metric_evidence(metrics.get("general") or {}, ["weights_used", "weights_total", "metrics_used", "minimum_weight", "minimum_metrics"]),
         }
     return {
-        "v": "corp-diagnostic-v4",
+        "v": "corp-diagnostic-v5",
         "range": {"start": start_date.isoformat(), "end": end_date.isoformat(), "business_days": len(business_days)},
         "planteles": rows,
     }
@@ -983,6 +1053,7 @@ def _metric_label(key: str) -> str:
         "staff_attendance": "Asistencia personal",
         "planning": "Planeaciones",
         "observations": "Observaciones",
+        "observation_coverage": "Cobertura obs.",
         "sapf": "SAPF",
     }.get(key, key)
 

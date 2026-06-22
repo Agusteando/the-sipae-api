@@ -65,66 +65,137 @@ async def count_active_academic_teachers(academic_filters: List[Dict[str, str]])
         conn.close()
 
 
-async def fetch_planning_review_totals(academic_filters: List[Dict[str, str]], start_date: date, end_date: date) -> Dict[str, Any]:
+async def fetch_planning_review_totals(
+    academic_filters: List[Dict[str, str]],
+    start_date: date,
+    end_date: date,
+    period_week_start: date,
+    period_week_end: date,
+) -> Dict[str, Any]:
+    """Review status for planeaciones belonging to the selected period.
+
+    The numerator/denominator must be based on the planning week, not merely on
+    creation date. Creation date is only a fallback when the row does not expose
+    a parseable week/weekEnd window.
+    """
     user_where, user_params = _build_academic_where(academic_filters, "u")
+    plan_where, plan_params = _build_academic_where(academic_filters, "p")
     reviewed = _reviewed_clause("p")
+    period_clause = """
+        (
+            (p.week IS NOT NULL AND p.weekEnd IS NOT NULL
+             AND DATE(p.week) <= %s AND DATE(p.weekEnd) >= %s)
+            OR (p.week IS NOT NULL AND p.weekEnd IS NULL
+                AND DATE(p.week) >= %s AND DATE(p.week) <= %s)
+            OR ((p.week IS NULL OR DATE(p.week) IS NULL)
+                AND (p.weekEnd IS NULL OR DATE(p.weekEnd) IS NULL)
+                AND p.created_at >= %s AND p.created_at < DATE_ADD(%s, INTERVAL 1 DAY))
+        )
+    """
+    unit_key = "CONCAT_WS('|', p.docente, IFNULL(DATE(p.week), p.week), IFNULL(DATE(p.weekEnd), p.weekEnd), IFNULL(p.ciclo, ''))"
     query = f"""
         SELECT
-            COUNT(DISTINCT CONCAT_WS('|', p.docente, p.week, IFNULL(p.ciclo, ''))) AS submitted_units,
-            COUNT(DISTINCT CASE WHEN {reviewed}
-                THEN CONCAT_WS('|', p.docente, p.week, IFNULL(p.ciclo, '')) END) AS reviewed_units,
-            COUNT(DISTINCT CASE WHEN NOT {reviewed}
-                THEN CONCAT_WS('|', p.docente, p.week, IFNULL(p.ciclo, '')) END) AS pending_units,
-            COUNT(DISTINCT p.docente) AS docentes_con_planeacion
+            COUNT(DISTINCT {unit_key}) AS submitted_units,
+            COUNT(DISTINCT CASE WHEN {reviewed} THEN {unit_key} END) AS reviewed_units,
+            COUNT(DISTINCT CASE WHEN NOT {reviewed} THEN {unit_key} END) AS pending_units,
+            COUNT(DISTINCT p.docente) AS docentes_con_planeacion,
+            MIN(DATE(p.week)) AS min_week,
+            MAX(DATE(p.weekEnd)) AS max_week_end,
+            SUM(CASE WHEN (p.week IS NULL OR DATE(p.week) IS NULL)
+                      AND (p.weekEnd IS NULL OR DATE(p.weekEnd) IS NULL)
+                     THEN 1 ELSE 0 END) AS created_at_fallback_rows
         FROM planeaciones p
         JOIN usuarios u ON u.username = p.docente
         WHERE {user_where}
-          AND p.created_at >= %s
-          AND p.created_at < DATE_ADD(%s, INTERVAL 1 DAY)
+          AND {plan_where}
+          AND {period_clause}
           AND p.flagged = 0
-          AND p.week IS NOT NULL
           AND p.docente IS NOT NULL
           AND TRIM(p.docente) <> ''
           AND COALESCE(u.coordinador, 0) = 0
           AND COALESCE(u.banned, 0) = 0
           AND (u.ISSSTE IS NULL OR u.ISSSTE = 0)
     """
+    params = (
+        *user_params,
+        *plan_params,
+        period_week_end,
+        period_week_start,
+        period_week_start,
+        period_week_end,
+        start_date,
+        end_date,
+    )
     conn = await get_attendance_db_connection()
     try:
         async with conn.cursor(aiomysql.DictCursor) as cur:
-            await cur.execute(query, (*user_params, start_date, end_date))
+            await cur.execute(query, params)
             return await cur.fetchone() or {}
     finally:
         conn.close()
 
 
-async def fetch_observation_teacher_totals(
+async def fetch_observation_monthly_totals(
     academic_filters: List[Dict[str, str]],
+    active_start: date,
+    active_end: date,
     observation_start: date,
     observation_end: date,
 ) -> Dict[str, Any]:
-    user_where, user_params = _build_academic_where(academic_filters, "u")
+    """Monthly observation output and coverage for currently active docentes.
+
+    Active docentes are limited to users with at least one planeación in the last
+    three weeks. This avoids counting stale/irrelevant users in the denominator.
+    """
+    active_user_where, active_user_params = _build_academic_where(academic_filters, "recent_u")
+    active_plan_where, active_plan_params = _build_academic_where(academic_filters, "recent")
+    obs_where, obs_params = _build_academic_where(academic_filters, "obs")
     query = f"""
         SELECT
-            COUNT(DISTINCT u.username) AS active_teachers,
-            COUNT(DISTINCT obs.docente) AS observed_teachers,
-            COUNT(obs.id) AS total_observations
-        FROM usuarios u
-        LEFT JOIN observaciones_form_submissions obs
-               ON obs.docente = u.username
+            COUNT(active_docentes.docente) AS active_teachers,
+            SUM(CASE WHEN COALESCE(obs_counts.total_observations, 0) >= 1 THEN 1 ELSE 0 END) AS observed_teachers,
+            SUM(CASE WHEN COALESCE(obs_counts.total_observations, 0) >= 2 THEN 1 ELSE 0 END) AS teachers_with_2plus,
+            COALESCE(SUM(COALESCE(obs_counts.total_observations, 0)), 0) AS total_observations
+        FROM (
+            SELECT DISTINCT recent.docente
+            FROM planeaciones recent
+            JOIN usuarios recent_u ON recent_u.username = recent.docente
+            WHERE {active_user_where}
+              AND {active_plan_where}
+              AND recent.created_at >= %s
+              AND recent.created_at < DATE_ADD(%s, INTERVAL 1 DAY)
+              AND recent.flagged = 0
+              AND recent.week IS NOT NULL
+              AND recent.docente IS NOT NULL
+              AND TRIM(recent.docente) <> ''
+              AND COALESCE(recent_u.coordinador, 0) = 0
+              AND COALESCE(recent_u.banned, 0) = 0
+              AND (recent_u.ISSSTE IS NULL OR recent_u.ISSSTE = 0)
+        ) active_docentes
+        LEFT JOIN (
+            SELECT obs.docente, COUNT(obs.id) AS total_observations
+            FROM observaciones_form_submissions obs
+            WHERE {obs_where}
               AND obs.submission_date >= %s
               AND obs.submission_date < DATE_ADD(%s, INTERVAL 1 DAY)
-        WHERE {user_where}
-          AND u.username IS NOT NULL
-          AND TRIM(u.username) <> ''
-          AND COALESCE(u.coordinador, 0) = 0
-          AND COALESCE(u.banned, 0) = 0
-          AND (u.ISSSTE IS NULL OR u.ISSSTE = 0)
+              AND obs.docente IS NOT NULL
+              AND TRIM(obs.docente) <> ''
+            GROUP BY obs.docente
+        ) obs_counts ON obs_counts.docente = active_docentes.docente
     """
+    params = (
+        *active_user_params,
+        *active_plan_params,
+        active_start,
+        active_end,
+        *obs_params,
+        observation_start,
+        observation_end,
+    )
     conn = await get_attendance_db_connection()
     try:
         async with conn.cursor(aiomysql.DictCursor) as cur:
-            await cur.execute(query, (observation_start, observation_end, *user_params))
+            await cur.execute(query, params)
             return await cur.fetchone() or {}
     finally:
         conn.close()

@@ -1,1 +1,1 @@
-Ajusta denominadores y evidencia del índice corporativo
+Ajusta planeaciones y observaciones del índice corporativo
