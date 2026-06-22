@@ -9,13 +9,16 @@ from zoneinfo import ZoneInfo
 
 from core.logger import get_logger
 from core.utils import resolve_plantel
-from modules.attendance.service import get_attendance_detail_report
 from modules.employee_attendance.service import get_kardex_attendance_report
-from modules.husky.service import calculate_husky_daily_rate, get_plantel_retardos
 from modules.sapf.service import get_sapf_overview_report
+from integrations.external_bot import fetch_expected_groups, fetch_expected_population
 
 from .report_repository import (
     count_active_academic_teachers,
+    fetch_academic_filter_shape,
+    fetch_attendance_rollup,
+    fetch_husky_daily_scan_counts,
+    fetch_husky_tardy_daily_counts,
     fetch_observation_teacher_totals,
     fetch_planning_review_totals,
 )
@@ -291,6 +294,208 @@ def _student_punctuality_metric(
     ), daily
 
 
+
+
+def _attendance_aliases(plantel_info: Dict[str, Any]) -> List[str]:
+    values = (
+        list(plantel_info.get("db_codes") or [])
+        + list(plantel_info.get("sapf_data_campuses") or [])
+        + [plantel_info.get("resolved_name", ""), plantel_info.get("short_name", "")]
+    )
+    out: List[str] = []
+    seen = set()
+    for value in values:
+        clean = str(value or "").strip()
+        key = clean.upper()
+        if clean and key not in seen:
+            seen.add(key)
+            out.append(clean)
+    return out or [str(plantel_info.get("db_code") or "")]
+
+
+def _husky_values(plantel_info: Dict[str, Any]) -> List[str]:
+    values = (
+        list(plantel_info.get("husky_db_codes") or [])
+        + list(plantel_info.get("db_codes") or [])
+        + list(plantel_info.get("sapf_data_campuses") or [])
+        + [plantel_info.get("resolved_name", ""), plantel_info.get("short_name", "")]
+    )
+    out: List[str] = []
+    seen = set()
+    for value in values:
+        clean = str(value or "").strip()
+        key = clean.upper()
+        if clean and key not in seen:
+            seen.add(key)
+            out.append(clean)
+    return out or [str(plantel_info.get("db_code") or "")]
+
+
+def _tardy_threshold(plantel_info: Dict[str, Any]) -> str:
+    db_code = str(plantel_info.get("db_code") or "").upper()
+    if db_code in {"PM", "PT"}:
+        return "08:01:00"
+    if db_code in {"SM", "ST"}:
+        return "07:01:00"
+    return "09:01:00"
+
+
+async def _safe_value_call(name: str, fn: Callable[[], Awaitable[Any]], timeout_seconds: float) -> Dict[str, Any]:
+    started = time.perf_counter()
+    try:
+        value = await asyncio.wait_for(fn(), timeout=timeout_seconds)
+        return {"_ok": True, "value": value, "_duration_ms": round((time.perf_counter() - started) * 1000, 1)}
+    except asyncio.TimeoutError:
+        message = f"{name} no respondió en {timeout_seconds:.0f}s"
+        logger.error("Corporate report source timed out: %s", message)
+        return {"_ok": False, "value": None, "error": message, "timeout": True, "_duration_ms": round((time.perf_counter() - started) * 1000, 1)}
+    except Exception as exc:
+        logger.error("Corporate report source failed: %s: %s", name, exc)
+        return {"_ok": False, "value": None, "error": str(exc), "_duration_ms": round((time.perf_counter() - started) * 1000, 1)}
+
+
+def _attendance_points_from_rollup(rows: List[Dict[str, Any]], business_days: List[date], expected_group_count: Optional[int]) -> List[Dict[str, Any]]:
+    allowed = {day.isoformat() for day in business_days}
+    by_day: Dict[str, Dict[str, Any]] = {}
+    groups_by_day: Dict[str, set[tuple[str, str]]] = defaultdict(set)
+    for row in rows or []:
+        day = _date_key(row.get("d_fecha"))
+        if not day or day not in allowed:
+            continue
+        item = by_day.setdefault(day, {"date": day, "records": 0, "present": 0, "absent": 0, "completed_lists": 0, "expected_lists": 0})
+        item["records"] += safe_int(row.get("records"))
+        item["present"] += safe_int(row.get("present"))
+        item["absent"] += safe_int(row.get("absent"))
+        grado = str(row.get("grado") or "").strip()
+        grupo = str(row.get("grupo") or "").strip()
+        if grado and grupo:
+            groups_by_day[day].add((grado, grupo))
+    observed_max_groups = max((len(groups) for groups in groups_by_day.values()), default=0)
+    daily_expected = expected_group_count if expected_group_count and expected_group_count > 0 else observed_max_groups
+    for day in business_days:
+        key = day.isoformat()
+        item = by_day.setdefault(key, {"date": key, "records": 0, "present": 0, "absent": 0, "completed_lists": 0, "expected_lists": 0})
+        item["completed_lists"] = len(groups_by_day.get(key) or set())
+        item["expected_lists"] = daily_expected if daily_expected > 0 else 0
+    return [by_day[day.isoformat()] for day in business_days]
+
+
+def _attendance_metrics_from_rollup(
+    rows: List[Dict[str, Any]],
+    expected_groups_result: Dict[str, Any],
+    business_days: List[date],
+) -> tuple[Dict[str, Any], Dict[str, Any], List[Dict[str, Any]]]:
+    expected_groups = expected_groups_result.get("value") if expected_groups_result.get("_ok") else None
+    bot_expected_count = len(expected_groups) if isinstance(expected_groups, list) else 0
+    points = _attendance_points_from_rollup(rows, business_days, bot_expected_count or None)
+    observed_max_groups = max((safe_int(p.get("completed_lists")) for p in points), default=0)
+    basis = "bot_expected_groups" if bot_expected_count > 0 else ("max_observed_daily_groups" if observed_max_groups > 0 else "none")
+
+    total_records = sum(safe_int(p.get("records")) for p in points)
+    present = sum(safe_int(p.get("present")) for p in points)
+    absent = sum(safe_int(p.get("absent")) for p in points)
+    expected_lists = sum(safe_int(p.get("expected_lists")) for p in points)
+    completed_lists = sum(min(safe_int(p.get("completed_lists")), safe_int(p.get("expected_lists")) or safe_int(p.get("completed_lists"))) for p in points)
+    missing_lists = max(expected_lists - completed_lists, 0) if expected_lists > 0 else 0
+
+    student_attendance = _metric(
+        pct(present, total_records),
+        f"{present:,} presentes de {total_records:,} registros" if total_records > 0 else "—",
+        f"{absent:,} ausencias registradas" if total_records > 0 else "Sin registros de asistencia",
+        {"present": present, "records": total_records, "absent": absent, "basis": "asistencia_table"},
+    )
+    roll_call = _metric(
+        pct(completed_lists, expected_lists),
+        f"{completed_lists:,} de {expected_lists:,} grupos/día capturados" if expected_lists > 0 else "—",
+        f"{missing_lists:,} grupos/día faltantes" if expected_lists > 0 else "Sin grupos esperados o capturados",
+        {
+            "expected": expected_lists,
+            "completed": completed_lists,
+            "missing": missing_lists,
+            "basis": basis,
+            "bot_groups": bot_expected_count,
+            "observed_max_groups": observed_max_groups,
+        },
+    )
+    return roll_call, student_attendance, points
+
+
+def _scans_metric_from_rows(
+    rows: List[Dict[str, Any]],
+    population_result: Dict[str, Any],
+    attendance_daily: List[Dict[str, Any]],
+    business_days: List[date],
+) -> tuple[Dict[str, Any], List[Dict[str, Any]]]:
+    expected_population = safe_int(population_result.get("value")) if population_result.get("_ok") else 0
+    by_day: Dict[str, Dict[str, int]] = defaultdict(lambda: {"entrada": 0, "salida": 0})
+    for row in rows or []:
+        day = _date_key(row.get("fecha"))
+        tipo = str(row.get("tipo_accion") or "").strip().lower()
+        if day and tipo in {"entrada", "salida"}:
+            by_day[day][tipo] += safe_int(row.get("total_scans"))
+
+    attendance_by_day = {item.get("date"): item for item in attendance_daily}
+    total_attendance_records = sum(safe_int(item.get("records")) for item in attendance_daily)
+    if expected_population > 0:
+        expected = expected_population * len(business_days)
+        basis = "bot_expected_population"
+    elif total_attendance_records > 0:
+        expected = total_attendance_records
+        basis = "attendance_records"
+    else:
+        expected = 0
+        basis = "none"
+
+    entries = sum(safe_int((by_day.get(day.isoformat()) or {}).get("entrada")) for day in business_days)
+    daily: List[Dict[str, Any]] = []
+    for day in business_days:
+        key = day.isoformat()
+        day_entries = safe_int((by_day.get(key) or {}).get("entrada"))
+        day_expected = expected_population if expected_population > 0 else safe_int((attendance_by_day.get(key) or {}).get("records"))
+        daily.append({"date": key, "entries": day_entries, "expected": day_expected, "score": pct(min(day_entries, day_expected), day_expected)})
+
+    return _metric(
+        pct(min(entries, expected), expected),
+        f"{entries:,} entradas de {expected:,} esperadas" if expected > 0 else "—",
+        f"Base: {basis.replace('_', ' ')}" if expected > 0 else "Sin población ni asistencia para comparar",
+        {"entries": entries, "expected": expected, "expected_population": expected_population, "basis": basis},
+    ), daily
+
+
+def _student_punctuality_metric_from_counts(
+    rows: List[Dict[str, Any]],
+    population_result: Dict[str, Any],
+    attendance_daily: List[Dict[str, Any]],
+    business_days: List[date],
+) -> tuple[Dict[str, Any], List[Dict[str, Any]]]:
+    tardies_by_day = {_date_key(row.get("date")): safe_int(row.get("tardies")) for row in rows or [] if _date_key(row.get("date"))}
+    expected_population = safe_int(population_result.get("value")) if population_result.get("_ok") else 0
+    total_attendance_records = sum(safe_int(item.get("records")) for item in attendance_daily)
+    if expected_population > 0:
+        opportunities = expected_population * len(business_days)
+        basis = "bot_expected_population"
+    elif total_attendance_records > 0:
+        opportunities = total_attendance_records
+        basis = "attendance_records"
+    else:
+        opportunities = 0
+        basis = "none"
+    total_tardies = sum(tardies_by_day.values())
+    attendance_by_day = {item.get("date"): item for item in attendance_daily}
+    daily: List[Dict[str, Any]] = []
+    for day in business_days:
+        key = day.isoformat()
+        day_opportunities = expected_population if expected_population > 0 else safe_int((attendance_by_day.get(key) or {}).get("records"))
+        day_tardies = safe_int(tardies_by_day.get(key))
+        daily.append({"date": key, "tardies": day_tardies, "opportunities": day_opportunities, "score": bounded_inverse_rate(day_tardies, day_opportunities)})
+    return _metric(
+        bounded_inverse_rate(total_tardies, opportunities),
+        f"{total_tardies:,} retardos" if opportunities > 0 else "—",
+        f"{opportunities:,} oportunidades alumno/día · base {basis.replace('_', ' ')}" if opportunities > 0 else "Sin oportunidades para comparar",
+        {"tardies": total_tardies, "opportunities": opportunities, "basis": basis},
+    ), daily
+
+
 def _staff_attendance_metric(payload: Dict[str, Any]) -> Dict[str, Any]:
     if not payload.get("_ok", True) or payload.get("error"):
         return _unavailable("—", "Asistencia personal no respondió")
@@ -314,17 +519,29 @@ async def _planning_metric(plantel_info: Dict[str, Any], start_date: date, end_d
         return _unavailable("—", "Plantel sin filtro académico")
     active_teachers = await count_active_academic_teachers(academic_filters)
     weeks = _weeks_touched(business_days)
-    expected = active_teachers * weeks
+    expected_by_teacher_week = active_teachers * weeks
     totals = await fetch_planning_review_totals(academic_filters, start_date, end_date)
     reviewed = safe_int(totals.get("reviewed_units"))
     submitted = safe_int(totals.get("submitted_units"))
-    pending = max(expected - reviewed, 0) if expected > 0 else 0
-    score = pct(min(reviewed, expected), expected)
+    pending_submitted = max(submitted - reviewed, 0)
+
+    # Planeaciones measures review completion for submitted plans.
+    # Teacher-week expectation remains in diagnostic only; using it as the denominator
+    # falsely punished campuses when the actual source only exposes submitted plans.
+    score = pct(min(reviewed, submitted), submitted)
     return _metric(
         score,
-        f"{reviewed:,} revisadas de {expected:,} esperadas" if expected > 0 else "—",
-        f"{pending:,} pendientes · {submitted:,} entregadas" if expected > 0 else "Sin docentes activos o semanas escolares",
-        {"active_teachers": active_teachers, "weeks": weeks, "expected": expected, "reviewed": reviewed, "submitted": submitted, "pending": pending},
+        f"{reviewed:,} revisadas de {submitted:,} entregadas" if submitted > 0 else "—",
+        f"{pending_submitted:,} entregadas sin revisión" if submitted > 0 else "Sin planeaciones entregadas en el periodo",
+        {
+            "active_teachers": active_teachers,
+            "weeks": weeks,
+            "expected": expected_by_teacher_week,
+            "reviewed": reviewed,
+            "submitted": submitted,
+            "pending": pending_submitted,
+            "basis": "reviewed_submitted_plans",
+        },
     )
 
 
@@ -349,16 +566,18 @@ async def _observations_metric(plantel_info: Dict[str, Any], end_date: date) -> 
 
 async def _academic_metrics(plantel_info: Dict[str, Any], start_date: date, end_date: date, business_days: List[date]) -> Dict[str, Dict[str, Any]]:
     try:
-        planning, observations = await asyncio.gather(
+        planning, observations, shape = await asyncio.gather(
             _planning_metric(plantel_info, start_date, end_date, business_days),
             _observations_metric(plantel_info, end_date),
+            fetch_academic_filter_shape(plantel_info.get("academic_filters") or [], start_date, end_date),
         )
-        return {"planning": planning, "observations": observations, "_ok": True}
+        return {"planning": planning, "observations": observations, "shape": shape, "_ok": True}
     except Exception as exc:
         logger.error("Corporate academic metrics failed for %s: %s", plantel_info.get("db_code"), exc)
         return {
             "planning": _unavailable("—", f"Error en planeaciones: {exc}"),
             "observations": _unavailable("—", f"Error en observaciones: {exc}"),
+            "shape": {},
             "_ok": False,
             "error": str(exc),
         }
@@ -488,27 +707,39 @@ def _clean_sources(sources: Dict[str, Dict[str, Any]]) -> Dict[str, Any]:
 
 async def _collect_plantel(code: str, start_date: date, end_date: date, scope: str, business_days: List[date]) -> Dict[str, Any]:
     plantel_info = resolve_plantel(code)
+    attendance_aliases = _attendance_aliases(plantel_info)
+    husky_values = _husky_values(plantel_info)
+    sheets_code = plantel_info.get("sheets_code") or code
+    threshold_time = _tardy_threshold(plantel_info)
 
     sources = await asyncio.gather(
-        _safe_call("attendance", lambda: get_attendance_detail_report(code, start_date, end_date, scope), SOURCE_TIMEOUTS["attendance"]),
-        _safe_call("husky", lambda: calculate_husky_daily_rate(code, start_date, end_date, scope), SOURCE_TIMEOUTS["husky"]),
-        _safe_call("retardos", lambda: get_plantel_retardos(code, start_date, end_date, scope), SOURCE_TIMEOUTS["retardos"]),
+        _safe_value_call("expected_groups", lambda: fetch_expected_groups(sheets_code), 6.0),
+        _safe_value_call("expected_population", lambda: fetch_expected_population(sheets_code), 6.0),
+        _safe_value_call("attendance_db", lambda: fetch_attendance_rollup(attendance_aliases, start_date, end_date), 12.0),
+        _safe_value_call("husky_scans_db", lambda: fetch_husky_daily_scan_counts(husky_values, start_date, end_date), 12.0),
+        _safe_value_call("retardos_db", lambda: fetch_husky_tardy_daily_counts(husky_values, start_date, end_date, threshold_time), 12.0),
         _safe_call("staff_attendance", lambda: get_kardex_attendance_report(code, start_date, end_date, scope), SOURCE_TIMEOUTS["staff_attendance"]),
         _safe_call("academic", lambda: _academic_metrics(plantel_info, start_date, end_date, business_days), SOURCE_TIMEOUTS["academic"]),
         _safe_call("sapf", lambda: get_sapf_overview_report(code, start_date, end_date, scope), SOURCE_TIMEOUTS["sapf"]),
     )
     source_map = {
-        "attendance": sources[0],
-        "husky": sources[1],
-        "retardos": sources[2],
-        "staff_attendance": sources[3],
-        "academic": sources[4],
-        "sapf": sources[5],
+        "expected_groups": sources[0],
+        "expected_population": sources[1],
+        "attendance": sources[2],
+        "husky": sources[3],
+        "retardos": sources[4],
+        "staff_attendance": sources[5],
+        "academic": sources[6],
+        "sapf": sources[7],
     }
 
-    roll_call, student_attendance, attendance_daily = _attendance_metrics(source_map["attendance"], business_days)
-    scans, scans_daily = _scans_metric(source_map["husky"], business_days)
-    student_punctuality, punctuality_daily = _student_punctuality_metric(source_map["husky"], source_map["retardos"], attendance_daily, business_days)
+    attendance_rows = source_map["attendance"].get("value") if source_map["attendance"].get("_ok") else []
+    husky_rows = source_map["husky"].get("value") if source_map["husky"].get("_ok") else []
+    tardy_rows = source_map["retardos"].get("value") if source_map["retardos"].get("_ok") else []
+
+    roll_call, student_attendance, attendance_daily = _attendance_metrics_from_rollup(attendance_rows, source_map["expected_groups"], business_days)
+    scans, scans_daily = _scans_metric_from_rows(husky_rows, source_map["expected_population"], attendance_daily, business_days)
+    student_punctuality, punctuality_daily = _student_punctuality_metric_from_counts(tardy_rows, source_map["expected_population"], attendance_daily, business_days)
     staff_attendance = _staff_attendance_metric(source_map["staff_attendance"])
     academic_payload = source_map["academic"] if isinstance(source_map["academic"], dict) else {}
     planning = academic_payload.get("planning") if isinstance(academic_payload.get("planning"), dict) else _unavailable("—", "Sin cálculo de planeaciones")
@@ -539,6 +770,7 @@ async def _collect_plantel(code: str, start_date: date, end_date: date, scope: s
         "domains": metrics,
         "daily": _merge_daily_points(attendance_daily, scans_daily, punctuality_daily, business_days),
         "source_audit": _clean_sources(source_map),
+        "academic_shape": academic_payload.get("shape") if isinstance(academic_payload, dict) else {},
     }
 
 
@@ -560,18 +792,19 @@ def _diagnostic(planteles: List[Dict[str, Any]], start_date: date, end_date: dat
             "name": plantel.get("resolved_name"),
             "sources": plantel.get("source_audit") or {},
             "metrics": {
-                "pase_lista": _metric_evidence(metrics.get("roll_call") or {}, ["completed", "expected", "missing"]),
-                "asistencia_alumnos": _metric_evidence(metrics.get("student_attendance") or {}, ["present", "records", "absent"]),
-                "escaneos": _metric_evidence(metrics.get("scans") or {}, ["entries", "expected", "expected_population"]),
-                "puntualidad_alumnos": _metric_evidence(metrics.get("student_punctuality") or {}, ["tardies", "opportunities"]),
+                "pase_lista": _metric_evidence(metrics.get("roll_call") or {}, ["completed", "expected", "missing", "basis", "bot_groups", "observed_max_groups"]),
+                "asistencia_alumnos": _metric_evidence(metrics.get("student_attendance") or {}, ["present", "records", "absent", "basis"]),
+                "escaneos": _metric_evidence(metrics.get("scans") or {}, ["entries", "expected", "expected_population", "basis"]),
+                "puntualidad_alumnos": _metric_evidence(metrics.get("student_punctuality") or {}, ["tardies", "opportunities", "basis"]),
                 "asistencia_personal": _metric_evidence(metrics.get("staff_attendance") or {}, ["records", "absences", "tardies", "incidents"]),
-                "planeaciones": _metric_evidence(metrics.get("planning") or {}, ["active_teachers", "weeks", "expected", "submitted", "reviewed", "pending"]),
+                "planeaciones": _metric_evidence(metrics.get("planning") or {}, ["submitted", "reviewed", "pending", "active_teachers", "weeks", "expected", "basis"]),
                 "observaciones": _metric_evidence(metrics.get("observations") or {}, ["active_teachers", "observed_teachers", "without_observation", "total_observations", "window_start", "window_end"]),
                 "sapf": _metric_evidence(metrics.get("sapf") or {}, ["open_cases", "closed_cases", "total_cases", "total_fichas", "complaints"]),
             },
+            "shape": plantel.get("academic_shape") or {},
         }
     return {
-        "v": "corp-diagnostic-v1",
+        "v": "corp-diagnostic-v2",
         "range": {"start": start_date.isoformat(), "end": end_date.isoformat(), "business_days": len(business_days)},
         "planteles": rows,
     }
@@ -727,7 +960,7 @@ async def get_corporate_compliance_index(
         "source_audit": {p["plantel"]: p.get("source_audit") for p in plantel_payloads},
         "diagnostic": _diagnostic(plantel_payloads, start_date, end_date, business_days),
         "meta": {
-            "logic_version": "2026-06-22-executive-1-100-v3",
+            "logic_version": "2026-06-22-executive-1-100-v4",
             "start_date": start_date.isoformat(),
             "end_date": end_date.isoformat(),
             "business_days": len(business_days),

@@ -1,1 +1,1 @@
-Agrega diagnóstico compacto al índice corporativo
+Corrige fuentes y fórmulas del índice corporativo
