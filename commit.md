@@ -1,1 +1,1 @@
-Corrige evidencia mínima y consultas del índice corporativo
+Ajusta denominadores y evidencia del índice corporativo

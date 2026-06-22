@@ -147,30 +147,29 @@ def _normalize_values(values: List[str] | str) -> List[str]:
 
 
 def _text_alias_clause(column_expr: str, values: List[str] | str) -> Tuple[str, List[str]]:
-    """Build a compact exact-match alias clause.
+    """Build an index-friendly exact-match alias clause.
 
-    The previous report used contained LIKE checks for every alias. That made
-    these corporate aggregates scan too much data and time out. The executive
-    report should not guess via broad text contains; it should match the known
-    source identifiers exactly and fall back to unavailable when the shape is
-    not known.
+    The corporate report must not scan large attendance/access tables with
+    functions over the plantel column. Known source aliases are matched exactly;
+    unresolved source shapes stay unavailable and are exposed in diagnostic.
     """
     raw_values = [values] if isinstance(values, str) else list(values or [])
-    raw_aliases: List[str] = []
-    seen_raw = set()
+    aliases: List[str] = []
+    seen = set()
     for value in raw_values:
         clean = str(value or "").strip()
-        if clean and clean not in seen_raw:
-            seen_raw.add(clean)
-            raw_aliases.append(clean)
+        if not clean:
+            continue
+        variants = [clean, " ".join(clean.upper().split())]
+        for variant in variants:
+            if variant and variant not in seen:
+                seen.add(variant)
+                aliases.append(variant)
 
-    aliases = _normalize_values(raw_aliases)
-    raw_exact = ", ".join(["%s" for _ in raw_aliases]) or "%s"
-    upper_exact = ", ".join(["%s" for _ in aliases]) or "%s"
-    return (
-        f"({column_expr} IN ({raw_exact}) OR TRIM(UPPER({column_expr})) IN ({upper_exact}))",
-        [*(raw_aliases or [""]), *(aliases or [""])],
-    )
+    if not aliases:
+        aliases = [""]
+    placeholders = ", ".join(["%s" for _ in aliases])
+    return f"{column_expr} IN ({placeholders})", aliases
 
 
 async def fetch_attendance_rollup(plantel_values: List[str] | str, start_date: date, end_date: date) -> List[Dict[str, Any]]:
@@ -240,7 +239,6 @@ async def fetch_husky_daily_scan_counts(plantel_values: List[str] | str, start_d
         ) src
         WHERE src.user_id IS NOT NULL
           AND LOWER(TRIM(src.tipo_accion)) IN ('entrada', 'salida')
-          AND DAYOFWEEK(src.timestamp) NOT IN (1, 7)
         GROUP BY DATE(src.timestamp), LOWER(TRIM(src.tipo_accion))
         ORDER BY DATE(src.timestamp)
     """
@@ -271,7 +269,6 @@ async def fetch_husky_tardy_daily_counts(plantel_values: List[str] | str, start_
               AND A.timestamp < DATE_ADD(%s, INTERVAL 1 DAY)
                   AND A.timestamp IS NOT NULL
                   AND LOWER(TRIM(A.type)) = 'entrada'
-                  AND DAYOFWEEK(A.timestamp) NOT IN (1, 7)
 
                 UNION ALL
 
@@ -284,7 +281,6 @@ async def fetch_husky_tardy_daily_counts(plantel_values: List[str] | str, start_
               AND A.timestamp < DATE_ADD(%s, INTERVAL 1 DAY)
                   AND A.timestamp IS NOT NULL
                   AND LOWER(TRIM(A.type)) = 'entrada'
-                  AND DAYOFWEEK(A.timestamp) NOT IN (1, 7)
             ) src
             WHERE src.user_id IS NOT NULL
             GROUP BY DATE(src.timestamp), src.user_id
