@@ -1,1 +1,1 @@
-Corrige cálculo ejecutivo del índice corporativo
+Agrega diagnóstico compacto al índice corporativo

@@ -542,6 +542,41 @@ async def _collect_plantel(code: str, start_date: date, end_date: date, scope: s
     }
 
 
+
+
+def _metric_evidence(metric: Dict[str, Any], keys: Iterable[str]) -> Dict[str, Any]:
+    output: Dict[str, Any] = {"score": metric.get("score")}
+    for key in keys:
+        if key in metric:
+            output[key] = metric.get(key)
+    return output
+
+
+def _diagnostic(planteles: List[Dict[str, Any]], start_date: date, end_date: date, business_days: List[date]) -> Dict[str, Any]:
+    rows: Dict[str, Any] = {}
+    for plantel in sorted(planteles, key=lambda item: item.get("order", 999)):
+        metrics = plantel.get("metrics") or {}
+        rows[str(plantel.get("plantel"))] = {
+            "name": plantel.get("resolved_name"),
+            "sources": plantel.get("source_audit") or {},
+            "metrics": {
+                "pase_lista": _metric_evidence(metrics.get("roll_call") or {}, ["completed", "expected", "missing"]),
+                "asistencia_alumnos": _metric_evidence(metrics.get("student_attendance") or {}, ["present", "records", "absent"]),
+                "escaneos": _metric_evidence(metrics.get("scans") or {}, ["entries", "expected", "expected_population"]),
+                "puntualidad_alumnos": _metric_evidence(metrics.get("student_punctuality") or {}, ["tardies", "opportunities"]),
+                "asistencia_personal": _metric_evidence(metrics.get("staff_attendance") or {}, ["records", "absences", "tardies", "incidents"]),
+                "planeaciones": _metric_evidence(metrics.get("planning") or {}, ["active_teachers", "weeks", "expected", "submitted", "reviewed", "pending"]),
+                "observaciones": _metric_evidence(metrics.get("observations") or {}, ["active_teachers", "observed_teachers", "without_observation", "total_observations", "window_start", "window_end"]),
+                "sapf": _metric_evidence(metrics.get("sapf") or {}, ["open_cases", "closed_cases", "total_cases", "total_fichas", "complaints"]),
+            },
+        }
+    return {
+        "v": "corp-diagnostic-v1",
+        "range": {"start": start_date.isoformat(), "end": end_date.isoformat(), "business_days": len(business_days)},
+        "planteles": rows,
+    }
+
+
 def _domain_averages(planteles: List[Dict[str, Any]]) -> Dict[str, Any]:
     output: Dict[str, Any] = {}
     for key in DISPLAY_METRICS:
@@ -690,6 +725,7 @@ async def get_corporate_compliance_index(
         "trend": _bucketed_trend(plantel_payloads, start_date, end_date),
         "planteles": plantel_payloads,
         "source_audit": {p["plantel"]: p.get("source_audit") for p in plantel_payloads},
+        "diagnostic": _diagnostic(plantel_payloads, start_date, end_date, business_days),
         "meta": {
             "logic_version": "2026-06-22-executive-1-100-v3",
             "start_date": start_date.isoformat(),

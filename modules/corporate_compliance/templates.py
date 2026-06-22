@@ -109,6 +109,13 @@ CORPORATE_COMPLIANCE_HTML = r'''
     .detail-table th, .detail-table td { padding: 12px 13px; border-bottom: 1px solid var(--line); text-align: left; }
     .detail-table tr:last-child td { border-bottom: 0; }
     .detail-table th { background: #fafafa; color: #4b5563; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; font-weight: 850; }
+
+    .diagnostic-box { display: grid; gap: 10px; }
+    .diag-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+    .copy-btn { border: 1px solid var(--line); background: #fff; border-radius: 999px; padding: 8px 12px; font-size: 12px; font-weight: 850; color: #374151; cursor: pointer; }
+    .diag-help { color: var(--muted); font-size: 12px; }
+    .diag-json { margin: 0; min-height: 150px; max-height: 260px; overflow: auto; border: 1px solid var(--line); border-radius: 14px; background: #111827; color: #e5e7eb; padding: 12px; font-size: 11px; line-height: 1.5; white-space: pre-wrap; word-break: break-word; }
+
     @media (max-width: 1100px) { .topbar-inner, .hero, .charts, .trend-grid, .detail-grid { grid-template-columns: 1fr; } .filters { justify-content: flex-start; } }
     @media (max-width: 720px) { .page { padding: 14px 12px 48px; } .topbar-inner { padding: 12px; } .kpi-value { font-size: 33px; } .chart-card, .line-chart { min-height: 300px; height: 300px; } }
   </style>
@@ -198,6 +205,17 @@ CORPORATE_COMPLIANCE_HTML = r'''
             <table class="detail-table" id="detailTable"></table>
           </div>
         </section>
+
+        <section class="panel">
+          <div class="section-head"><div><div class="section-label">Diagnóstico</div><div class="section-title">JSON compacto para validar datos</div></div></div>
+          <div class="section-body diagnostic-box">
+            <div class="diag-actions">
+              <button class="copy-btn" id="copyDiagnosticBtn">Copiar diagnóstico</button>
+              <span class="diag-help">Pega este bloque en el chat para ajustar la lógica con datos reales.</span>
+            </div>
+            <pre class="diag-json" id="diagnosticJson">{}</pre>
+          </div>
+        </section>
       </div>
     </div>
   </main>
@@ -226,8 +244,10 @@ CORPORATE_COMPLIANCE_HTML = r'''
       });
     }
     function num(value) {
+      if (value === null || value === undefined || value === "") return null;
       var parsed = Number(value);
-      return isFinite(parsed) ? parsed : null;
+      if (!isFinite(parsed) || parsed <= 0) return null;
+      return parsed;
     }
     function pct(value) {
       var n = num(value);
@@ -277,6 +297,7 @@ CORPORATE_COMPLIANCE_HTML = r'''
         });
       }
       byId("refreshBtn").addEventListener("click", function () { loadReport(true); });
+      byId("copyDiagnosticBtn").addEventListener("click", copyDiagnostic);
       byId("startDate").addEventListener("change", function () { if (state.scope === "range") loadReport(false); });
       byId("endDate").addEventListener("change", function () { if (state.scope === "range") loadReport(false); });
       byId("trendMetric").addEventListener("change", renderTrend);
@@ -324,6 +345,7 @@ CORPORATE_COMPLIANCE_HTML = r'''
       renderBars();
       renderTrend();
       renderDetail();
+      renderDiagnostic();
     }
     function renderHero() {
       var aggregate = get(state.data, ["aggregate"], {});
@@ -464,6 +486,31 @@ CORPORATE_COMPLIANCE_HTML = r'''
       }
       table += '</tbody>';
       byId("detailTable").innerHTML = table;
+    }
+
+
+    function renderDiagnostic() {
+      var diagnostic = get(state.data, ["diagnostic"], {});
+      byId("diagnosticJson").textContent = JSON.stringify(diagnostic);
+    }
+    async function copyDiagnostic() {
+      var text = byId("diagnosticJson").textContent || "{}";
+      try {
+        if (navigator.clipboard && navigator.clipboard.writeText) await navigator.clipboard.writeText(text);
+        else {
+          var area = document.createElement("textarea");
+          area.value = text;
+          document.body.appendChild(area);
+          area.select();
+          document.execCommand("copy");
+          document.body.removeChild(area);
+        }
+        byId("copyDiagnosticBtn").textContent = "Copiado";
+        setTimeout(function () { byId("copyDiagnosticBtn").textContent = "Copiar diagnóstico"; }, 1400);
+      } catch (err) {
+        byId("copyDiagnosticBtn").textContent = "No se pudo copiar";
+        setTimeout(function () { byId("copyDiagnosticBtn").textContent = "Copiar diagnóstico"; }, 1800);
+      }
     }
 
     initControls();
