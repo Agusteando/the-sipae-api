@@ -70,7 +70,7 @@ CORPORATE_COMPLIANCE_HTML = r'''
     .section-body { padding: 17px; }
     .matrix-wrap { overflow-x: auto; }
     table { border-collapse: collapse; width: 100%; }
-    .matrix { min-width: 940px; border: 1px solid var(--line); border-radius: 14px; overflow: hidden; border-collapse: separate; border-spacing: 0; }
+    .matrix { min-width: 1280px; border: 1px solid var(--line); border-radius: 14px; overflow: hidden; border-collapse: separate; border-spacing: 0; }
     .matrix th, .matrix td { padding: 12px; border-bottom: 1px solid var(--line); border-right: 1px solid var(--line); text-align: left; }
     .matrix tr:last-child td { border-bottom: 0; }
     .matrix th:last-child, .matrix td:last-child { border-right: 0; }
@@ -143,13 +143,13 @@ CORPORATE_COMPLIANCE_HTML = r'''
       <section class="hero">
         <div class="panel intro">
           <h1>Cumplimiento corporativo</h1>
-          <div class="subtitle">Vista de dirección con valores de 0 a 100 por plantel y por área. El color indica el nivel de atención requerido.</div>
+          <div class="subtitle">Vista de dirección con valores de 1 a 100 por plantel y por métrica. Donde no hay denominador real se muestra —.</div>
           <div class="stamp-row">
             <span class="stamp" id="periodStamp">Periodo —</span>
             <span class="stamp" id="updatedStamp">Actualizado —</span>
             <span class="stamp"><span class="dot green"></span>85–100</span>
             <span class="stamp"><span class="dot yellow"></span>70–84</span>
-            <span class="stamp"><span class="dot red"></span>0–69</span>
+            <span class="stamp"><span class="dot red"></span>1–69</span>
           </div>
         </div>
         <div class="panel kpi"><div><div class="kpi-label">General</div><div class="kpi-value score gray" id="generalScore">—</div></div><div><div class="kpi-name" id="generalTitle">Sin datos</div><div class="kpi-detail" id="generalDetail">—</div></div></div>
@@ -167,7 +167,7 @@ CORPORATE_COMPLIANCE_HTML = r'''
           <div class="section-head"><div><div class="section-label">Comparativo</div><div class="section-title">Planteles y áreas</div></div></div>
           <div class="section-body charts">
             <div class="chart-card"><div class="chart-title">Cumplimiento general por plantel</div><div id="plantelBars" class="bar-list"></div></div>
-            <div class="chart-card"><div class="chart-title">Promedio por área</div><div id="metricBars" class="bar-list"></div></div>
+            <div class="chart-card"><div class="chart-title">Promedio por métrica</div><div id="metricBars" class="bar-list"></div></div>
           </div>
         </section>
 
@@ -176,9 +176,10 @@ CORPORATE_COMPLIANCE_HTML = r'''
             <div><div class="section-label">Tendencia</div><div class="section-title">Evolución del periodo</div></div>
             <select id="trendMetric" class="select">
               <option value="general">General</option>
-              <option value="attendance">Asistencia</option>
-              <option value="lists">Listas</option>
-              <option value="tardies">Retardos</option>
+              <option value="roll_call">Pase de lista</option>
+              <option value="student_attendance">Asistencia alumnos</option>
+              <option value="scans">Escaneos</option>
+              <option value="student_punctuality">Puntualidad alumnos</option>
             </select>
           </div>
           <div class="section-body trend-grid">
@@ -203,8 +204,8 @@ CORPORATE_COMPLIANCE_HTML = r'''
 
   <script>
     var PLANTELES = ["PT", "PM", "ST", "SM", "PREET", "PREEM"];
-    var METRIC_ORDER = ["general", "attendance", "lists", "tardies", "academic", "sapf"];
-    var METRIC_LABELS = { general: "General", attendance: "Asistencia", lists: "Listas", tardies: "Retardos", academic: "Académico", sapf: "SAPF" };
+    var METRIC_ORDER = ["general", "roll_call", "student_attendance", "scans", "student_punctuality", "staff_attendance", "planning", "observations", "sapf"];
+    var METRIC_LABELS = { general: "General", roll_call: "Pase de lista", student_attendance: "Asistencia alumnos", scans: "Escaneos", student_punctuality: "Puntualidad alumnos", staff_attendance: "Asistencia personal", planning: "Planeaciones", observations: "Observaciones", sapf: "SAPF" };
     var LINE_COLORS = ["#111827", "#15803d", "#b91c1c", "#b45309", "#2563eb", "#7c3aed"];
     var state = { scope: "month", planteles: {}, data: null, selectedPlantel: null };
     for (var p0 = 0; p0 < PLANTELES.length; p0 += 1) state.planteles[PLANTELES[p0]] = true;

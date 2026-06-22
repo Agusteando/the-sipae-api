@@ -1,1 +1,1 @@
-Corrige diseño y carga del índice corporativo
+Corrige cálculo ejecutivo del índice corporativo

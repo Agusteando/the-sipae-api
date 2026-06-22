@@ -12,7 +12,7 @@ TRAFFIC_LABELS = {
     STATUS_GREEN: "Bien",
     STATUS_YELLOW: "Atención",
     STATUS_RED: "Bajo",
-    STATUS_EMPTY: "Sin datos",
+    STATUS_EMPTY: "Sin cálculo",
 }
 
 TRAFFIC_COLORS = {
@@ -23,11 +23,14 @@ TRAFFIC_COLORS = {
 }
 
 METRIC_WEIGHTS = {
-    "attendance": 30,
-    "lists": 25,
-    "tardies": 15,
-    "academic": 20,
-    "sapf": 10,
+    "roll_call": 20,
+    "student_attendance": 15,
+    "scans": 10,
+    "student_punctuality": 10,
+    "staff_attendance": 10,
+    "planning": 15,
+    "observations": 15,
+    "sapf": 5,
 }
 
 
@@ -53,10 +56,16 @@ def safe_int(value: Any, default: int = 0) -> int:
 
 
 def clamp_score(value: Any) -> Optional[float]:
+    """Executive score: calculable values are constrained to 1-100.
+
+    `None` means no real denominator/source. It must remain unavailable and never
+    become 0. Values at or below 0 are only possible when the denominator was real
+    and the result was completely failed; those display as 1 by policy.
+    """
     parsed = safe_float(value)
     if parsed is None:
         return None
-    return round(max(0.0, min(100.0, parsed)), 1)
+    return round(max(1.0, min(100.0, parsed)), 1)
 
 
 def pct(numerator: Any, denominator: Any) -> Optional[float]:
@@ -65,6 +74,14 @@ def pct(numerator: Any, denominator: Any) -> Optional[float]:
     if den is None or num is None or den <= 0:
         return None
     return clamp_score((num / den) * 100.0)
+
+
+def bounded_inverse_rate(events: Any, opportunities: Any) -> Optional[float]:
+    den = safe_float(opportunities)
+    ev = safe_float(events)
+    if den is None or ev is None or den <= 0:
+        return None
+    return clamp_score(100.0 - ((max(ev, 0.0) / den) * 100.0))
 
 
 def status_for_score(score: Optional[float]) -> str:
@@ -102,15 +119,11 @@ def weighted_score(scores: Mapping[str, Optional[float]], weights: Mapping[str, 
 
 
 def average_score(values: Iterable[Optional[float]]) -> Optional[float]:
-    parsed = [clamp_score(v) for v in values]
-    usable = [v for v in parsed if v is not None]
+    usable = []
+    for value in values:
+        score = clamp_score(value)
+        if score is not None:
+            usable.append(score)
     if not usable:
         return None
     return clamp_score(sum(usable) / len(usable))
-
-
-def score_from_penalty(rate: Optional[float], multiplier: float) -> Optional[float]:
-    parsed = safe_float(rate)
-    if parsed is None:
-        return None
-    return clamp_score(100.0 - (parsed * multiplier))
