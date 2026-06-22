@@ -72,86 +72,55 @@ async def fetch_planning_review_totals(
     period_week_start: date,
     period_week_end: date,
 ) -> Dict[str, Any]:
-    """Review status for planeaciones in the selected period.
+    """Review status for planeaciones created inside the selected period.
 
-    Preference order:
-    1) rows whose planning week/weekEnd overlaps the selected period;
-    2) rows created in the period only when the week fields are missing or not
-       parseable. This restores real submitted plans without counting parseable
-       future weeks as period work.
+    The report intentionally uses p.created_at as the source of truth. week/weekEnd
+    are not used because their stored shape is inconsistent across planteles.
     """
+    del period_week_start, period_week_end
     user_where, user_params = _build_academic_where(academic_filters, "u")
     plan_where, plan_params = _build_academic_where(academic_filters, "p")
     reviewed = _reviewed_clause("p")
-    week_start = "DATE(p.week)"
-    week_end = "DATE(p.weekEnd)"
-    period_match = f"""
-        (
-            ({week_start} IS NOT NULL AND {week_end} IS NOT NULL
-             AND {week_start} <= %s AND {week_end} >= %s)
-            OR ({week_start} IS NOT NULL AND {week_end} IS NULL
-                AND {week_start} >= %s AND {week_start} <= %s)
-        )
-    """
-    created_fallback_match = f"""
-        (
-            p.created_at >= %s AND p.created_at < DATE_ADD(%s, INTERVAL 1 DAY)
-            AND ({week_start} IS NULL AND {week_end} IS NULL)
-        )
-    """
-    unit_key = "CONCAT_WS('|', p.docente, COALESCE(DATE(p.week), DATE(p.created_at)), COALESCE(DATE(p.weekEnd), ''), IFNULL(p.ciclo, ''))"
+    unit_key = "CONCAT_WS('|', p.docente, DATE(p.created_at), IFNULL(p.ciclo, ''), IFNULL(p.id, ''))"
     query = f"""
         SELECT
-            COUNT(DISTINCT CASE WHEN {period_match} THEN {unit_key} END) AS period_submitted_units,
-            COUNT(DISTINCT CASE WHEN {period_match} AND {reviewed} THEN {unit_key} END) AS period_reviewed_units,
-            COUNT(DISTINCT CASE WHEN {period_match} AND NOT {reviewed} THEN {unit_key} END) AS period_pending_units,
-            COUNT(DISTINCT CASE WHEN {created_fallback_match} THEN {unit_key} END) AS created_submitted_units,
-            COUNT(DISTINCT CASE WHEN {created_fallback_match} AND {reviewed} THEN {unit_key} END) AS created_reviewed_units,
-            COUNT(DISTINCT CASE WHEN {created_fallback_match} AND NOT {reviewed} THEN {unit_key} END) AS created_pending_units,
-            COUNT(DISTINCT CASE WHEN ({period_match} OR {created_fallback_match}) THEN p.docente END) AS docentes_con_planeacion,
-            MIN(CASE WHEN {period_match} THEN DATE(p.week) END) AS min_week,
-            MAX(CASE WHEN {period_match} THEN DATE(p.weekEnd) END) AS max_week_end,
-            SUM(CASE WHEN DATE(p.week) IS NULL AND DATE(p.weekEnd) IS NULL THEN 1 ELSE 0 END) AS unparseable_week_rows,
-            SUM(CASE WHEN {period_match} THEN 1 ELSE 0 END) AS period_match_rows,
-            SUM(CASE WHEN {created_fallback_match} THEN 1 ELSE 0 END) AS created_at_fallback_rows
+            COUNT(DISTINCT {unit_key}) AS submitted_units,
+            COUNT(DISTINCT CASE WHEN {reviewed} THEN {unit_key} END) AS reviewed_units,
+            COUNT(DISTINCT CASE WHEN NOT {reviewed} THEN {unit_key} END) AS pending_units,
+            COUNT(DISTINCT p.docente) AS docentes_con_planeacion,
+            MIN(DATE(p.created_at)) AS min_created_at,
+            MAX(DATE(p.created_at)) AS max_created_at,
+            COUNT(*) AS raw_rows
         FROM planeaciones p
         JOIN usuarios u ON u.username = p.docente
         WHERE {user_where}
           AND {plan_where}
+          AND p.created_at >= %s
+          AND p.created_at < DATE_ADD(%s, INTERVAL 1 DAY)
           AND p.flagged = 0
           AND p.docente IS NOT NULL
           AND TRIM(p.docente) <> ''
           AND COALESCE(u.coordinador, 0) = 0
           AND COALESCE(u.banned, 0) = 0
           AND (u.ISSSTE IS NULL OR u.ISSSTE = 0)
-          AND ({period_match} OR {created_fallback_match})
     """
-    # period_match appears 8 times and created_fallback_match appears 6 times in the query.
-    period_params = (period_week_end, period_week_start, period_week_start, period_week_end)
-    created_params = (start_date, end_date)
-    params = (
-        *user_params,
-        *plan_params,
-        *period_params,  # period_submitted
-        *period_params,  # period_reviewed
-        *period_params,  # period_pending
-        *created_params, # created_submitted
-        *created_params, # created_reviewed
-        *created_params, # created_pending
-        *period_params,  # docentes period
-        *created_params, # docentes fallback
-        *period_params,  # min period week
-        *period_params,  # max period weekEnd
-        *period_params,  # period_match_rows
-        *created_params, # created_at_fallback_rows
-        *period_params,  # WHERE period
-        *created_params, # WHERE fallback
-    )
+    params = (*user_params, *plan_params, start_date, end_date)
     conn = await get_attendance_db_connection()
     try:
         async with conn.cursor(aiomysql.DictCursor) as cur:
             await cur.execute(query, params)
-            return await cur.fetchone() or {}
+            row = await cur.fetchone() or {}
+            # Backward-compatible aliases used by the service/diagnostic.
+            row["period_submitted_units"] = row.get("submitted_units") or 0
+            row["period_reviewed_units"] = row.get("reviewed_units") or 0
+            row["period_pending_units"] = row.get("pending_units") or 0
+            row["created_submitted_units"] = row.get("submitted_units") or 0
+            row["created_reviewed_units"] = row.get("reviewed_units") or 0
+            row["created_pending_units"] = row.get("pending_units") or 0
+            row["created_at_fallback_rows"] = row.get("raw_rows") or 0
+            row["period_match_rows"] = row.get("raw_rows") or 0
+            row["unparseable_week_rows"] = 0
+            return row
     finally:
         conn.close()
 
@@ -186,7 +155,6 @@ async def fetch_observation_monthly_totals(
               AND recent.created_at >= %s
               AND recent.created_at < DATE_ADD(%s, INTERVAL 1 DAY)
               AND recent.flagged = 0
-              AND recent.week IS NOT NULL
               AND recent.docente IS NOT NULL
               AND TRIM(recent.docente) <> ''
               AND COALESCE(recent_u.coordinador, 0) = 0

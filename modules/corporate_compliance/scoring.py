@@ -57,16 +57,15 @@ def safe_int(value: Any, default: int = 0) -> int:
 
 
 def clamp_score(value: Any) -> Optional[float]:
-    """Executive score: calculable values are constrained to 1-100.
+    """Executive score: calculable values are constrained to 0-100.
 
-    `None` means no real denominator/source. It must remain unavailable and never
-    become 0. Values at or below 0 are only possible when the denominator was real
-    and the result was completely failed; those display as 1 by policy.
+    `None` means no real denominator/source. A true zero must remain 0 and must
+    not be hidden as unavailable or inflated to 1.
     """
     parsed = safe_float(value)
     if parsed is None:
         return None
-    return round(max(1.0, min(100.0, parsed)), 1)
+    return round(max(0.0, min(100.0, parsed)), 1)
 
 
 def pct(numerator: Any, denominator: Any) -> Optional[float]:

@@ -1,1 +1,1 @@
-Ajusta Reporte SIPAE con planeaciones y seguimientos poblacionales
+Corrige Reporte SIPAE con planeaciones por creación y ceros reales

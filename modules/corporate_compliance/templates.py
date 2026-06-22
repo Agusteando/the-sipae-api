@@ -249,7 +249,7 @@ CORPORATE_COMPLIANCE_HTML = r'''
     function num(value) {
       if (value === null || value === undefined || value === "") return null;
       var parsed = Number(value);
-      if (!isFinite(parsed) || parsed <= 0) return null;
+      if (!isFinite(parsed)) return null;
       return parsed;
     }
     function pct(value) {
