@@ -1,1 +1,1 @@
-Corrige fuentes y fórmulas del índice corporativo
+Corrige evidencia mínima y consultas del índice corporativo

@@ -67,7 +67,6 @@ async def count_active_academic_teachers(academic_filters: List[Dict[str, str]])
 
 async def fetch_planning_review_totals(academic_filters: List[Dict[str, str]], start_date: date, end_date: date) -> Dict[str, Any]:
     user_where, user_params = _build_academic_where(academic_filters, "u")
-    plan_where, plan_params = _build_academic_where(academic_filters, "p")
     reviewed = _reviewed_clause("p")
     query = f"""
         SELECT
@@ -80,7 +79,6 @@ async def fetch_planning_review_totals(academic_filters: List[Dict[str, str]], s
         FROM planeaciones p
         JOIN usuarios u ON u.username = p.docente
         WHERE {user_where}
-          AND {plan_where}
           AND p.created_at >= %s
           AND p.created_at < DATE_ADD(%s, INTERVAL 1 DAY)
           AND p.flagged = 0
@@ -94,7 +92,7 @@ async def fetch_planning_review_totals(academic_filters: List[Dict[str, str]], s
     conn = await get_attendance_db_connection()
     try:
         async with conn.cursor(aiomysql.DictCursor) as cur:
-            await cur.execute(query, (*user_params, *plan_params, start_date, end_date))
+            await cur.execute(query, (*user_params, start_date, end_date))
             return await cur.fetchone() or {}
     finally:
         conn.close()
@@ -106,7 +104,6 @@ async def fetch_observation_teacher_totals(
     observation_end: date,
 ) -> Dict[str, Any]:
     user_where, user_params = _build_academic_where(academic_filters, "u")
-    obs_where, obs_params = _build_academic_where(academic_filters, "obs")
     query = f"""
         SELECT
             COUNT(DISTINCT u.username) AS active_teachers,
@@ -115,7 +112,6 @@ async def fetch_observation_teacher_totals(
         FROM usuarios u
         LEFT JOIN observaciones_form_submissions obs
                ON obs.docente = u.username
-              AND {obs_where}
               AND obs.submission_date >= %s
               AND obs.submission_date < DATE_ADD(%s, INTERVAL 1 DAY)
         WHERE {user_where}
@@ -128,7 +124,7 @@ async def fetch_observation_teacher_totals(
     conn = await get_attendance_db_connection()
     try:
         async with conn.cursor(aiomysql.DictCursor) as cur:
-            await cur.execute(query, (*obs_params, observation_start, observation_end, *user_params))
+            await cur.execute(query, (observation_start, observation_end, *user_params))
             return await cur.fetchone() or {}
     finally:
         conn.close()
@@ -151,16 +147,30 @@ def _normalize_values(values: List[str] | str) -> List[str]:
 
 
 def _text_alias_clause(column_expr: str, values: List[str] | str) -> Tuple[str, List[str]]:
-    aliases = _normalize_values(values)
-    exact = ", ".join(["%s" for _ in aliases])
-    parts = [f"TRIM(UPPER({column_expr})) IN ({exact})"]
-    params: List[str] = list(aliases)
-    for alias in aliases:
-        parts.append(f"TRIM(UPPER({column_expr})) LIKE %s")
-        params.append(f"{alias}%")
-        parts.append(f"TRIM(UPPER({column_expr})) LIKE %s")
-        params.append(f"%{alias}%")
-    return "(" + " OR ".join(parts) + ")", params
+    """Build a compact exact-match alias clause.
+
+    The previous report used contained LIKE checks for every alias. That made
+    these corporate aggregates scan too much data and time out. The executive
+    report should not guess via broad text contains; it should match the known
+    source identifiers exactly and fall back to unavailable when the shape is
+    not known.
+    """
+    raw_values = [values] if isinstance(values, str) else list(values or [])
+    raw_aliases: List[str] = []
+    seen_raw = set()
+    for value in raw_values:
+        clean = str(value or "").strip()
+        if clean and clean not in seen_raw:
+            seen_raw.add(clean)
+            raw_aliases.append(clean)
+
+    aliases = _normalize_values(raw_aliases)
+    raw_exact = ", ".join(["%s" for _ in raw_aliases]) or "%s"
+    upper_exact = ", ".join(["%s" for _ in aliases]) or "%s"
+    return (
+        f"({column_expr} IN ({raw_exact}) OR TRIM(UPPER({column_expr})) IN ({upper_exact}))",
+        [*(raw_aliases or [""]), *(aliases or [""])],
+    )
 
 
 async def fetch_attendance_rollup(plantel_values: List[str] | str, start_date: date, end_date: date) -> List[Dict[str, Any]]:
@@ -174,18 +184,18 @@ async def fetch_attendance_rollup(plantel_values: List[str] | str, start_date: d
     query = f"""
         SELECT
             DATE(A.fecha) AS d_fecha,
-            TRIM(A.grado) AS grado,
-            TRIM(A.grupo) AS grupo,
             COUNT(*) AS records,
             SUM(CASE WHEN A.attendance = 1 THEN 1 ELSE 0 END) AS present,
-            SUM(CASE WHEN A.attendance = 0 THEN 1 ELSE 0 END) AS absent
+            SUM(CASE WHEN A.attendance = 0 THEN 1 ELSE 0 END) AS absent,
+            COUNT(DISTINCT CONCAT_WS('|', TRIM(A.grado), TRIM(A.grupo))) AS completed_lists
         FROM asistencia A
         WHERE {plantel_clause}
-          AND DATE(A.fecha) BETWEEN %s AND %s
+          AND A.fecha >= %s
+          AND A.fecha < DATE_ADD(%s, INTERVAL 1 DAY)
           AND A.grado IS NOT NULL
           AND A.grupo IS NOT NULL
-        GROUP BY DATE(A.fecha), TRIM(A.grado), TRIM(A.grupo)
-        ORDER BY DATE(A.fecha), TRIM(A.grado), TRIM(A.grupo)
+        GROUP BY DATE(A.fecha)
+        ORDER BY DATE(A.fecha)
     """
     conn = await get_attendance_db_connection()
     try:
@@ -211,7 +221,8 @@ async def fetch_husky_daily_scan_counts(plantel_values: List[str] | str, start_d
             FROM acceso A
             JOIN users B ON B.id = A.ss_id
             WHERE {direct_clause}
-              AND DATE(A.timestamp) BETWEEN %s AND %s
+              AND A.timestamp >= %s
+              AND A.timestamp < DATE_ADD(%s, INTERVAL 1 DAY)
               AND A.timestamp IS NOT NULL
               AND A.type IS NOT NULL
 
@@ -222,7 +233,8 @@ async def fetch_husky_daily_scan_counts(plantel_values: List[str] | str, start_d
             JOIN personas_autorizadas pa ON pa.id = A.ss_id
             JOIN users B ON pa.user_id = B.id
             WHERE {chain_clause}
-              AND DATE(A.timestamp) BETWEEN %s AND %s
+              AND A.timestamp >= %s
+              AND A.timestamp < DATE_ADD(%s, INTERVAL 1 DAY)
               AND A.timestamp IS NOT NULL
               AND A.type IS NOT NULL
         ) src
@@ -255,7 +267,8 @@ async def fetch_husky_tardy_daily_counts(plantel_values: List[str] | str, start_
                 FROM acceso A
                 JOIN users B ON B.id = A.ss_id
                 WHERE {direct_clause}
-                  AND DATE(A.timestamp) BETWEEN %s AND %s
+                  AND A.timestamp >= %s
+              AND A.timestamp < DATE_ADD(%s, INTERVAL 1 DAY)
                   AND A.timestamp IS NOT NULL
                   AND LOWER(TRIM(A.type)) = 'entrada'
                   AND DAYOFWEEK(A.timestamp) NOT IN (1, 7)
@@ -267,7 +280,8 @@ async def fetch_husky_tardy_daily_counts(plantel_values: List[str] | str, start_
                 JOIN personas_autorizadas pa ON pa.id = A.ss_id
                 JOIN users B ON pa.user_id = B.id
                 WHERE {chain_clause}
-                  AND DATE(A.timestamp) BETWEEN %s AND %s
+                  AND A.timestamp >= %s
+              AND A.timestamp < DATE_ADD(%s, INTERVAL 1 DAY)
                   AND A.timestamp IS NOT NULL
                   AND LOWER(TRIM(A.type)) = 'entrada'
                   AND DAYOFWEEK(A.timestamp) NOT IN (1, 7)
