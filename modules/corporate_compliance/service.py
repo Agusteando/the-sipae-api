@@ -35,6 +35,15 @@ from .scoring import (
 logger = get_logger("service.corporate_compliance")
 
 FIXED_PLANTEL_ORDER = ["PT", "PM", "ST", "SM", "PREET", "PREEM"]
+PLANTEL_LEVELS = {
+    "PT": "Primaria",
+    "PM": "Primaria",
+    "ST": "Secundaria",
+    "SM": "Secundaria",
+    "PREET": "Preescolar",
+    "PREEM": "Preescolar",
+}
+LEVEL_ORDER = ["Preescolar", "Primaria", "Secundaria"]
 DISPLAY_METRICS = [
     "general",
     "roll_call",
@@ -1050,9 +1059,10 @@ def _diagnostic(planteles: List[Dict[str, Any]], start_date: date, end_date: dat
             "general": _metric_evidence(metrics.get("general") or {}, ["weights_used", "weights_total", "metrics_used", "minimum_weight", "minimum_metrics"]),
         }
     return {
-        "v": "corp-diagnostic-v9",
+        "v": "corp-diagnostic-v10",
         "range": {"start": start_date.isoformat(), "end": end_date.isoformat(), "business_days": len(business_days)},
         "planteles": rows,
+        "promedio_entradas_nivel": _level_access_summary(planteles, business_days),
     }
 
 
@@ -1104,6 +1114,53 @@ def _aggregate(planteles: List[Dict[str, Any]], start_date: date, end_date: date
             "critical": sum(1 for p in scored if (p.get("index") or {}).get("status") == "critical"),
             "unavailable": len(planteles) - len(scored),
         },
+    }
+
+
+def _level_access_summary(planteles: List[Dict[str, Any]], business_days: List[date]) -> Dict[str, Any]:
+    """Average entrada access by derived school level.
+
+    Husky does not expose a `nivel` field. The level is derived from the plantel
+    code: PT/PM=Primaria, ST/SM=Secundaria, PREET/PREEM=Preescolar.
+    """
+    level_days: Dict[str, Dict[str, int]] = {
+        level: {day.isoformat(): 0 for day in business_days}
+        for level in LEVEL_ORDER
+    }
+    level_planteles: Dict[str, set[str]] = {level: set() for level in LEVEL_ORDER}
+
+    for plantel in planteles:
+        code = str(plantel.get("plantel") or "")
+        level = PLANTEL_LEVELS.get(code)
+        if not level:
+            continue
+        level_planteles.setdefault(level, set()).add(code)
+        for point in plantel.get("daily") or []:
+            day = str(point.get("date") or "")
+            if day in level_days.setdefault(level, {}):
+                level_days[level][day] += safe_int(point.get("scan_entries"))
+
+    rows: List[Dict[str, Any]] = []
+    for level in LEVEL_ORDER:
+        day_values = [safe_int(level_days.get(level, {}).get(day.isoformat())) for day in business_days]
+        total_entries = sum(day_values)
+        days_with_entries = sum(1 for value in day_values if value > 0)
+        period_days = len(business_days)
+        average_per_business_day = round(total_entries / period_days, 1) if period_days > 0 else None
+        average_per_active_day = round(total_entries / days_with_entries, 1) if days_with_entries > 0 else None
+        rows.append({
+            "nivel": level,
+            "planteles": sorted(level_planteles.get(level) or []),
+            "total_entries": total_entries,
+            "business_days": period_days,
+            "days_with_entries": days_with_entries,
+            "average_per_business_day": average_per_business_day,
+            "average_per_active_day": average_per_active_day,
+            "basis": "plantel_code_mapping",
+        })
+    return {
+        "basis": "nivel_derivado_por_plantel_no_campo_db",
+        "rows": rows,
     }
 
 
@@ -1181,6 +1238,7 @@ async def get_corporate_compliance_index(
     plantel_payloads = await asyncio.gather(*(collect(code) for code in selected))
     plantel_payloads.sort(key=lambda item: item.get("order", 999))
     aggregate = _aggregate(plantel_payloads, start_date, end_date)
+    access_by_level = _level_access_summary(plantel_payloads, business_days)
 
     return {
         "title": "Reporte SIPAE",
@@ -1203,11 +1261,12 @@ async def get_corporate_compliance_index(
         "matrix": _matrix(plantel_payloads),
         "rankings": _rankings(plantel_payloads, aggregate),
         "trend": _bucketed_trend(plantel_payloads, start_date, end_date),
+        "access_by_level": access_by_level,
         "planteles": plantel_payloads,
         "source_audit": {p["plantel"]: p.get("source_audit") for p in plantel_payloads},
         "diagnostic": _diagnostic(plantel_payloads, start_date, end_date, business_days),
         "meta": {
-            "logic_version": "2026-06-22-reporte-sipae-v10",
+            "logic_version": "2026-06-22-reporte-sipae-v11",
             "start_date": start_date.isoformat(),
             "end_date": end_date.isoformat(),
             "business_days": len(business_days),

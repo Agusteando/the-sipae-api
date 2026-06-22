@@ -1,1 +1,1 @@
-Corrige seguimientos por carga relativa poblacional
+Agrega promedio de entradas por nivel al Reporte SIPAE

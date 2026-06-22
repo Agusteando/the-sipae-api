@@ -86,6 +86,13 @@ CORPORATE_COMPLIANCE_HTML = r'''
     .cell-label { margin-top: 3px; color: #4b5563; font-size: 11px; line-height: 1.35; }
     .charts { display: grid; grid-template-columns: minmax(0, 1fr) minmax(310px, .44fr); gap: 12px; }
     .chart-card { min-height: 335px; border: 1px solid var(--line); border-radius: 14px; background: #fff; padding: 14px; }
+    .level-access { display: grid; gap: 10px; }
+    .level-row { display: grid; grid-template-columns: 120px minmax(160px,1fr) 110px 90px; gap: 12px; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--line); }
+    .level-row:last-child { border-bottom: 0; }
+    .level-name { font-weight: 900; color: #1f2937; }
+    .level-meta { color: var(--muted); font-size: 12px; margin-top: 2px; }
+    .level-number { text-align: right; font-size: 19px; font-weight: 900; color: #111827; letter-spacing: -.035em; }
+    .level-label { text-align: right; color: var(--muted); font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .06em; }
     .chart-title { margin-bottom: 12px; font-size: 13px; color: #374151; font-weight: 850; }
     .bar-list { display: grid; gap: 11px; }
     .bar-row { display: grid; grid-template-columns: 90px minmax(120px,1fr) 56px; gap: 10px; align-items: center; }
@@ -177,6 +184,13 @@ CORPORATE_COMPLIANCE_HTML = r'''
           <div class="section-body charts">
             <div class="chart-card"><div class="chart-title">Cumplimiento general por plantel</div><div id="plantelBars" class="bar-list"></div></div>
             <div class="chart-card"><div class="chart-title">Promedio por métrica</div><div id="metricBars" class="bar-list"></div></div>
+          </div>
+        </section>
+
+        <section class="panel">
+          <div class="section-head"><div><div class="section-label">Accesos</div><div class="section-title">Promedio de entradas por nivel</div></div></div>
+          <div class="section-body">
+            <div class="level-access" id="levelAccess"></div>
           </div>
         </section>
 
@@ -358,6 +372,7 @@ CORPORATE_COMPLIANCE_HTML = r'''
       renderHero();
       renderMatrix();
       renderBars();
+      renderLevelAccess();
       renderTrend();
       renderDetail();
       renderDiagnostic();
@@ -419,6 +434,23 @@ CORPORATE_COMPLIANCE_HTML = r'''
       }
       byId(targetId).innerHTML = html || '<div class="state">Sin datos</div>';
     }
+    function renderLevelAccess() {
+      var rows = get(state.data, ["access_by_level", "rows"], []);
+      var maxAvg = 0;
+      for (var i = 0; i < rows.length; i += 1) {
+        var avg = Number(rows[i].average_per_business_day || 0);
+        if (avg > maxAvg) maxAvg = avg;
+      }
+      var html = "";
+      for (var r = 0; r < rows.length; r += 1) {
+        var row = rows[r];
+        var value = Number(row.average_per_business_day || 0);
+        var width = maxAvg > 0 ? Math.max(2, Math.min(100, (value / maxAvg) * 100)) : 0;
+        html += '<div class="level-row"><div><div class="level-name">' + esc(row.nivel || "—") + '</div><div class="level-meta">' + esc((row.planteles || []).join(", ")) + '</div></div><div class="track"><div class="fill green" style="width:' + width.toFixed(1) + '%"></div></div><div class="level-number">' + value.toFixed(1) + '</div><div class="level-label">entradas/día</div></div>';
+      }
+      byId("levelAccess").innerHTML = html || '<div class="state">Sin datos de entradas</div>';
+    }
+
     function average(values) {
       var sum = 0;
       var count = 0;
