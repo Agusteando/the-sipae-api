@@ -311,6 +311,58 @@ async def fetch_husky_daily_scan_counts(plantel_values: List[str] | str, start_d
         conn.close()
 
 
+async def fetch_husky_daily_first_entry_time_stats(plantel_values: List[str] | str, start_date: date, end_date: date) -> List[Dict[str, Any]]:
+    """Average first entrada time per student/day for a plantel alias set."""
+    from core.database import get_husky_db_connection
+
+    direct_clause, direct_params = _text_alias_clause("B.plantel", plantel_values)
+    chain_clause, chain_params = _text_alias_clause("B.plantel", plantel_values)
+    query = f"""
+        SELECT
+            first_scan.scan_date AS date,
+            COUNT(*) AS samples,
+            AVG(TIME_TO_SEC(TIME(first_scan.first_timestamp))) AS avg_entry_seconds,
+            MIN(TIME(first_scan.first_timestamp)) AS first_entry_time,
+            MAX(TIME(first_scan.first_timestamp)) AS last_entry_time
+        FROM (
+            SELECT DATE(src.timestamp) AS scan_date, src.user_id, MIN(src.timestamp) AS first_timestamp
+            FROM (
+                SELECT A.timestamp, B.id AS user_id
+                FROM acceso A
+                JOIN users B ON B.id = A.ss_id
+                WHERE {direct_clause}
+                  AND A.timestamp >= %s
+                  AND A.timestamp < DATE_ADD(%s, INTERVAL 1 DAY)
+                  AND A.timestamp IS NOT NULL
+                  AND LOWER(TRIM(A.type)) = 'entrada'
+
+                UNION ALL
+
+                SELECT A.timestamp, B.id AS user_id
+                FROM acceso A
+                JOIN personas_autorizadas pa ON pa.id = A.ss_id
+                JOIN users B ON pa.user_id = B.id
+                WHERE {chain_clause}
+                  AND A.timestamp >= %s
+                  AND A.timestamp < DATE_ADD(%s, INTERVAL 1 DAY)
+                  AND A.timestamp IS NOT NULL
+                  AND LOWER(TRIM(A.type)) = 'entrada'
+            ) src
+            WHERE src.user_id IS NOT NULL
+            GROUP BY DATE(src.timestamp), src.user_id
+        ) first_scan
+        GROUP BY first_scan.scan_date
+        ORDER BY first_scan.scan_date
+    """
+    conn = await get_husky_db_connection()
+    try:
+        async with conn.cursor(aiomysql.DictCursor) as cur:
+            await cur.execute(query, (*direct_params, start_date, end_date, *chain_params, start_date, end_date))
+            return await cur.fetchall()
+    finally:
+        conn.close()
+
+
 async def fetch_husky_tardy_daily_counts(plantel_values: List[str] | str, start_date: date, end_date: date, threshold_time: str) -> List[Dict[str, Any]]:
     from core.database import get_husky_db_connection
 

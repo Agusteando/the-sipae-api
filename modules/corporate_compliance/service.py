@@ -15,6 +15,7 @@ from integrations.external_bot import fetch_expected_groups, fetch_expected_popu
 from .report_repository import (
     count_active_academic_teachers,
     fetch_attendance_rollup,
+    fetch_husky_daily_first_entry_time_stats,
     fetch_husky_daily_scan_counts,
     fetch_husky_tardy_daily_counts,
     fetch_observation_monthly_totals,
@@ -956,6 +957,7 @@ async def _collect_plantel(code: str, start_date: date, end_date: date, scope: s
         _safe_value_call("expected_population", lambda: fetch_expected_population(sheets_code), 12.0),
         _safe_value_call("attendance_db", lambda: fetch_attendance_rollup(attendance_aliases, start_date, end_date), 20.0),
         _safe_value_call("husky_scans_db", lambda: fetch_husky_daily_scan_counts(husky_values, start_date, end_date), 20.0),
+        _safe_value_call("entry_time_db", lambda: fetch_husky_daily_first_entry_time_stats(husky_values, start_date, end_date), 20.0),
         _safe_value_call("retardos_db", lambda: fetch_husky_tardy_daily_counts(husky_values, start_date, end_date, threshold_time), 20.0),
         _safe_call("academic", lambda: _academic_metrics(plantel_info, start_date, end_date, business_days), SOURCE_TIMEOUTS["academic"]),
         _safe_call("sapf", lambda: get_sapf_overview_report(code, start_date, end_date, scope), SOURCE_TIMEOUTS["sapf"]),
@@ -965,14 +967,17 @@ async def _collect_plantel(code: str, start_date: date, end_date: date, scope: s
         "expected_population": sources[1],
         "attendance": sources[2],
         "husky": sources[3],
-        "retardos": sources[4],
-        "academic": sources[5],
-        "seguimientos": sources[6],
+        "entry_time": sources[4],
+        "retardos": sources[5],
+        "academic": sources[6],
+        "seguimientos": sources[7],
     }
 
     attendance_rows = source_map["attendance"].get("value") if source_map["attendance"].get("_ok") else []
     husky_rows = source_map["husky"].get("value") if source_map["husky"].get("_ok") else []
     tardy_rows = source_map["retardos"].get("value") if source_map["retardos"].get("_ok") else []
+    entry_time_rows = source_map["entry_time"].get("value") if source_map["entry_time"].get("_ok") else []
+    entry_time_daily = _entry_time_daily_points(entry_time_rows, business_days) if source_map["entry_time"].get("_ok") else []
 
     if source_map["attendance"].get("_ok"):
         roll_call, student_attendance, attendance_daily = _attendance_metrics_from_rollup(attendance_rows, source_map["expected_groups"], business_days)
@@ -1023,6 +1028,7 @@ async def _collect_plantel(code: str, start_date: date, end_date: date, scope: s
         "index": general,
         "domains": metrics,
         "daily": _merge_daily_points(attendance_daily, scans_daily, punctuality_daily, business_days),
+        "entry_time_daily": entry_time_daily,
         "source_audit": _clean_sources(source_map),
         "academic_shape": academic_payload.get("shape") if isinstance(academic_payload, dict) else {},
     }
@@ -1059,10 +1065,10 @@ def _diagnostic(planteles: List[Dict[str, Any]], start_date: date, end_date: dat
             "general": _metric_evidence(metrics.get("general") or {}, ["weights_used", "weights_total", "metrics_used", "minimum_weight", "minimum_metrics"]),
         }
     return {
-        "v": "corp-diagnostic-v10",
+        "v": "corp-diagnostic-v11",
         "range": {"start": start_date.isoformat(), "end": end_date.isoformat(), "business_days": len(business_days)},
         "planteles": rows,
-        "promedio_entradas_nivel": _level_access_summary(planteles, business_days),
+        "hora_promedio_entrada_nivel": _level_access_summary(planteles, business_days),
     }
 
 
@@ -1117,46 +1123,90 @@ def _aggregate(planteles: List[Dict[str, Any]], start_date: date, end_date: date
     }
 
 
+def _format_hhmm(seconds: Any) -> Optional[str]:
+    parsed = safe_float(seconds)
+    if parsed is None:
+        return None
+    total = int(round(parsed)) % 86400
+    hour = total // 3600
+    minute = (total % 3600) // 60
+    return f"{hour:02d}:{minute:02d}"
+
+
+def _entry_time_daily_points(rows: List[Dict[str, Any]], business_days: List[date]) -> List[Dict[str, Any]]:
+    allowed = {day.isoformat() for day in business_days}
+    points: List[Dict[str, Any]] = []
+    for row in rows or []:
+        day = _date_key(row.get("date"))
+        if not day or day not in allowed:
+            continue
+        avg_seconds = safe_float(row.get("avg_entry_seconds"))
+        samples = safe_int(row.get("samples"))
+        if avg_seconds is None or samples <= 0:
+            continue
+        first_entry = str(row.get("first_entry_time") or "")[:5] or None
+        last_entry = str(row.get("last_entry_time") or "")[:5] or None
+        points.append({
+            "date": day,
+            "avg_entry_seconds": avg_seconds,
+            "avg_entry_time": _format_hhmm(avg_seconds),
+            "samples": samples,
+            "first_entry_time": first_entry,
+            "last_entry_time": last_entry,
+        })
+    points.sort(key=lambda item: item["date"])
+    return points
+
+
 def _level_access_summary(planteles: List[Dict[str, Any]], business_days: List[date]) -> Dict[str, Any]:
-    """Average entrada access by derived school level.
+    """Average first entrada time by derived school level.
 
     Husky does not expose a `nivel` field. The level is derived from the plantel
     code: PT/PM=Primaria, ST/SM=Secundaria, PREET/PREEM=Preescolar.
+    The average uses the first entrada per student/day, weighted by samples.
     """
-    level_days: Dict[str, Dict[str, int]] = {
-        level: {day.isoformat(): 0 for day in business_days}
+    level_stats: Dict[str, Dict[str, Any]] = {
+        level: {"weighted_seconds": 0.0, "samples": 0, "days": set(), "planteles": set(), "first_times": [], "last_times": []}
         for level in LEVEL_ORDER
     }
-    level_planteles: Dict[str, set[str]] = {level: set() for level in LEVEL_ORDER}
 
     for plantel in planteles:
         code = str(plantel.get("plantel") or "")
         level = PLANTEL_LEVELS.get(code)
         if not level:
             continue
-        level_planteles.setdefault(level, set()).add(code)
-        for point in plantel.get("daily") or []:
-            day = str(point.get("date") or "")
-            if day in level_days.setdefault(level, {}):
-                level_days[level][day] += safe_int(point.get("scan_entries"))
+        stats = level_stats.setdefault(level, {"weighted_seconds": 0.0, "samples": 0, "days": set(), "planteles": set(), "first_times": [], "last_times": []})
+        stats["planteles"].add(code)
+        for point in plantel.get("entry_time_daily") or []:
+            samples = safe_int(point.get("samples"))
+            avg_seconds = safe_float(point.get("avg_entry_seconds"))
+            if samples <= 0 or avg_seconds is None:
+                continue
+            stats["weighted_seconds"] += avg_seconds * samples
+            stats["samples"] += samples
+            if point.get("date"):
+                stats["days"].add(str(point.get("date")))
+            if point.get("first_entry_time"):
+                stats["first_times"].append(str(point.get("first_entry_time"))[:5])
+            if point.get("last_entry_time"):
+                stats["last_times"].append(str(point.get("last_entry_time"))[:5])
 
     rows: List[Dict[str, Any]] = []
     for level in LEVEL_ORDER:
-        day_values = [safe_int(level_days.get(level, {}).get(day.isoformat())) for day in business_days]
-        total_entries = sum(day_values)
-        days_with_entries = sum(1 for value in day_values if value > 0)
-        period_days = len(business_days)
-        average_per_business_day = round(total_entries / period_days, 1) if period_days > 0 else None
-        average_per_active_day = round(total_entries / days_with_entries, 1) if days_with_entries > 0 else None
+        stats = level_stats.get(level) or {}
+        samples = safe_int(stats.get("samples"))
+        avg_seconds = (float(stats.get("weighted_seconds") or 0.0) / samples) if samples > 0 else None
         rows.append({
             "nivel": level,
-            "planteles": sorted(level_planteles.get(level) or []),
-            "total_entries": total_entries,
-            "business_days": period_days,
-            "days_with_entries": days_with_entries,
-            "average_per_business_day": average_per_business_day,
-            "average_per_active_day": average_per_active_day,
-            "basis": "plantel_code_mapping",
+            "planteles": sorted(stats.get("planteles") or []),
+            "avg_entry_seconds": round(avg_seconds, 1) if avg_seconds is not None else None,
+            "avg_entry_time": _format_hhmm(avg_seconds),
+            "sample_count": samples,
+            "days_with_samples": len(stats.get("days") or set()),
+            "business_days": len(business_days),
+            "first_entry_time": min(stats.get("first_times") or []) if stats.get("first_times") else None,
+            "last_entry_time": max(stats.get("last_times") or []) if stats.get("last_times") else None,
+            "basis": "first_entrada_per_student_day_derived_level",
         })
     return {
         "basis": "nivel_derivado_por_plantel_no_campo_db",
@@ -1266,7 +1316,7 @@ async def get_corporate_compliance_index(
         "source_audit": {p["plantel"]: p.get("source_audit") for p in plantel_payloads},
         "diagnostic": _diagnostic(plantel_payloads, start_date, end_date, business_days),
         "meta": {
-            "logic_version": "2026-06-22-reporte-sipae-v11",
+            "logic_version": "2026-06-22-reporte-sipae-v13",
             "start_date": start_date.isoformat(),
             "end_date": end_date.isoformat(),
             "business_days": len(business_days),

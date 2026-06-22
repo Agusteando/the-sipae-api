@@ -1,1 +1,1 @@
-Agrega promedio de entradas por nivel al Reporte SIPAE
+Corrige promedio de hora de entrada por nivel

@@ -188,7 +188,7 @@ CORPORATE_COMPLIANCE_HTML = r'''
         </section>
 
         <section class="panel">
-          <div class="section-head"><div><div class="section-label">Accesos</div><div class="section-title">Promedio de entradas por nivel</div></div></div>
+          <div class="section-head"><div><div class="section-label">Accesos</div><div class="section-title">Hora promedio de entrada por nivel</div></div></div>
           <div class="section-body">
             <div class="level-access" id="levelAccess"></div>
           </div>
@@ -436,17 +436,15 @@ CORPORATE_COMPLIANCE_HTML = r'''
     }
     function renderLevelAccess() {
       var rows = get(state.data, ["access_by_level", "rows"], []);
-      var maxAvg = 0;
-      for (var i = 0; i < rows.length; i += 1) {
-        var avg = Number(rows[i].average_per_business_day || 0);
-        if (avg > maxAvg) maxAvg = avg;
-      }
       var html = "";
       for (var r = 0; r < rows.length; r += 1) {
         var row = rows[r];
-        var value = Number(row.average_per_business_day || 0);
-        var width = maxAvg > 0 ? Math.max(2, Math.min(100, (value / maxAvg) * 100)) : 0;
-        html += '<div class="level-row"><div><div class="level-name">' + esc(row.nivel || "—") + '</div><div class="level-meta">' + esc((row.planteles || []).join(", ")) + '</div></div><div class="track"><div class="fill green" style="width:' + width.toFixed(1) + '%"></div></div><div class="level-number">' + value.toFixed(1) + '</div><div class="level-label">entradas/día</div></div>';
+        var time = row.avg_entry_time || "—";
+        var samples = Number(row.sample_count || 0);
+        var days = Number(row.days_with_samples || 0);
+        var meta = (row.planteles || []).join(", ");
+        var detail = samples > 0 ? (samples.toLocaleString("es-MX") + " entradas · " + days + " días con muestra") : "Sin muestra";
+        html += '<div class="level-row"><div><div class="level-name">' + esc(row.nivel || "—") + '</div><div class="level-meta">' + esc(meta) + '</div></div><div class="level-number">' + esc(time) + '</div><div class="level-label">hora promedio</div><div class="level-meta">' + esc(detail) + '</div></div>';
       }
       byId("levelAccess").innerHTML = html || '<div class="state">Sin datos de entradas</div>';
     }
