@@ -1,1 +1,1 @@
-Ajusta planeaciones y observaciones del índice corporativo
+Actualiza Reporte SIPAE con cómputo diario y balance de escaneos

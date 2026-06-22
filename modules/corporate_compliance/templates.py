@@ -4,11 +4,12 @@ CORPORATE_COMPLIANCE_HTML = r'''
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Índice Corporativo de Cumplimiento</title>
+  <title>Reporte SIPAE</title>
   <style>
     :root {
-      --bg: #f6f7f9;
+      --bg: #f4f6f8;
       --panel: #ffffff;
+      --panel-soft: #fbfcfd;
       --text: #111827;
       --muted: #6b7280;
       --muted-2: #9ca3af;
@@ -25,7 +26,7 @@ CORPORATE_COMPLIANCE_HTML = r'''
       --gray-soft: #f1f5f9;
       --ink: #0f172a;
       --radius: 16px;
-      --shadow: 0 12px 30px rgba(15, 23, 42, .06);
+      --shadow: 0 14px 36px rgba(15, 23, 42, .06);
       --font: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
     }
     * { box-sizing: border-box; }
@@ -49,7 +50,7 @@ CORPORATE_COMPLIANCE_HTML = r'''
     .state { padding: 18px 20px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); box-shadow: var(--shadow); color: var(--muted); font-weight: 750; }
     .state.error { border-color: rgba(185,28,28,.35); background: #fff7f7; color: var(--red); }
     .hero { display: grid; grid-template-columns: minmax(0, 1.1fr) repeat(3, minmax(180px, .3fr)); gap: 12px; margin-bottom: 12px; }
-    .panel { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); }
+    .panel { background: var(--panel); border: 1px solid rgba(15,23,42,.08); border-radius: var(--radius); box-shadow: var(--shadow); }
     .intro { padding: 22px; }
     h1 { margin: 0; font-size: clamp(26px, 3.2vw, 42px); line-height: 1.02; letter-spacing: -.045em; font-weight: 900; }
     .subtitle { margin-top: 10px; max-width: 760px; color: #4b5563; font-size: 14px; line-height: 1.55; }
@@ -74,10 +75,11 @@ CORPORATE_COMPLIANCE_HTML = r'''
     .matrix th, .matrix td { padding: 12px; border-bottom: 1px solid var(--line); border-right: 1px solid var(--line); text-align: left; }
     .matrix tr:last-child td { border-bottom: 0; }
     .matrix th:last-child, .matrix td:last-child { border-right: 0; }
-    .matrix th { background: #fafafa; color: #4b5563; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; font-weight: 850; }
+    .matrix th { background: var(--panel-soft); color: #475569; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; font-weight: 850; }
     .plantel-code { font-weight: 900; }
     .plantel-name { margin-top: 2px; color: var(--muted); font-size: 12px; line-height: 1.35; }
-    .heat { min-width: 120px; cursor: pointer; transition: box-shadow .15s ease; }
+    .heat { min-width: 124px; cursor: pointer; transition: box-shadow .15s ease, transform .15s ease; }
+    .heat:hover { box-shadow: inset 0 0 0 1px rgba(15,23,42,.08); transform: translateY(-1px); }
     .heat:hover { box-shadow: inset 0 0 0 999px rgba(17,24,39,.035); }
     .heat.green { background: var(--green-soft); } .heat.yellow { background: var(--yellow-soft); } .heat.red { background: var(--red-soft); } .heat.gray { background: var(--gray-soft); }
     .cell-score { font-size: 19px; font-weight: 900; letter-spacing: -.035em; }
@@ -125,7 +127,7 @@ CORPORATE_COMPLIANCE_HTML = r'''
     <div class="topbar-inner">
       <div>
         <div class="eyebrow">Reporte ejecutivo</div>
-        <div class="title">Índice Corporativo de Cumplimiento</div>
+        <div class="title">Reporte SIPAE</div>
       </div>
       <div class="filters">
         <div class="chip-row" id="scopeFilters">
@@ -149,10 +151,10 @@ CORPORATE_COMPLIANCE_HTML = r'''
     <div id="report" class="hidden">
       <section class="hero">
         <div class="panel intro">
-          <h1>Cumplimiento corporativo</h1>
-          <div class="subtitle">Vista de dirección con valores de 1 a 100 por plantel y por métrica. Donde no hay denominador real se muestra —.</div>
+          <h1>Reporte SIPAE</h1>
+          <div class="subtitle">Vista ejecutiva del periodo evaluado con métricas de 1 a 100 por plantel. La mayoría de los indicadores operativos se calculan por día y se promedian en el periodo.</div>
           <div class="stamp-row">
-            <span class="stamp" id="periodStamp">Periodo —</span>
+            <span class="stamp" id="periodStamp">Periodo —</span><span class="stamp" id="businessDaysStamp">Días hábiles —</span>
             <span class="stamp" id="updatedStamp">Actualizado —</span>
             <span class="stamp"><span class="dot green"></span>85–100</span>
             <span class="stamp"><span class="dot yellow"></span>70–84</span>
@@ -186,6 +188,7 @@ CORPORATE_COMPLIANCE_HTML = r'''
               <option value="roll_call">Pase de lista</option>
               <option value="student_attendance">Asistencia alumnos</option>
               <option value="scans">Escaneos</option>
+              <option value="scan_balance">Balance accesos</option>
               <option value="student_punctuality">Puntualidad alumnos</option>
             </select>
           </div>
@@ -222,8 +225,8 @@ CORPORATE_COMPLIANCE_HTML = r'''
 
   <script>
     var PLANTELES = ["PT", "PM", "ST", "SM", "PREET", "PREEM"];
-    var METRIC_ORDER = ["general", "roll_call", "student_attendance", "scans", "student_punctuality", "staff_attendance", "planning", "observations", "observation_coverage", "sapf"];
-    var METRIC_LABELS = { general: "General", roll_call: "Pase de lista", student_attendance: "Asistencia alumnos", scans: "Escaneos", student_punctuality: "Puntualidad alumnos", staff_attendance: "Asistencia personal", planning: "Planeaciones", observations: "Observaciones", observation_coverage: "Cobertura obs.", sapf: "SAPF" };
+    var METRIC_ORDER = ["general", "roll_call", "student_attendance", "scans", "scan_balance", "student_punctuality", "staff_attendance", "planning", "observations", "observation_coverage", "sapf"];
+    var METRIC_LABELS = { general: "General", roll_call: "Pase de lista", student_attendance: "Asistencia alumnos", scans: "Escaneos", scan_balance: "Balance accesos", student_punctuality: "Puntualidad alumnos", staff_attendance: "Asistencia personal", planning: "Planeaciones", observations: "Observaciones", observation_coverage: "Cobertura obs.", sapf: "SAPF" };
     var LINE_COLORS = ["#111827", "#15803d", "#b91c1c", "#b45309", "#2563eb", "#7c3aed"];
     var state = { scope: "month", planteles: {}, data: null, selectedPlantel: null };
     for (var p0 = 0; p0 < PLANTELES.length; p0 += 1) state.planteles[PLANTELES[p0]] = true;
@@ -260,6 +263,18 @@ CORPORATE_COMPLIANCE_HTML = r'''
       if (n >= 70) return "yellow";
       return "red";
     }
+    function mix(a, b, t) { return a + (b - a) * t; }
+    function heatBackground(score) {
+      var n = num(score);
+      if (n === null) return "linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%)";
+      var red = [185, 28, 28], yellow = [180, 83, 9], green = [21, 128, 61];
+      var from = n < 70 ? red : (n < 85 ? yellow : green);
+      var alpha = 0.12 + (Math.max(1, Math.min(100, n)) / 100) * 0.18;
+      var top = 'rgba(' + from[0] + ',' + from[1] + ',' + from[2] + ',' + alpha.toFixed(3) + ')';
+      var bottom = 'rgba(' + from[0] + ',' + from[1] + ',' + from[2] + ',' + (alpha * 0.55).toFixed(3) + ')';
+      return 'linear-gradient(180deg, ' + top + ' 0%, ' + bottom + ' 100%)';
+    }
+    function heatStyle(metric) { return ' style="background:' + heatBackground(metric ? metric.score : null) + '"'; }
     function metricColor(metric) { return metric && metric.color ? metric.color : colorFor(metric ? metric.score : null); }
     function dot(metric) { return '<span class="dot ' + metricColor(metric) + '"></span>'; }
     function selectedPlanteles() {
@@ -351,7 +366,8 @@ CORPORATE_COMPLIANCE_HTML = r'''
       var aggregate = get(state.data, ["aggregate"], {});
       var general = get(aggregate, ["corporate_index"], {});
       var win = get(aggregate, ["window"], {});
-      byId("periodStamp").textContent = (win.start || "—") + " → " + (win.end || "—");
+      byId("periodStamp").textContent = "Periodo evaluado: " + (win.start || "—") + " → " + (win.end || "—");
+      byId("businessDaysStamp").textContent = (win.business_days || 0) + " días hábiles";
       var generated = get(state.data, ["generated_at"], null);
       byId("updatedStamp").textContent = generated ? "Actualizado " + new Date(generated).toLocaleString("es-MX") : "Actualizado —";
       byId("generalScore").className = "kpi-value score " + metricColor(general);
@@ -379,7 +395,7 @@ CORPORATE_COMPLIANCE_HTML = r'''
         for (var c = 0; c < METRIC_ORDER.length; c += 1) {
           var key = METRIC_ORDER[c];
           var metric = get(row, ["cells", key], {});
-          html += '<td class="heat ' + metricColor(metric) + '" data-plantel="' + esc(row.plantel) + '"><div class="cell-score score ' + metricColor(metric) + '">' + pct(metric.score) + '</div><div class="cell-label">' + esc(metric.label || "Sin datos") + '</div></td>';
+          html += '<td class="heat ' + metricColor(metric) + '" data-plantel="' + esc(row.plantel) + '"' + heatStyle(metric) + '><div class="cell-score score ' + metricColor(metric) + '">' + pct(metric.score) + '</div><div class="cell-label">' + esc(metric.label || "Sin datos") + '</div></td>';
         }
         html += "</tr>";
       }
@@ -424,7 +440,7 @@ CORPORATE_COMPLIANCE_HTML = r'''
       byId("trendName").textContent = trend.label || METRIC_LABELS[key] || "Métrica";
       byId("trendAverage").className = "trend-big score " + colorFor(avg);
       byId("trendAverage").textContent = pct(avg);
-      byId("trendText").textContent = "Promedio del periodo seleccionado.";
+      byId("trendText").textContent = "Promedio del periodo evaluado.";
       var legend = "";
       for (var l = 0; l < series.length; l += 1) {
         legend += '<span class="legend-item"><span class="legend-line" style="background:' + LINE_COLORS[l % LINE_COLORS.length] + '"></span>' + esc(series[l].plantel || series[l].name || "—") + '</span>';
