@@ -1,1 +1,1 @@
-Stabilize operational dashboard by removing live bot dependency from page-load metrics
+Corrige normalización de planteles SM y ST en reportes globales

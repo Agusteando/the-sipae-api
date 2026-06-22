@@ -8,8 +8,8 @@ export const plantelUItoAPI: Record<string, string[]> = {
   'ISSSTE Metepec': ['issste metepec', 'is metepec', 'ism'],
   'Preescolar Metepec': ['preescolar metepec', 'pre metepec'],
   'Preescolar Toluca': ['preescolar toluca', 'pre toluca'],
-  'Secundaria Toluca': ['secundaria toluca', 'sec toluca'],
-  'Secundaria Metepec': ['secundaria metepec', 'sec metepec'],
+  'Secundaria Toluca': ['st', '2 st', '02 st', 'secundaria toluca', 'sec toluca'],
+  'Secundaria Metepec': ['sm', '5 sm', '05 sm', 'secundaria metepec', 'sec metepec'],
   'Desarrollo Climaya': ['desarrollo climaya', 'climaya'],
   'Casita Ocoyoacac': ['casita ocoyoacac', 'ocoyoacac'],
   'Casita Metepec': ['casita metepec', 'cas metepec'],
@@ -18,17 +18,22 @@ export const plantelUItoAPI: Record<string, string[]> = {
   'Externos e Invitados Especiales': ['externo', 'externos']
 };
 
+function normalizePlantelValue(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
 export function normalizeAndMatchPlantel(apiValue: string, filterLabel: string): boolean {
   if (!apiValue || !filterLabel) return false;
-  
-  const apiNorm = apiValue.toLowerCase().replace(/[^a-z0-9]/g, ' ');
+
+  const apiNorm = normalizePlantelValue(apiValue);
   if (filterLabel === 'Externos e Invitados Especiales') return apiNorm.includes('externo');
 
   const mapping = plantelUItoAPI[filterLabel] || [];
   for (const phrase of mapping) {
-    if (apiNorm.includes(phrase)) return true;
+    const phraseNorm = normalizePlantelValue(phrase);
+    if (apiNorm === phraseNorm || apiNorm.includes(phraseNorm)) return true;
   }
-  
-  // Respaldo final: Verificación de coincidencia exacta
-  return apiValue === filterLabel;
+
+  // Respaldo final: verificación exacta normalizada.
+  return apiNorm === normalizePlantelValue(filterLabel);
 }
