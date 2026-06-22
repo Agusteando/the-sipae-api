@@ -1,1 +1,1 @@
-Rediseña índice corporativo ejecutivo de cumplimiento
+Corrige diseño y carga del índice corporativo

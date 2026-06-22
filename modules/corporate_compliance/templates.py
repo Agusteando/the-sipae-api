@@ -1,188 +1,200 @@
-CORPORATE_COMPLIANCE_HTML = """
+CORPORATE_COMPLIANCE_HTML = r'''
 <!doctype html>
 <html lang="es">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Índice Corporativo de Cumplimiento</title>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.8/dist/chart.umd.min.js"></script>
   <style>
     :root {
-      --bg: #f4f6f8;
+      --bg: #f6f7f9;
       --panel: #ffffff;
-      --text: #172033;
-      --muted: #64748b;
-      --line: #dde4ee;
-      --soft: #f8fafc;
-      --green: #16a34a;
-      --green-bg: #dcfce7;
-      --yellow: #d97706;
-      --yellow-bg: #fef3c7;
-      --red: #dc2626;
-      --red-bg: #fee2e2;
-      --gray: #94a3b8;
-      --gray-bg: #f1f5f9;
-      --shadow: 0 16px 38px rgba(15, 23, 42, .07);
-      --radius: 18px;
+      --text: #111827;
+      --muted: #6b7280;
+      --muted-2: #9ca3af;
+      --line: #e5e7eb;
+      --line-strong: #d1d5db;
+      --soft: #f9fafb;
+      --green: #15803d;
+      --green-soft: #dcfce7;
+      --yellow: #b45309;
+      --yellow-soft: #fef3c7;
+      --red: #b91c1c;
+      --red-soft: #fee2e2;
+      --gray: #64748b;
+      --gray-soft: #f1f5f9;
+      --ink: #0f172a;
+      --radius: 16px;
+      --shadow: 0 12px 30px rgba(15, 23, 42, .06);
       --font: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
     }
     * { box-sizing: border-box; }
-    body { margin: 0; background: var(--bg); color: var(--text); font-family: var(--font); }
+    html { background: var(--bg); }
+    body { margin: 0; color: var(--text); background: var(--bg); font-family: var(--font); }
     button, input, select { font: inherit; }
-    .topbar { position: sticky; top: 0; z-index: 20; background: rgba(255,255,255,.96); border-bottom: 1px solid var(--line); backdrop-filter: blur(14px); }
-    .topbar-inner { max-width: 1560px; margin: 0 auto; padding: 14px 22px; display: grid; grid-template-columns: minmax(300px,1fr) auto; gap: 16px; align-items: center; }
-    .brand-kicker { color: var(--muted); font-size: 11px; font-weight: 900; letter-spacing: .14em; text-transform: uppercase; }
-    .brand-title { margin-top: 2px; font-weight: 900; font-size: 19px; letter-spacing: -.025em; }
-    .filters { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 10px; }
-    .segmented, .plantel-list { display: inline-flex; align-items: center; gap: 5px; padding: 5px; border: 1px solid var(--line); background: var(--soft); border-radius: 999px; }
-    .scope-btn, .plantel-btn, .refresh-btn { border: 0; border-radius: 999px; padding: 8px 12px; color: #334155; background: transparent; cursor: pointer; font-size: 12px; font-weight: 850; white-space: nowrap; }
-    .scope-btn.active, .plantel-btn.active { background: #111827; color: #fff; }
-    .refresh-btn { background: #111827; color: #fff; padding-inline: 16px; }
-    .date-input { display: none; border: 1px solid var(--line); border-radius: 999px; padding: 8px 11px; background: #fff; color: var(--text); font-size: 12px; font-weight: 800; }
+    button { cursor: pointer; }
+    .topbar { position: sticky; top: 0; z-index: 10; border-bottom: 1px solid var(--line); background: rgba(255,255,255,.94); backdrop-filter: blur(16px); }
+    .topbar-inner { max-width: 1480px; margin: 0 auto; padding: 14px 22px; display: grid; grid-template-columns: minmax(260px, 1fr) auto; gap: 18px; align-items: center; }
+    .eyebrow { color: var(--muted); font-size: 11px; font-weight: 800; letter-spacing: .13em; text-transform: uppercase; }
+    .title { margin-top: 2px; font-size: 18px; font-weight: 850; letter-spacing: -.02em; }
+    .filters { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; align-items: center; }
+    .chip-row { display: inline-flex; gap: 4px; padding: 4px; border: 1px solid var(--line); background: var(--soft); border-radius: 999px; max-width: 100%; overflow-x: auto; }
+    .chip { border: 0; border-radius: 999px; padding: 7px 11px; background: transparent; color: #374151; font-size: 12px; font-weight: 750; white-space: nowrap; }
+    .chip.active { background: var(--ink); color: #fff; }
+    .date-input { display: none; border: 1px solid var(--line); border-radius: 999px; padding: 7px 10px; color: #374151; background: #fff; font-size: 12px; font-weight: 700; }
     .date-input.visible { display: inline-block; }
-    .page { max-width: 1560px; margin: 0 auto; padding: 22px 22px 64px; }
+    .refresh { border: 0; border-radius: 999px; padding: 8px 14px; background: var(--ink); color: #fff; font-size: 12px; font-weight: 800; }
+    .page { max-width: 1480px; margin: 0 auto; padding: 22px 22px 64px; }
     .hidden { display: none !important; }
-    .state-box { padding: 22px; border: 1px solid var(--line); background: var(--panel); border-radius: var(--radius); box-shadow: var(--shadow); color: var(--muted); font-weight: 800; }
-    .state-box.error { color: #991b1b; background: #fff7f7; border-color: rgba(220,38,38,.35); }
-    .hero { display: grid; grid-template-columns: minmax(0, 1.15fr) repeat(3, minmax(210px,.28fr)); gap: 14px; margin-bottom: 14px; }
-    .card, .section { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); }
-    .intro { padding: 24px; }
-    h1 { margin: 0; font-size: clamp(30px, 4vw, 50px); line-height: .98; letter-spacing: -.055em; }
-    .subtitle { margin-top: 12px; color: #475569; font-size: 14px; font-weight: 620; max-width: 900px; }
-    .stamp-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 18px; }
-    .stamp { display: inline-flex; align-items: center; gap: 7px; padding: 7px 10px; border: 1px solid var(--line); border-radius: 999px; color: #334155; background: #fff; font-size: 12px; font-weight: 800; }
-    .kpi { padding: 18px; min-height: 154px; display: flex; flex-direction: column; justify-content: space-between; }
-    .kpi-label { font-size: 11px; text-transform: uppercase; letter-spacing: .1em; color: var(--muted); font-weight: 900; }
-    .kpi-value { margin-top: 12px; font-size: 40px; font-weight: 950; letter-spacing: -.06em; }
-    .kpi-title { margin-top: 4px; font-size: 15px; font-weight: 850; }
-    .kpi-detail { margin-top: 6px; color: var(--muted); font-size: 12px; font-weight: 650; }
-    .dot { display: inline-block; width: 10px; height: 10px; border-radius: 999px; margin-right: 6px; vertical-align: middle; background: var(--gray); }
-    .dot.green { background: var(--green); } .dot.yellow { background: var(--yellow); } .dot.red { background: var(--red); } .dot.gray { background: var(--gray); }
+    .state { padding: 18px 20px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); box-shadow: var(--shadow); color: var(--muted); font-weight: 750; }
+    .state.error { border-color: rgba(185,28,28,.35); background: #fff7f7; color: var(--red); }
+    .hero { display: grid; grid-template-columns: minmax(0, 1.1fr) repeat(3, minmax(180px, .3fr)); gap: 12px; margin-bottom: 12px; }
+    .panel { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); }
+    .intro { padding: 22px; }
+    h1 { margin: 0; font-size: clamp(26px, 3.2vw, 42px); line-height: 1.02; letter-spacing: -.045em; font-weight: 900; }
+    .subtitle { margin-top: 10px; max-width: 760px; color: #4b5563; font-size: 14px; line-height: 1.55; }
+    .stamp-row { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 16px; }
+    .stamp { display: inline-flex; align-items: center; gap: 7px; padding: 6px 9px; border: 1px solid var(--line); border-radius: 999px; background: #fff; color: #374151; font-size: 12px; font-weight: 750; }
+    .kpi { padding: 17px; display: flex; min-height: 144px; flex-direction: column; justify-content: space-between; }
+    .kpi-label { color: var(--muted); font-size: 11px; font-weight: 850; letter-spacing: .1em; text-transform: uppercase; }
+    .kpi-value { margin-top: 12px; font-size: 37px; line-height: .95; font-weight: 900; letter-spacing: -.055em; }
+    .kpi-name { font-size: 15px; font-weight: 820; }
+    .kpi-detail { margin-top: 5px; color: var(--muted); font-size: 12px; font-weight: 650; }
     .score.green { color: var(--green); } .score.yellow { color: var(--yellow); } .score.red { color: var(--red); } .score.gray { color: var(--gray); }
-    .layout { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; align-items: start; }
-    .section.wide { grid-column: 1 / -1; }
-    .section-head { padding: 16px 18px; border-bottom: 1px solid var(--line); display: flex; align-items: center; justify-content: space-between; gap: 14px; }
-    .section-kicker { color: var(--muted); font-size: 11px; font-weight: 900; letter-spacing: .12em; text-transform: uppercase; }
-    .section-title { margin-top: 3px; font-size: 20px; font-weight: 930; letter-spacing: -.03em; }
-    .section-body { padding: 18px; }
+    .dot { width: 9px; height: 9px; display: inline-block; border-radius: 99px; margin-right: 7px; vertical-align: middle; background: var(--gray); }
+    .dot.green { background: var(--green); } .dot.yellow { background: var(--yellow); } .dot.red { background: var(--red); } .dot.gray { background: var(--gray); }
+    .main-grid { display: grid; gap: 12px; }
+    .section-head { padding: 15px 17px 13px; border-bottom: 1px solid var(--line); display: flex; align-items: center; justify-content: space-between; gap: 14px; }
+    .section-label { color: var(--muted); font-size: 11px; font-weight: 850; letter-spacing: .11em; text-transform: uppercase; }
+    .section-title { margin-top: 3px; font-size: 19px; font-weight: 880; letter-spacing: -.025em; }
+    .section-body { padding: 17px; }
     .matrix-wrap { overflow-x: auto; }
-    .matrix { width: 100%; border-collapse: separate; border-spacing: 0; min-width: 980px; }
-    .matrix th, .matrix td { border-bottom: 1px solid var(--line); border-right: 1px solid var(--line); padding: 12px; text-align: left; }
-    .matrix th:first-child, .matrix td:first-child { border-left: 1px solid var(--line); }
-    .matrix tr:first-child th { border-top: 1px solid var(--line); }
-    .matrix th { background: #f8fafc; color: #475569; font-size: 11px; font-weight: 950; letter-spacing: .09em; text-transform: uppercase; }
-    .matrix tr:first-child th:first-child { border-top-left-radius: 14px; }
-    .matrix tr:first-child th:last-child { border-top-right-radius: 14px; }
-    .matrix tr:last-child td:first-child { border-bottom-left-radius: 14px; }
-    .matrix tr:last-child td:last-child { border-bottom-right-radius: 14px; }
-    .plantel-name { font-size: 13px; color: var(--muted); margin-top: 2px; }
-    .heat-cell { cursor: pointer; transition: transform .12s ease, box-shadow .12s ease; }
-    .heat-cell:hover { transform: translateY(-1px); box-shadow: inset 0 0 0 999px rgba(15,23,42,.025); }
-    .heat-green { background: var(--green-bg); }
-    .heat-yellow { background: var(--yellow-bg); }
-    .heat-red { background: var(--red-bg); }
-    .heat-gray { background: var(--gray-bg); color: #64748b; }
-    .cell-score { font-size: 20px; font-weight: 950; letter-spacing: -.035em; }
-    .cell-detail { margin-top: 3px; color: #475569; font-size: 11px; font-weight: 680; }
-    .chart-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(310px,.42fr); gap: 16px; align-items: stretch; }
-    .chart-box { min-height: 370px; border: 1px solid var(--line); border-radius: 14px; padding: 14px; background: #fff; position: relative; }
-    .chart-box.small { min-height: 330px; }
-    .chart-box.tall { min-height: 430px; }
-    .side-card { border: 1px solid var(--line); border-radius: 14px; background: #f8fafc; padding: 16px; }
-    .side-title { font-size: 12px; text-transform: uppercase; letter-spacing: .09em; font-weight: 950; color: #475569; }
-    .side-big { margin-top: 14px; font-size: 34px; font-weight: 950; letter-spacing: -.05em; }
-    .side-line { margin-top: 10px; font-size: 14px; color: #334155; font-weight: 700; }
-    .selector { border: 1px solid var(--line); border-radius: 999px; padding: 8px 12px; background: #fff; color: #334155; font-size: 12px; font-weight: 850; }
-    .detail-grid { display: grid; grid-template-columns: 280px 1fr; gap: 16px; }
-    .plantel-select { display: flex; flex-direction: column; gap: 8px; }
-    .plantel-row { border: 1px solid var(--line); background: #fff; border-radius: 12px; padding: 12px; cursor: pointer; display: flex; justify-content: space-between; align-items: center; gap: 12px; }
-    .plantel-row.active { border-color: #111827; box-shadow: inset 4px 0 0 #111827; }
-    .detail-table { width: 100%; border-collapse: separate; border-spacing: 0; border: 1px solid var(--line); border-radius: 14px; overflow: hidden; }
-    .detail-table th, .detail-table td { padding: 13px 14px; border-bottom: 1px solid var(--line); text-align: left; }
+    table { border-collapse: collapse; width: 100%; }
+    .matrix { min-width: 940px; border: 1px solid var(--line); border-radius: 14px; overflow: hidden; border-collapse: separate; border-spacing: 0; }
+    .matrix th, .matrix td { padding: 12px; border-bottom: 1px solid var(--line); border-right: 1px solid var(--line); text-align: left; }
+    .matrix tr:last-child td { border-bottom: 0; }
+    .matrix th:last-child, .matrix td:last-child { border-right: 0; }
+    .matrix th { background: #fafafa; color: #4b5563; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; font-weight: 850; }
+    .plantel-code { font-weight: 900; }
+    .plantel-name { margin-top: 2px; color: var(--muted); font-size: 12px; line-height: 1.35; }
+    .heat { min-width: 120px; cursor: pointer; transition: box-shadow .15s ease; }
+    .heat:hover { box-shadow: inset 0 0 0 999px rgba(17,24,39,.035); }
+    .heat.green { background: var(--green-soft); } .heat.yellow { background: var(--yellow-soft); } .heat.red { background: var(--red-soft); } .heat.gray { background: var(--gray-soft); }
+    .cell-score { font-size: 19px; font-weight: 900; letter-spacing: -.035em; }
+    .cell-label { margin-top: 3px; color: #4b5563; font-size: 11px; line-height: 1.35; }
+    .charts { display: grid; grid-template-columns: minmax(0, 1fr) minmax(310px, .44fr); gap: 12px; }
+    .chart-card { min-height: 335px; border: 1px solid var(--line); border-radius: 14px; background: #fff; padding: 14px; }
+    .chart-title { margin-bottom: 12px; font-size: 13px; color: #374151; font-weight: 850; }
+    .bar-list { display: grid; gap: 11px; }
+    .bar-row { display: grid; grid-template-columns: 90px minmax(120px,1fr) 56px; gap: 10px; align-items: center; }
+    .bar-name { font-size: 12px; font-weight: 800; color: #374151; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .track { height: 12px; border-radius: 999px; background: #eef2f7; overflow: hidden; }
+    .fill { height: 100%; width: 0; border-radius: 999px; background: var(--gray); }
+    .fill.green { background: var(--green); } .fill.yellow { background: var(--yellow); } .fill.red { background: var(--red); } .fill.gray { background: var(--gray); }
+    .bar-value { text-align: right; font-size: 12px; font-weight: 850; }
+    .trend-grid { display: grid; grid-template-columns: minmax(0, 1fr) 260px; gap: 12px; }
+    .select { border: 1px solid var(--line); border-radius: 999px; background: #fff; color: #374151; padding: 7px 11px; font-size: 12px; font-weight: 800; }
+    .line-chart { width: 100%; height: 350px; border: 1px solid var(--line); border-radius: 14px; background: #fff; display: block; }
+    .trend-side { border: 1px solid var(--line); border-radius: 14px; background: #fff; padding: 15px; }
+    .trend-big { margin-top: 14px; font-size: 32px; font-weight: 900; letter-spacing: -.04em; }
+    .trend-small { margin-top: 8px; color: var(--muted); font-size: 13px; line-height: 1.45; }
+    .legend { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+    .legend-item { display: inline-flex; align-items: center; gap: 6px; color: #4b5563; font-size: 12px; font-weight: 700; }
+    .legend-line { width: 18px; height: 3px; border-radius: 99px; background: var(--gray); }
+    .detail-grid { display: grid; grid-template-columns: 270px minmax(0,1fr); gap: 12px; }
+    .plantel-list-detail { display: grid; gap: 8px; }
+    .plantel-option { border: 1px solid var(--line); background: #fff; border-radius: 12px; padding: 11px 12px; display: flex; justify-content: space-between; gap: 12px; align-items: center; text-align: left; }
+    .plantel-option.active { border-color: var(--ink); box-shadow: inset 4px 0 0 var(--ink); }
+    .detail-table { border: 1px solid var(--line); border-radius: 14px; overflow: hidden; border-collapse: separate; border-spacing: 0; }
+    .detail-table th, .detail-table td { padding: 12px 13px; border-bottom: 1px solid var(--line); text-align: left; }
     .detail-table tr:last-child td { border-bottom: 0; }
-    .detail-table th { background: #f8fafc; color: #475569; font-size: 11px; font-weight: 950; letter-spacing: .09em; text-transform: uppercase; }
-    @media (max-width: 1180px) { .topbar-inner, .hero, .layout, .chart-grid, .detail-grid { grid-template-columns: 1fr; } .filters { justify-content: flex-start; } }
-    @media (max-width: 720px) { .page { padding: 14px 12px 42px; } .topbar-inner { padding: 12px; } .plantel-list { max-width: 100%; overflow-x: auto; } .kpi-value { font-size: 34px; } .chart-box { min-height: 310px; } }
+    .detail-table th { background: #fafafa; color: #4b5563; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; font-weight: 850; }
+    @media (max-width: 1100px) { .topbar-inner, .hero, .charts, .trend-grid, .detail-grid { grid-template-columns: 1fr; } .filters { justify-content: flex-start; } }
+    @media (max-width: 720px) { .page { padding: 14px 12px 48px; } .topbar-inner { padding: 12px; } .kpi-value { font-size: 33px; } .chart-card, .line-chart { min-height: 300px; height: 300px; } }
   </style>
 </head>
 <body>
   <header class="topbar">
     <div class="topbar-inner">
       <div>
-        <div class="brand-kicker">Planteles</div>
-        <div class="brand-title">Índice Corporativo de Cumplimiento</div>
+        <div class="eyebrow">Reporte ejecutivo</div>
+        <div class="title">Índice Corporativo de Cumplimiento</div>
       </div>
       <div class="filters">
-        <div class="segmented">
-          <button class="scope-btn active" data-scope="month">Mes</button>
-          <button class="scope-btn" data-scope="today">Hoy</button>
-          <button class="scope-btn" data-scope="ciclo_escolar">Ciclo</button>
-          <button class="scope-btn" data-scope="range">Rango</button>
+        <div class="chip-row" id="scopeFilters">
+          <button class="chip active" data-scope="month">Mes</button>
+          <button class="chip" data-scope="today">Hoy</button>
+          <button class="chip" data-scope="ciclo_escolar">Ciclo</button>
+          <button class="chip" data-scope="range">Rango</button>
         </div>
         <input id="startDate" class="date-input" type="date" />
         <input id="endDate" class="date-input" type="date" />
-        <div id="plantelFilters" class="plantel-list"></div>
-        <button id="refreshBtn" class="refresh-btn">Actualizar</button>
+        <div class="chip-row" id="plantelFilters"></div>
+        <button class="refresh" id="refreshBtn">Actualizar</button>
       </div>
     </div>
   </header>
 
   <main class="page">
-    <div id="loading" class="state-box">Cargando reporte...</div>
-    <div id="error" class="state-box error hidden"></div>
+    <div id="loading" class="state">Cargando reporte...</div>
+    <div id="error" class="state error hidden"></div>
+
     <div id="report" class="hidden">
       <section class="hero">
-        <div class="card intro">
-          <h1>Índice Corporativo de Cumplimiento</h1>
-          <div class="subtitle">Reporte ejecutivo por plantel. Cada valor se calcula de 0 a 100 y se muestra con semáforo.</div>
+        <div class="panel intro">
+          <h1>Cumplimiento corporativo</h1>
+          <div class="subtitle">Vista de dirección con valores de 0 a 100 por plantel y por área. El color indica el nivel de atención requerido.</div>
           <div class="stamp-row">
-            <span id="periodStamp" class="stamp">Periodo</span>
-            <span id="updatedStamp" class="stamp">Actualizado</span>
+            <span class="stamp" id="periodStamp">Periodo —</span>
+            <span class="stamp" id="updatedStamp">Actualizado —</span>
             <span class="stamp"><span class="dot green"></span>85–100</span>
             <span class="stamp"><span class="dot yellow"></span>70–84</span>
             <span class="stamp"><span class="dot red"></span>0–69</span>
           </div>
         </div>
-        <div class="card kpi"><div><div class="kpi-label">Cumplimiento general</div><div id="generalScore" class="kpi-value score gray">—</div></div><div><div id="generalTitle" class="kpi-title">Sin datos</div><div id="generalDetail" class="kpi-detail">—</div></div></div>
-        <div class="card kpi"><div><div class="kpi-label">Mejor plantel</div><div id="bestScore" class="kpi-value score gray">—</div></div><div><div id="bestTitle" class="kpi-title">—</div><div id="bestDetail" class="kpi-detail">—</div></div></div>
-        <div class="card kpi"><div><div class="kpi-label">Peor plantel</div><div id="worstScore" class="kpi-value score gray">—</div></div><div><div id="worstTitle" class="kpi-title">—</div><div id="worstDetail" class="kpi-detail">—</div></div></div>
+        <div class="panel kpi"><div><div class="kpi-label">General</div><div class="kpi-value score gray" id="generalScore">—</div></div><div><div class="kpi-name" id="generalTitle">Sin datos</div><div class="kpi-detail" id="generalDetail">—</div></div></div>
+        <div class="panel kpi"><div><div class="kpi-label">Mejor plantel</div><div class="kpi-value score gray" id="bestScore">—</div></div><div><div class="kpi-name" id="bestTitle">—</div><div class="kpi-detail" id="bestDetail">—</div></div></div>
+        <div class="panel kpi"><div><div class="kpi-label">Menor resultado</div><div class="kpi-value score gray" id="worstScore">—</div></div><div><div class="kpi-name" id="worstTitle">—</div><div class="kpi-detail" id="worstDetail">—</div></div></div>
       </section>
 
-      <div class="layout">
-        <section class="section wide">
-          <div class="section-head"><div><div class="section-kicker">Resumen</div><div class="section-title">Mapa de cumplimiento</div></div></div>
-          <div class="section-body"><div class="matrix-wrap"><table id="matrix" class="matrix"></table></div></div>
+      <div class="main-grid">
+        <section class="panel">
+          <div class="section-head"><div><div class="section-label">Resumen</div><div class="section-title">Mapa de cumplimiento</div></div></div>
+          <div class="section-body"><div class="matrix-wrap"><table class="matrix" id="matrix"></table></div></div>
         </section>
 
-        <section class="section wide">
-          <div class="section-head"><div><div class="section-kicker">Gráficas</div><div class="section-title">Cumplimiento por plantel y por área</div></div></div>
-          <div class="section-body chart-grid">
-            <div class="chart-box"><canvas id="plantelBarChart"></canvas></div>
-            <div class="chart-box small"><canvas id="metricBarChart"></canvas></div>
+        <section class="panel">
+          <div class="section-head"><div><div class="section-label">Comparativo</div><div class="section-title">Planteles y áreas</div></div></div>
+          <div class="section-body charts">
+            <div class="chart-card"><div class="chart-title">Cumplimiento general por plantel</div><div id="plantelBars" class="bar-list"></div></div>
+            <div class="chart-card"><div class="chart-title">Promedio por área</div><div id="metricBars" class="bar-list"></div></div>
           </div>
         </section>
 
-        <section class="section wide">
+        <section class="panel">
           <div class="section-head">
-            <div><div class="section-kicker">Tendencia</div><div class="section-title">Evolución del periodo</div></div>
-            <select id="trendMetric" class="selector">
+            <div><div class="section-label">Tendencia</div><div class="section-title">Evolución del periodo</div></div>
+            <select id="trendMetric" class="select">
               <option value="general">General</option>
               <option value="attendance">Asistencia</option>
               <option value="lists">Listas</option>
               <option value="tardies">Retardos</option>
             </select>
           </div>
-          <div class="section-body chart-grid">
-            <div class="chart-box tall"><canvas id="trendChart"></canvas></div>
-            <div id="trendSide" class="side-card"><div class="side-title">Métrica seleccionada</div><div class="side-big">—</div><div class="side-line">—</div></div>
+          <div class="section-body trend-grid">
+            <div>
+              <svg id="trendSvg" class="line-chart" viewBox="0 0 900 350" preserveAspectRatio="none" role="img" aria-label="Tendencia"></svg>
+              <div id="trendLegend" class="legend"></div>
+            </div>
+            <div class="trend-side"><div class="section-label" id="trendName">Métrica</div><div class="trend-big score gray" id="trendAverage">—</div><div class="trend-small" id="trendText">Promedio del periodo seleccionado.</div></div>
           </div>
         </section>
 
-        <section class="section wide">
-          <div class="section-head"><div><div class="section-kicker">Detalle</div><div class="section-title">Plantel seleccionado</div></div></div>
+        <section class="panel">
+          <div class="section-head"><div><div class="section-label">Detalle</div><div class="section-title">Plantel seleccionado</div></div></div>
           <div class="section-body detail-grid">
-            <div id="plantelSelector" class="plantel-select"></div>
-            <div><table id="detailTable" class="detail-table"></table></div>
+            <div class="plantel-list-detail" id="plantelSelector"></div>
+            <table class="detail-table" id="detailTable"></table>
           </div>
         </section>
       </div>
@@ -190,98 +202,121 @@ CORPORATE_COMPLIANCE_HTML = """
   </main>
 
   <script>
-    const PLANTELES = ["PT", "PM", "ST", "SM", "PREET", "PREEM"];
-    const METRIC_LABELS = {
-      general: "General",
-      attendance: "Asistencia",
-      lists: "Listas",
-      tardies: "Retardos",
-      academic: "Académico",
-      sapf: "SAPF"
-    };
-    const METRIC_ORDER = ["general", "attendance", "lists", "tardies", "academic", "sapf"];
-    const COLORS = {
-      green: "#16a34a",
-      yellow: "#d97706",
-      red: "#dc2626",
-      gray: "#94a3b8",
-      blue: "#2563eb",
-      purple: "#7c3aed",
-      teal: "#0f766e"
-    };
-    const LINE_COLORS = ["#2563eb", "#16a34a", "#dc2626", "#d97706", "#7c3aed", "#0f766e"];
+    var PLANTELES = ["PT", "PM", "ST", "SM", "PREET", "PREEM"];
+    var METRIC_ORDER = ["general", "attendance", "lists", "tardies", "academic", "sapf"];
+    var METRIC_LABELS = { general: "General", attendance: "Asistencia", lists: "Listas", tardies: "Retardos", academic: "Académico", sapf: "SAPF" };
+    var LINE_COLORS = ["#111827", "#15803d", "#b91c1c", "#b45309", "#2563eb", "#7c3aed"];
+    var state = { scope: "month", planteles: {}, data: null, selectedPlantel: null };
+    for (var p0 = 0; p0 < PLANTELES.length; p0 += 1) state.planteles[PLANTELES[p0]] = true;
 
-    let state = { scope: "month", planteles: new Set(PLANTELES), data: null, selectedPlantel: null };
-    let charts = {};
-
-    const $ = (id) => document.getElementById(id);
-    const pct = (v) => v === null || v === undefined || Number.isNaN(Number(v)) ? "—" : `${Number(v).toFixed(1)}%`;
-    const scoreClass = (metric) => `score ${metric?.color || "gray"}`;
-    const heatClass = (metric) => `heat-cell heat-${metric?.color || "gray"}`;
-    const dot = (metric) => `<span class="dot ${metric?.color || "gray"}"></span>`;
-    const escapeHtml = (value) => String(value ?? "").replace(/[&<>'"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;","\"":"&quot;"}[c]));
+    function byId(id) { return document.getElementById(id); }
+    function hasOwn(obj, key) { return Object.prototype.hasOwnProperty.call(obj || {}, key); }
+    function get(obj, path, fallback) {
+      var current = obj;
+      for (var i = 0; i < path.length; i += 1) {
+        if (current === null || current === undefined || !hasOwn(current, path[i])) return fallback;
+        current = current[path[i]];
+      }
+      return current === undefined ? fallback : current;
+    }
+    function esc(value) {
+      return String(value === null || value === undefined ? "" : value).replace(/[&<>"']/g, function (c) {
+        return { "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;" }[c];
+      });
+    }
+    function num(value) {
+      var parsed = Number(value);
+      return isFinite(parsed) ? parsed : null;
+    }
+    function pct(value) {
+      var n = num(value);
+      return n === null ? "—" : n.toFixed(1) + "%";
+    }
+    function colorFor(score) {
+      var n = num(score);
+      if (n === null) return "gray";
+      if (n >= 85) return "green";
+      if (n >= 70) return "yellow";
+      return "red";
+    }
+    function metricColor(metric) { return metric && metric.color ? metric.color : colorFor(metric ? metric.score : null); }
+    function dot(metric) { return '<span class="dot ' + metricColor(metric) + '"></span>'; }
+    function selectedPlanteles() {
+      var out = [];
+      for (var i = 0; i < PLANTELES.length; i += 1) if (state.planteles[PLANTELES[i]]) out.push(PLANTELES[i]);
+      return out;
+    }
 
     function initControls() {
-      $("plantelFilters").innerHTML = PLANTELES.map(code => `<button class="plantel-btn active" data-plantel="${code}">${code}</button>`).join("");
-      document.querySelectorAll(".scope-btn").forEach(btn => {
-        btn.addEventListener("click", () => {
-          document.querySelectorAll(".scope-btn").forEach(b => b.classList.remove("active"));
-          btn.classList.add("active");
-          state.scope = btn.dataset.scope;
-          const range = state.scope === "range";
-          $("startDate").classList.toggle("visible", range);
-          $("endDate").classList.toggle("visible", range);
-          loadReport();
-        });
-      });
-      document.querySelectorAll(".plantel-btn").forEach(btn => {
-        btn.addEventListener("click", () => {
-          const code = btn.dataset.plantel;
-          if (state.planteles.has(code) && state.planteles.size > 1) state.planteles.delete(code);
-          else state.planteles.add(code);
-          btn.classList.toggle("active", state.planteles.has(code));
-          loadReport();
-        });
-      });
-      $("refreshBtn").addEventListener("click", () => loadReport(true));
-      $("startDate").addEventListener("change", () => state.scope === "range" && loadReport());
-      $("endDate").addEventListener("change", () => state.scope === "range" && loadReport());
-      $("trendMetric").addEventListener("change", renderTrend);
-    }
+      var plantelHtml = "";
+      for (var i = 0; i < PLANTELES.length; i += 1) {
+        plantelHtml += '<button class="chip active" data-plantel="' + esc(PLANTELES[i]) + '">' + esc(PLANTELES[i]) + '</button>';
+      }
+      byId("plantelFilters").innerHTML = plantelHtml;
 
-    function buildUrl(force=false) {
-      const params = new URLSearchParams();
+      var scopeBtns = document.querySelectorAll("#scopeFilters .chip");
+      for (var s = 0; s < scopeBtns.length; s += 1) {
+        scopeBtns[s].addEventListener("click", function () {
+          for (var j = 0; j < scopeBtns.length; j += 1) scopeBtns[j].classList.remove("active");
+          this.classList.add("active");
+          state.scope = this.getAttribute("data-scope") || "month";
+          toggleRangeInputs();
+          loadReport(false);
+        });
+      }
+      var plantelBtns = document.querySelectorAll("#plantelFilters .chip");
+      for (var b = 0; b < plantelBtns.length; b += 1) {
+        plantelBtns[b].addEventListener("click", function () {
+          var code = this.getAttribute("data-plantel");
+          if (!code) return;
+          if (state.planteles[code] && selectedPlanteles().length > 1) state.planteles[code] = false;
+          else state.planteles[code] = true;
+          this.classList.toggle("active", !!state.planteles[code]);
+          loadReport(false);
+        });
+      }
+      byId("refreshBtn").addEventListener("click", function () { loadReport(true); });
+      byId("startDate").addEventListener("change", function () { if (state.scope === "range") loadReport(false); });
+      byId("endDate").addEventListener("change", function () { if (state.scope === "range") loadReport(false); });
+      byId("trendMetric").addEventListener("change", renderTrend);
+    }
+    function toggleRangeInputs() {
+      var visible = state.scope === "range";
+      byId("startDate").classList.toggle("visible", visible);
+      byId("endDate").classList.toggle("visible", visible);
+    }
+    function buildUrl(force) {
+      var params = new URLSearchParams();
       params.set("scope", state.scope);
-      params.set("planteles", Array.from(state.planteles).join(","));
+      params.set("planteles", selectedPlanteles().join(","));
       if (state.scope === "range") {
-        if ($("startDate").value) params.set("start_date", $("startDate").value);
-        if ($("endDate").value) params.set("end_date", $("endDate").value);
+        if (byId("startDate").value) params.set("start_date", byId("startDate").value);
+        if (byId("endDate").value) params.set("end_date", byId("endDate").value);
       }
       if (force) params.set("force_refresh", "true");
-      return `/api/v1/corporate-compliance-risk-index?${params.toString()}`;
+      return "/api/v1/corporate-compliance-risk-index?" + params.toString();
     }
-
-    async function loadReport(force=false) {
-      $("loading").classList.remove("hidden");
-      $("error").classList.add("hidden");
-      $("report").classList.add("hidden");
+    async function loadReport(force) {
+      byId("loading").classList.remove("hidden");
+      byId("error").classList.add("hidden");
+      byId("report").classList.add("hidden");
       try {
-        const res = await fetch(buildUrl(force), { cache: "no-store" });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        state.data = await res.json();
-        if (!state.selectedPlantel || !(state.data.planteles || []).some(p => p.plantel === state.selectedPlantel)) {
-          state.selectedPlantel = state.data.planteles?.[0]?.plantel || null;
-        }
+        var response = await fetch(buildUrl(force), { cache: "no-store" });
+        if (!response.ok) throw new Error("HTTP " + response.status);
+        state.data = await response.json();
+        var planteles = get(state.data, ["planteles"], []);
+        var found = false;
+        for (var i = 0; i < planteles.length; i += 1) if (planteles[i].plantel === state.selectedPlantel) found = true;
+        if (!found) state.selectedPlantel = planteles.length ? planteles[0].plantel : null;
         renderReport();
-        $("report").classList.remove("hidden");
+        byId("report").classList.remove("hidden");
       } catch (err) {
-        $("error").textContent = `No se pudo cargar el reporte: ${err.message || err}`;
-        $("error").classList.remove("hidden");
+        byId("error").textContent = "No se pudo cargar el reporte: " + (err && err.message ? err.message : String(err));
+        byId("error").classList.remove("hidden");
       } finally {
-        $("loading").classList.add("hidden");
+        byId("loading").classList.add("hidden");
       }
     }
-
     function renderReport() {
       renderHero();
       renderMatrix();
@@ -289,177 +324,150 @@ CORPORATE_COMPLIANCE_HTML = """
       renderTrend();
       renderDetail();
     }
-
     function renderHero() {
-      const data = state.data || {};
-      const agg = data.aggregate || {};
-      const general = agg.corporate_index || {};
-      const window = agg.window || data.meta || {};
-      $("periodStamp").textContent = `${window.start || "—"} → ${window.end || "—"}`;
-      $("updatedStamp").textContent = data.generated_at ? `Actualizado ${new Date(data.generated_at).toLocaleString("es-MX")}` : "Actualizado —";
-
-      $("generalScore").className = scoreClass(general);
-      $("generalScore").textContent = pct(general.score);
-      $("generalTitle").innerHTML = `${dot(general)}${escapeHtml(general.traffic_label || "Sin datos")}`;
-      $("generalDetail").textContent = general.detail || "—";
-
-      renderPlantelKpi("best", agg.best_plantel);
-      renderPlantelKpi("worst", agg.worst_plantel);
+      var aggregate = get(state.data, ["aggregate"], {});
+      var general = get(aggregate, ["corporate_index"], {});
+      var win = get(aggregate, ["window"], {});
+      byId("periodStamp").textContent = (win.start || "—") + " → " + (win.end || "—");
+      var generated = get(state.data, ["generated_at"], null);
+      byId("updatedStamp").textContent = generated ? "Actualizado " + new Date(generated).toLocaleString("es-MX") : "Actualizado —";
+      byId("generalScore").className = "kpi-value score " + metricColor(general);
+      byId("generalScore").textContent = pct(general.score);
+      byId("generalTitle").innerHTML = dot(general) + esc(general.traffic_label || "Sin datos");
+      byId("generalDetail").textContent = general.detail || "—";
+      renderKpi("best", aggregate.best_plantel);
+      renderKpi("worst", aggregate.worst_plantel);
     }
-
-    function renderPlantelKpi(prefix, item) {
-      const color = item?.color || "gray";
-      $(`${prefix}Score`).className = `kpi-value score ${color}`;
-      $(`${prefix}Score`).textContent = pct(item?.score);
-      $(`${prefix}Title`).innerHTML = item ? `${dot(item)}${escapeHtml(item.plantel)}` : "—";
-      $(`${prefix}Detail`).textContent = item?.resolved_name || "—";
+    function renderKpi(prefix, item) {
+      var metric = item || {};
+      byId(prefix + "Score").className = "kpi-value score " + metricColor(metric);
+      byId(prefix + "Score").textContent = pct(metric.score);
+      byId(prefix + "Title").innerHTML = item ? dot(metric) + esc(item.plantel) : "—";
+      byId(prefix + "Detail").textContent = item && item.resolved_name ? item.resolved_name : "—";
     }
-
     function renderMatrix() {
-      const rows = state.data?.matrix || [];
-      const header = `<tr><th>Plantel</th>${METRIC_ORDER.map(k => `<th>${METRIC_LABELS[k]}</th>`).join("")}</tr>`;
-      const body = rows.map(row => {
-        const cells = METRIC_ORDER.map(key => {
-          const m = row.cells?.[key] || {};
-          return `<td class="${heatClass(m)}" data-plantel="${escapeHtml(row.plantel)}"><div class="cell-score">${pct(m.score)}</div><div class="cell-detail">${escapeHtml(m.label || "Sin datos")}</div></td>`;
-        }).join("");
-        return `<tr><td><strong>${escapeHtml(row.plantel)}</strong><div class="plantel-name">${escapeHtml(row.name)}</div></td>${cells}</tr>`;
-      }).join("");
-      $("matrix").innerHTML = header + body;
-      document.querySelectorAll(".heat-cell").forEach(cell => {
-        cell.addEventListener("click", () => {
-          state.selectedPlantel = cell.dataset.plantel;
-          renderDetail();
-        });
-      });
-    }
-
-    function metricColor(value) {
-      if (value === null || value === undefined) return COLORS.gray;
-      if (value >= 85) return COLORS.green;
-      if (value >= 70) return COLORS.yellow;
-      return COLORS.red;
-    }
-
-    function chartDataValues(rows) {
-      return rows.map(r => r.score === null || r.score === undefined ? null : Number(r.score));
-    }
-
-    function destroyChart(key) {
-      if (charts[key]) { charts[key].destroy(); charts[key] = null; }
-    }
-
-    function renderBars() {
-      const plantelRows = state.data?.rankings?.planteles || [];
-      const metricRows = state.data?.rankings?.metrics || [];
-      destroyChart("plantelBar");
-      destroyChart("metricBar");
-
-      charts.plantelBar = new Chart($("plantelBarChart"), {
-        type: "bar",
-        data: {
-          labels: plantelRows.map(r => r.plantel),
-          datasets: [{
-            label: "General",
-            data: chartDataValues(plantelRows),
-            backgroundColor: plantelRows.map(r => metricColor(r.score)),
-            borderWidth: 0,
-            borderRadius: 10
-          }]
-        },
-        options: barOptions("%")
-      });
-
-      charts.metricBar = new Chart($("metricBarChart"), {
-        type: "bar",
-        data: {
-          labels: metricRows.map(r => r.label),
-          datasets: [{
-            label: "Promedio",
-            data: chartDataValues(metricRows),
-            backgroundColor: metricRows.map(r => metricColor(r.score)),
-            borderWidth: 0,
-            borderRadius: 10
-          }]
-        },
-        options: barOptions("%")
-      });
-    }
-
-    function barOptions(suffix) {
-      return {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => `${ctx.raw ?? "—"}${suffix}` } } },
-        scales: { y: { min: 0, max: 100, grid: { color: "#edf2f7" } }, x: { grid: { display: false } } }
-      };
-    }
-
-    function renderTrend() {
-      const key = $("trendMetric").value;
-      const trend = state.data?.trend?.metrics?.[key] || {};
-      const labels = state.data?.trend?.labels || [];
-      destroyChart("trend");
-      charts.trend = new Chart($("trendChart"), {
-        type: "line",
-        data: {
-          labels,
-          datasets: (trend.series || []).map((serie, idx) => ({
-            label: serie.plantel,
-            data: serie.values,
-            borderColor: LINE_COLORS[idx % LINE_COLORS.length],
-            backgroundColor: LINE_COLORS[idx % LINE_COLORS.length],
-            tension: .28,
-            borderWidth: 3,
-            pointRadius: 3,
-            spanGaps: true
-          }))
-        },
-        options: {
-          responsive: true,
-          maintainAspectRatio: false,
-          plugins: { legend: { position: "bottom" }, tooltip: { callbacks: { label: ctx => `${ctx.dataset.label}: ${ctx.raw === null ? "—" : Number(ctx.raw).toFixed(1) + "%"}` } } },
-          scales: { y: { min: 0, max: 100, grid: { color: "#edf2f7" } }, x: { grid: { display: false } } }
+      var rows = get(state.data, ["matrix"], []);
+      var html = "<tr><th>Plantel</th>";
+      for (var h = 0; h < METRIC_ORDER.length; h += 1) html += "<th>" + esc(METRIC_LABELS[METRIC_ORDER[h]]) + "</th>";
+      html += "</tr>";
+      for (var r = 0; r < rows.length; r += 1) {
+        var row = rows[r];
+        html += "<tr><td><div class=\"plantel-code\">" + esc(row.plantel) + "</div><div class=\"plantel-name\">" + esc(row.name) + "</div></td>";
+        for (var c = 0; c < METRIC_ORDER.length; c += 1) {
+          var key = METRIC_ORDER[c];
+          var metric = get(row, ["cells", key], {});
+          html += '<td class="heat ' + metricColor(metric) + '" data-plantel="' + esc(row.plantel) + '"><div class="cell-score score ' + metricColor(metric) + '">' + pct(metric.score) + '</div><div class="cell-label">' + esc(metric.label || "Sin datos") + '</div></td>';
         }
-      });
-      const side = $("trendSide");
-      const avg = average((trend.series || []).flatMap(s => s.values || []));
-      side.innerHTML = `<div class="side-title">${escapeHtml(trend.label || METRIC_LABELS[key])}</div><div class="side-big score ${avgColor(avg)}">${pct(avg)}</div><div class="side-line">Promedio del periodo seleccionado</div>`;
+        html += "</tr>";
+      }
+      byId("matrix").innerHTML = html;
+      var cells = document.querySelectorAll(".heat[data-plantel]");
+      for (var i = 0; i < cells.length; i += 1) cells[i].addEventListener("click", function () { state.selectedPlantel = this.getAttribute("data-plantel"); renderDetail(); });
     }
-
+    function renderBars() {
+      renderBarList("plantelBars", get(state.data, ["rankings", "planteles"], []), "plantel");
+      renderBarList("metricBars", get(state.data, ["rankings", "metrics"], []), "label");
+    }
+    function renderBarList(targetId, rows, labelKey) {
+      var html = "";
+      for (var i = 0; i < rows.length; i += 1) {
+        var row = rows[i];
+        var score = num(row.score);
+        var width = score === null ? 0 : Math.max(0, Math.min(100, score));
+        var color = row.color || colorFor(score);
+        var label = row[labelKey] || row.plantel || row.key || "—";
+        html += '<div class="bar-row"><div class="bar-name">' + esc(label) + '</div><div class="track"><div class="fill ' + color + '" style="width:' + width + '%"></div></div><div class="bar-value score ' + color + '">' + pct(score) + '</div></div>';
+      }
+      byId(targetId).innerHTML = html || '<div class="state">Sin datos</div>';
+    }
     function average(values) {
-      const nums = values.filter(v => v !== null && v !== undefined && Number.isFinite(Number(v))).map(Number);
-      if (!nums.length) return null;
-      return nums.reduce((a,b) => a+b, 0) / nums.length;
+      var sum = 0;
+      var count = 0;
+      for (var i = 0; i < values.length; i += 1) {
+        var n = num(values[i]);
+        if (n !== null) { sum += n; count += 1; }
+      }
+      return count ? sum / count : null;
     }
-    function avgColor(value) {
-      if (value === null || value === undefined) return "gray";
-      if (value >= 85) return "green";
-      if (value >= 70) return "yellow";
-      return "red";
+    function renderTrend() {
+      var key = byId("trendMetric").value;
+      var trend = get(state.data, ["trend", "metrics", key], {});
+      var labels = get(state.data, ["trend", "labels"], []);
+      var series = trend.series || [];
+      drawLineChart(labels, series);
+      var allValues = [];
+      for (var i = 0; i < series.length; i += 1) allValues = allValues.concat(series[i].values || []);
+      var avg = average(allValues);
+      byId("trendName").textContent = trend.label || METRIC_LABELS[key] || "Métrica";
+      byId("trendAverage").className = "trend-big score " + colorFor(avg);
+      byId("trendAverage").textContent = pct(avg);
+      byId("trendText").textContent = "Promedio del periodo seleccionado.";
+      var legend = "";
+      for (var l = 0; l < series.length; l += 1) {
+        legend += '<span class="legend-item"><span class="legend-line" style="background:' + LINE_COLORS[l % LINE_COLORS.length] + '"></span>' + esc(series[l].plantel || series[l].name || "—") + '</span>';
+      }
+      byId("trendLegend").innerHTML = legend;
     }
-
+    function drawLineChart(labels, series) {
+      var width = 900, height = 350, padL = 42, padR = 18, padT = 18, padB = 42;
+      var plotW = width - padL - padR;
+      var plotH = height - padT - padB;
+      var html = '';
+      for (var y = 0; y <= 100; y += 25) {
+        var py = padT + plotH - (y / 100) * plotH;
+        html += '<line x1="' + padL + '" y1="' + py + '" x2="' + (width - padR) + '" y2="' + py + '" stroke="#e5e7eb" stroke-width="1" />';
+        html += '<text x="10" y="' + (py + 4) + '" font-size="11" fill="#6b7280">' + y + '</text>';
+      }
+      var labelStep = Math.max(1, Math.ceil(labels.length / 8));
+      for (var lx = 0; lx < labels.length; lx += labelStep) {
+        var x = labels.length <= 1 ? padL : padL + (lx / (labels.length - 1)) * plotW;
+        html += '<text x="' + x + '" y="330" text-anchor="middle" font-size="11" fill="#6b7280">' + esc(labels[lx]) + '</text>';
+      }
+      for (var s = 0; s < series.length; s += 1) {
+        var values = series[s].values || [];
+        var path = '';
+        var started = false;
+        for (var i = 0; i < labels.length; i += 1) {
+          var n = num(values[i]);
+          if (n === null) { started = false; continue; }
+          var px = labels.length <= 1 ? padL : padL + (i / (labels.length - 1)) * plotW;
+          var py2 = padT + plotH - (Math.max(0, Math.min(100, n)) / 100) * plotH;
+          path += (started ? ' L ' : ' M ') + px.toFixed(1) + ' ' + py2.toFixed(1);
+          started = true;
+        }
+        if (path) html += '<path d="' + path + '" fill="none" stroke="' + LINE_COLORS[s % LINE_COLORS.length] + '" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />';
+      }
+      byId("trendSvg").innerHTML = html;
+    }
     function renderDetail() {
-      const planteles = state.data?.planteles || [];
-      const selected = planteles.find(p => p.plantel === state.selectedPlantel) || planteles[0];
-      if (!selected) return;
+      var planteles = get(state.data, ["planteles"], []);
+      if (!planteles.length) return;
+      var selected = planteles[0];
+      for (var i = 0; i < planteles.length; i += 1) if (planteles[i].plantel === state.selectedPlantel) selected = planteles[i];
       state.selectedPlantel = selected.plantel;
-      $("plantelSelector").innerHTML = planteles.map(p => {
-        const m = p.metrics?.general || {};
-        return `<button class="plantel-row ${p.plantel === state.selectedPlantel ? "active" : ""}" data-plantel="${escapeHtml(p.plantel)}"><span><strong>${escapeHtml(p.plantel)}</strong><div class="plantel-name">${escapeHtml(p.resolved_name)}</div></span><span class="score ${m.color || "gray"}">${pct(m.score)}</span></button>`;
-      }).join("");
-      document.querySelectorAll(".plantel-row").forEach(btn => btn.addEventListener("click", () => { state.selectedPlantel = btn.dataset.plantel; renderDetail(); }));
-
-      const rows = METRIC_ORDER.map(key => {
-        const m = selected.metrics?.[key] || {};
-        return `<tr><td>${dot(m)}<strong>${METRIC_LABELS[key]}</strong></td><td class="score ${m.color || "gray"}">${pct(m.score)}</td><td>${escapeHtml(m.label || "Sin datos")}</td><td>${escapeHtml(m.detail || "—")}</td></tr>`;
-      }).join("");
-      $("detailTable").innerHTML = `<thead><tr><th>Área</th><th>Valor</th><th>Resumen</th><th>Detalle</th></tr></thead><tbody>${rows}</tbody>`;
+      var html = "";
+      for (var p = 0; p < planteles.length; p += 1) {
+        var row = planteles[p];
+        var general = get(row, ["metrics", "general"], {});
+        var active = row.plantel === state.selectedPlantel ? " active" : "";
+        html += '<button class="plantel-option' + active + '" data-plantel="' + esc(row.plantel) + '"><span><strong>' + esc(row.plantel) + '</strong><div class="plantel-name">' + esc(row.resolved_name) + '</div></span><span class="score ' + metricColor(general) + '">' + pct(general.score) + '</span></button>';
+      }
+      byId("plantelSelector").innerHTML = html;
+      var buttons = document.querySelectorAll(".plantel-option[data-plantel]");
+      for (var b = 0; b < buttons.length; b += 1) buttons[b].addEventListener("click", function () { state.selectedPlantel = this.getAttribute("data-plantel"); renderDetail(); });
+      var table = '<thead><tr><th>Área</th><th>Valor</th><th>Resumen</th><th>Detalle</th></tr></thead><tbody>';
+      for (var m = 0; m < METRIC_ORDER.length; m += 1) {
+        var key = METRIC_ORDER[m];
+        var metric = get(selected, ["metrics", key], {});
+        table += '<tr><td>' + dot(metric) + '<strong>' + esc(METRIC_LABELS[key]) + '</strong></td><td class="score ' + metricColor(metric) + '">' + pct(metric.score) + '</td><td>' + esc(metric.label || "Sin datos") + '</td><td>' + esc(metric.detail || "—") + '</td></tr>';
+      }
+      table += '</tbody>';
+      byId("detailTable").innerHTML = table;
     }
 
     initControls();
-    loadReport();
+    loadReport(false);
   </script>
 </body>
 </html>
-"""
+'''
