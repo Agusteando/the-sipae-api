@@ -1,1 +1,1 @@
-Actualiza Reporte SIPAE con cómputo diario y balance de escaneos
+Ajusta Reporte SIPAE con planeaciones y seguimientos poblacionales

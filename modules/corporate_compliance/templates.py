@@ -152,7 +152,7 @@ CORPORATE_COMPLIANCE_HTML = r'''
       <section class="hero">
         <div class="panel intro">
           <h1>Reporte SIPAE</h1>
-          <div class="subtitle">Vista ejecutiva del periodo evaluado con métricas de 1 a 100 por plantel. La mayoría de los indicadores operativos se calculan por día y se promedian en el periodo.</div>
+          <div class="subtitle">Vista ejecutiva del periodo evaluado con métricas de 1 a 100 por plantel. Los indicadores operativos se calculan como valor positivo: 100 es sano, menor valor indica mayor atención requerida.</div>
           <div class="stamp-row">
             <span class="stamp" id="periodStamp">Periodo —</span><span class="stamp" id="businessDaysStamp">Días hábiles —</span>
             <span class="stamp" id="updatedStamp">Actualizado —</span>
@@ -225,8 +225,8 @@ CORPORATE_COMPLIANCE_HTML = r'''
 
   <script>
     var PLANTELES = ["PT", "PM", "ST", "SM", "PREET", "PREEM"];
-    var METRIC_ORDER = ["general", "roll_call", "student_attendance", "scans", "scan_balance", "student_punctuality", "staff_attendance", "planning", "observations", "observation_coverage", "sapf"];
-    var METRIC_LABELS = { general: "General", roll_call: "Pase de lista", student_attendance: "Asistencia alumnos", scans: "Escaneos", scan_balance: "Balance accesos", student_punctuality: "Puntualidad alumnos", staff_attendance: "Asistencia personal", planning: "Planeaciones", observations: "Observaciones", observation_coverage: "Cobertura obs.", sapf: "SAPF" };
+    var METRIC_ORDER = ["general", "roll_call", "student_attendance", "scans", "scan_balance", "student_punctuality", "planning", "observations", "observation_coverage", "sapf"];
+    var METRIC_LABELS = { general: "General", roll_call: "Pase de lista", student_attendance: "Asistencia alumnos", scans: "Escaneos", scan_balance: "Balance accesos", student_punctuality: "Puntualidad alumnos", planning: "Planeaciones", observations: "Observaciones", observation_coverage: "Cobertura obs.", sapf: "Seguimientos" };
     var LINE_COLORS = ["#111827", "#15803d", "#b91c1c", "#b45309", "#2563eb", "#7c3aed"];
     var state = { scope: "month", planteles: {}, data: null, selectedPlantel: null };
     for (var p0 = 0; p0 < PLANTELES.length; p0 += 1) state.planteles[PLANTELES[p0]] = true;

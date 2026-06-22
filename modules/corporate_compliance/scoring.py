@@ -28,11 +28,10 @@ METRIC_WEIGHTS = {
     "scans": 10,
     "scan_balance": 8,
     "student_punctuality": 10,
-    "staff_attendance": 10,
-    "planning": 12,
+    "planning": 15,
     "observations": 10,
-    "observation_coverage": 8,
-    "sapf": 5,
+    "observation_coverage": 10,
+    "sapf": 10,
 }
 
 

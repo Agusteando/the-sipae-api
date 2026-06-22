@@ -9,7 +9,6 @@ from zoneinfo import ZoneInfo
 
 from core.logger import get_logger
 from core.utils import resolve_plantel
-from modules.employee_attendance.service import get_kardex_attendance_report
 from modules.sapf.service import get_sapf_overview_report
 from integrations.external_bot import fetch_expected_groups, fetch_expected_population
 
@@ -43,7 +42,6 @@ DISPLAY_METRICS = [
     "scans",
     "scan_balance",
     "student_punctuality",
-    "staff_attendance",
     "planning",
     "observations",
     "observation_coverage",
@@ -54,7 +52,6 @@ SOURCE_TIMEOUTS = {
     "attendance": 26.0,
     "husky": 18.0,
     "retardos": 18.0,
-    "staff_attendance": 18.0,
     "academic": 18.0,
     "sapf": 12.0,
 }
@@ -636,15 +633,27 @@ async def _planning_metric(plantel_info: Dict[str, Any], start_date: date, end_d
         period_week_start,
         period_week_end,
     )
-    reviewed = safe_int(totals.get("reviewed_units"))
-    submitted = safe_int(totals.get("submitted_units"))
-    pending_submitted = max(submitted - reviewed, 0)
+    period_submitted = safe_int(totals.get("period_submitted_units"))
+    period_reviewed = safe_int(totals.get("period_reviewed_units"))
+    period_pending = safe_int(totals.get("period_pending_units"))
+    created_submitted = safe_int(totals.get("created_submitted_units"))
+    created_reviewed = safe_int(totals.get("created_reviewed_units"))
+    created_pending = safe_int(totals.get("created_pending_units"))
+    if period_submitted > 0:
+        submitted = period_submitted
+        reviewed = period_reviewed
+        pending_submitted = period_pending
+        basis = "period_week_overlap"
+    else:
+        submitted = created_submitted
+        reviewed = created_reviewed
+        pending_submitted = created_pending
+        basis = "created_at_period_fallback_unparseable_week"
     submitted_teachers = safe_int(totals.get("docentes_con_planeacion"))
     created_at_fallback_rows = safe_int(totals.get("created_at_fallback_rows"))
+    unparseable_week_rows = safe_int(totals.get("unparseable_week_rows"))
+    period_match_rows = safe_int(totals.get("period_match_rows"))
 
-    # Planeaciones measures review completion for plans whose planning week
-    # belongs to the selected period, including the current week. It does not
-    # count future-week plans just because they were created during the period.
     score = pct(min(reviewed, submitted), submitted)
     return _metric(
         score,
@@ -658,10 +667,16 @@ async def _planning_metric(plantel_info: Dict[str, Any], start_date: date, end_d
             "submitted": submitted,
             "pending": pending_submitted,
             "submitted_teachers": submitted_teachers,
+            "period_submitted": period_submitted,
+            "period_reviewed": period_reviewed,
+            "created_submitted": created_submitted,
+            "created_reviewed": created_reviewed,
             "period_week_start": period_week_start.isoformat(),
             "period_week_end": period_week_end.isoformat(),
             "created_at_fallback_rows": created_at_fallback_rows,
-            "basis": "reviewed_period_plans",
+            "period_match_rows": period_match_rows,
+            "unparseable_week_rows": unparseable_week_rows,
+            "basis": basis,
         },
     )
 
@@ -747,19 +762,34 @@ async def _academic_metrics(plantel_info: Dict[str, Any], start_date: date, end_
         }
 
 
-def _sapf_metric(payload: Dict[str, Any]) -> Dict[str, Any]:
+def _sapf_metric(payload: Dict[str, Any], population_result: Dict[str, Any], start_date: date, end_date: date) -> Dict[str, Any]:
     if not payload.get("_ok", True) or payload.get("error"):
-        return _unavailable("—", "SAPF no respondió")
-    open_cases = safe_int(payload.get("open_cases"))
-    closed_cases = safe_int(payload.get("closed_cases"))
-    complaints = safe_int(payload.get("complaints"))
-    total_cases = open_cases + closed_cases
-    score = pct(closed_cases, total_cases)
+        return _unavailable("—", "Seguimientos no respondió")
+    population = safe_int(population_result.get("value")) if population_result.get("_ok") else 0
+    total_followups = safe_int(payload.get("total_fichas"))
+    if total_followups <= 0:
+        total_followups = safe_int(payload.get("open_cases")) + safe_int(payload.get("closed_cases"))
+    calendar_days = max((end_date - start_date).days + 1, 1)
+    month_start, month_end = _month_window_for(end_date)
+    month_days = max((month_end.replace(day=28) + timedelta(days=4)).replace(day=1).toordinal() - month_start.toordinal(), 28)
+    monthly_rate = 0.05
+    target = round(population * monthly_rate * min(calendar_days, month_days) / month_days, 1) if population > 0 else 0
+    score = pct(min(total_followups, target), target)
     return _metric(
         score,
-        f"{closed_cases:,} cerrados de {total_cases:,} casos" if total_cases > 0 else "—",
-        f"{open_cases:,} abiertos · {complaints:,} quejas" if total_cases > 0 else "Sin casos abiertos/cerrados para calcular",
-        {"open_cases": open_cases, "closed_cases": closed_cases, "complaints": complaints, "total_cases": total_cases, "total_fichas": safe_int(payload.get("total_fichas"))},
+        f"{total_followups:,} seguimientos de {target:,.1f} esperados" if target > 0 else "—",
+        f"Referencia {monthly_rate:.0%} mensual de población · población {population:,}" if target > 0 else "Sin población para referencia",
+        {
+            "total_followups": total_followups,
+            "target_followups": target,
+            "population": population,
+            "monthly_rate": monthly_rate,
+            "open_cases": safe_int(payload.get("open_cases")),
+            "closed_cases": safe_int(payload.get("closed_cases")),
+            "total_fichas": safe_int(payload.get("total_fichas")),
+            "complaints": safe_int(payload.get("complaints")),
+            "basis": "population_reference_5pct_month_prorated",
+        },
     )
 
 
@@ -773,7 +803,7 @@ def _general_metric(metrics: Dict[str, Dict[str, Any]]) -> Dict[str, Any]:
     minimum_weight = 50
     minimum_metrics = 3
     has_operational_base = any(key in usable_keys for key in ("roll_call", "student_attendance", "scans", "scan_balance", "student_punctuality"))
-    has_followup_base = any(key in usable_keys for key in ("planning", "observations", "observation_coverage", "staff_attendance", "sapf"))
+    has_followup_base = any(key in usable_keys for key in ("planning", "observations", "observation_coverage", "sapf"))
     has_enough_evidence = (
         used_weight >= minimum_weight
         and len(usable_keys) >= minimum_metrics
@@ -906,7 +936,6 @@ async def _collect_plantel(code: str, start_date: date, end_date: date, scope: s
         _safe_value_call("attendance_db", lambda: fetch_attendance_rollup(attendance_aliases, start_date, end_date), 20.0),
         _safe_value_call("husky_scans_db", lambda: fetch_husky_daily_scan_counts(husky_values, start_date, end_date), 20.0),
         _safe_value_call("retardos_db", lambda: fetch_husky_tardy_daily_counts(husky_values, start_date, end_date, threshold_time), 20.0),
-        _safe_call("staff_attendance", lambda: get_kardex_attendance_report(code, start_date, end_date, scope), SOURCE_TIMEOUTS["staff_attendance"]),
         _safe_call("academic", lambda: _academic_metrics(plantel_info, start_date, end_date, business_days), SOURCE_TIMEOUTS["academic"]),
         _safe_call("sapf", lambda: get_sapf_overview_report(code, start_date, end_date, scope), SOURCE_TIMEOUTS["sapf"]),
     )
@@ -916,9 +945,8 @@ async def _collect_plantel(code: str, start_date: date, end_date: date, scope: s
         "attendance": sources[2],
         "husky": sources[3],
         "retardos": sources[4],
-        "staff_attendance": sources[5],
-        "academic": sources[6],
-        "sapf": sources[7],
+        "academic": sources[5],
+        "seguimientos": sources[6],
     }
 
     attendance_rows = source_map["attendance"].get("value") if source_map["attendance"].get("_ok") else []
@@ -944,12 +972,11 @@ async def _collect_plantel(code: str, start_date: date, end_date: date, scope: s
     else:
         student_punctuality = _unavailable("—", "Retardos no respondió")
         punctuality_daily = []
-    staff_attendance = _staff_attendance_metric(source_map["staff_attendance"])
     academic_payload = source_map["academic"] if isinstance(source_map["academic"], dict) else {}
     planning = academic_payload.get("planning") if isinstance(academic_payload.get("planning"), dict) else _unavailable("—", "Sin cálculo de planeaciones")
     observations = academic_payload.get("observations") if isinstance(academic_payload.get("observations"), dict) else _unavailable("—", "Sin cálculo de observaciones")
     observation_coverage = academic_payload.get("observation_coverage") if isinstance(academic_payload.get("observation_coverage"), dict) else _unavailable("—", "Sin cálculo de cobertura docente")
-    sapf = _sapf_metric(source_map["sapf"])
+    sapf = _sapf_metric(source_map["seguimientos"], source_map["expected_population"], start_date, end_date)
 
     metrics = {
         "roll_call": roll_call,
@@ -957,7 +984,6 @@ async def _collect_plantel(code: str, start_date: date, end_date: date, scope: s
         "scans": scans,
         "scan_balance": scan_balance,
         "student_punctuality": student_punctuality,
-        "staff_attendance": staff_attendance,
         "planning": planning,
         "observations": observations,
         "observation_coverage": observation_coverage,
@@ -1003,17 +1029,16 @@ def _diagnostic(planteles: List[Dict[str, Any]], start_date: date, end_date: dat
                 "asistencia_alumnos": _metric_evidence(metrics.get("student_attendance") or {}, ["present", "records", "absent", "basis"]),
                 "escaneos": _metric_evidence(metrics.get("scans") or {}, ["entries", "exits", "expected", "expected_population", "observed_max_entries", "days_with_records", "basis"]),
                 "balance_escaneos": _metric_evidence(metrics.get("scan_balance") or {}, ["entries", "exits", "gap_total", "days_with_records", "basis"]),
-                "puntualidad_alumnos": _metric_evidence(metrics.get("student_punctuality") or {}, ["tardies", "opportunities", "basis"]),
-                "asistencia_personal": _metric_evidence(metrics.get("staff_attendance") or {}, ["records", "absences", "tardies", "incidents"]),
-                "planeaciones": _metric_evidence(metrics.get("planning") or {}, ["submitted", "reviewed", "pending", "active_teachers", "submitted_teachers", "weeks", "expected", "period_week_start", "period_week_end", "created_at_fallback_rows", "basis"]),
+                "puntualidad_alumnos": _metric_evidence(metrics.get("student_punctuality") or {}, ["tardies", "opportunities", "days_with_records", "basis"]),
+                "planeaciones": _metric_evidence(metrics.get("planning") or {}, ["submitted", "reviewed", "pending", "period_submitted", "period_reviewed", "created_submitted", "created_reviewed", "active_teachers", "submitted_teachers", "period_match_rows", "created_at_fallback_rows", "unparseable_week_rows", "basis"]),
                 "observaciones": _metric_evidence(metrics.get("observations") or {}, ["total_observations", "monthly_goal", "active_teachers", "window_start", "window_end", "active_window_start", "active_window_end", "basis"]),
                 "cobertura_observaciones": _metric_evidence(metrics.get("observation_coverage") or {}, ["active_teachers", "observed_teachers", "teachers_with_2plus", "without_observation", "window_start", "window_end", "basis"]),
-                "sapf": _metric_evidence(metrics.get("sapf") or {}, ["open_cases", "closed_cases", "total_cases", "total_fichas", "complaints"]),
+                "seguimientos": _metric_evidence(metrics.get("sapf") or {}, ["total_followups", "target_followups", "population", "monthly_rate", "basis"]),
             },
             "general": _metric_evidence(metrics.get("general") or {}, ["weights_used", "weights_total", "metrics_used", "minimum_weight", "minimum_metrics"]),
         }
     return {
-        "v": "corp-diagnostic-v6",
+        "v": "corp-diagnostic-v7",
         "range": {"start": start_date.isoformat(), "end": end_date.isoformat(), "business_days": len(business_days)},
         "planteles": rows,
     }
@@ -1118,11 +1143,10 @@ def _metric_label(key: str) -> str:
         "scans": "Escaneos",
         "scan_balance": "Balance accesos",
         "student_punctuality": "Puntualidad alumnos",
-        "staff_attendance": "Asistencia personal",
         "planning": "Planeaciones",
         "observations": "Observaciones",
         "observation_coverage": "Cobertura obs.",
-        "sapf": "SAPF",
+        "sapf": "Seguimientos",
     }.get(key, key)
 
 
@@ -1171,7 +1195,7 @@ async def get_corporate_compliance_index(
         "source_audit": {p["plantel"]: p.get("source_audit") for p in plantel_payloads},
         "diagnostic": _diagnostic(plantel_payloads, start_date, end_date, business_days),
         "meta": {
-            "logic_version": "2026-06-22-reporte-sipae-v7",
+            "logic_version": "2026-06-22-reporte-sipae-v8",
             "start_date": start_date.isoformat(),
             "end_date": end_date.isoformat(),
             "business_days": len(business_days),
