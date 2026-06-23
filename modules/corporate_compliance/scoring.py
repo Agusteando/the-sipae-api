@@ -31,6 +31,7 @@ METRIC_WEIGHTS = {
     "planning": 15,
     "observations": 10,
     "observation_coverage": 10,
+    "sapf": 10,
 }
 
 

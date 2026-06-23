@@ -1,1 +1,1 @@
-Corrige seguimientos y consolida hora de entrada
+Corrige seguimientos con meta poblacional positiva

@@ -84,6 +84,8 @@ CORPORATE_COMPLIANCE_HTML = r'''
     .heat.green { background: var(--green-soft); } .heat.yellow { background: var(--yellow-soft); } .heat.red { background: var(--red-soft); } .heat.gray { background: var(--gray-soft); }
     .cell-score { font-size: 19px; font-weight: 900; letter-spacing: -.035em; }
     .cell-label { margin-top: 3px; color: #4b5563; font-size: 11px; line-height: 1.35; }
+    .info-title { color: #334155; font-size: 15px; line-height: 1.25; font-weight: 850; letter-spacing: -.015em; }
+    .info-cell { background: linear-gradient(180deg, #f8fafc 0%, #eef2f7 100%) !important; }
     .charts { display: grid; grid-template-columns: minmax(0, 1fr) minmax(310px, .44fr); gap: 12px; }
     .chart-card { min-height: 335px; border: 1px solid var(--line); border-radius: 14px; background: #fff; padding: 14px; }
     .level-access { display: grid; gap: 10px; }
@@ -291,6 +293,17 @@ CORPORATE_COMPLIANCE_HTML = r'''
     function heatStyle(metric) { return ' style="background:' + heatBackground(metric ? metric.score : null) + '"'; }
     function metricColor(metric) { return metric && metric.color ? metric.color : colorFor(metric ? metric.score : null); }
     function dot(metric) { return '<span class="dot ' + metricColor(metric) + '"></span>'; }
+    function isInformational(metric) { return !!(metric && metric.informational); }
+    function metricCellHtml(metric) {
+      if (isInformational(metric)) {
+        return '<div class="info-title">' + esc(metric.label || 'Sin registros') + '</div><div class="cell-label">' + esc(metric.detail || 'Dato informativo') + '</div>';
+      }
+      return '<div class="cell-score score ' + metricColor(metric) + '">' + pct(metric.score) + '</div><div class="cell-label">' + esc(metric.label || "Sin datos") + '</div>';
+    }
+    function metricValueHtml(metric) {
+      if (isInformational(metric)) return '<span class="score gray">Informativo</span>';
+      return '<span class="score ' + metricColor(metric) + '">' + pct(metric.score) + '</span>';
+    }
     function selectedPlanteles() {
       var out = [];
       for (var i = 0; i < PLANTELES.length; i += 1) if (state.planteles[PLANTELES[i]]) out.push(PLANTELES[i]);
@@ -410,7 +423,8 @@ CORPORATE_COMPLIANCE_HTML = r'''
         for (var c = 0; c < METRIC_ORDER.length; c += 1) {
           var key = METRIC_ORDER[c];
           var metric = get(row, ["cells", key], {});
-          html += '<td class="heat ' + metricColor(metric) + '" data-plantel="' + esc(row.plantel) + '"' + heatStyle(metric) + '><div class="cell-score score ' + metricColor(metric) + '">' + pct(metric.score) + '</div><div class="cell-label">' + esc(metric.label || "Sin datos") + '</div></td>';
+          var infoClass = isInformational(metric) ? ' info-cell' : '';
+          html += '<td class="heat ' + metricColor(metric) + infoClass + '" data-plantel="' + esc(row.plantel) + '"' + heatStyle(metric) + '>' + metricCellHtml(metric) + '</td>';
         }
         html += "</tr>";
       }
@@ -528,7 +542,7 @@ CORPORATE_COMPLIANCE_HTML = r'''
       for (var m = 0; m < METRIC_ORDER.length; m += 1) {
         var key = METRIC_ORDER[m];
         var metric = get(selected, ["metrics", key], {});
-        table += '<tr><td>' + dot(metric) + '<strong>' + esc(METRIC_LABELS[key]) + '</strong></td><td class="score ' + metricColor(metric) + '">' + pct(metric.score) + '</td><td>' + esc(metric.label || "Sin datos") + '</td><td>' + esc(metric.detail || "—") + '</td></tr>';
+        table += '<tr><td>' + dot(metric) + '<strong>' + esc(METRIC_LABELS[key]) + '</strong></td><td>' + metricValueHtml(metric) + '</td><td>' + esc(metric.label || "Sin datos") + '</td><td>' + esc(metric.detail || "—") + '</td></tr>';
       }
       table += '</tbody>';
       byId("detailTable").innerHTML = table;

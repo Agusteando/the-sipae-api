@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import calendar
 import time
 from collections import defaultdict
 from datetime import date, datetime, timedelta
@@ -102,6 +103,22 @@ def _week_window_for_period(start_date: date, end_date: date) -> tuple[date, dat
 
 def _month_window_for(value: date) -> tuple[date, date]:
     return value.replace(day=1), value
+
+
+def _monthly_target_per_100_for_period(start_date: date, end_date: date, monthly_target_per_100: float = 5.0) -> float:
+    """Prorate a monthly per-100 target over the evaluated calendar range."""
+    if end_date < start_date:
+        return 0.0
+    cursor = start_date
+    prorated = 0.0
+    while cursor <= end_date:
+        days_in_month = calendar.monthrange(cursor.year, cursor.month)[1]
+        month_end = date(cursor.year, cursor.month, days_in_month)
+        segment_end = min(month_end, end_date)
+        segment_days = (segment_end - cursor).days + 1
+        prorated += monthly_target_per_100 * (segment_days / days_in_month)
+        cursor = segment_end + timedelta(days=1)
+    return round(prorated, 2)
 
 
 def _date_key(value: Any) -> Optional[str]:
@@ -761,13 +778,12 @@ async def _academic_metrics(plantel_info: Dict[str, Any], start_date: date, end_
 
 
 def _sapf_metric(payload: Dict[str, Any], population_result: Dict[str, Any], start_date: date, end_date: date) -> Dict[str, Any]:
-    """Seguimientos as neutral activity information.
+    """Seguimientos scored as positive activity against a prorated target.
 
-    There is no validated compliance target yet. This metric must not reward zero
-    activity or punish high activity, so it is intentionally not scored and is
-    excluded from General until a business target is defined.
+    A higher score means the plantel registered enough follow-up activity for
+    its population during the evaluated period. Zero follow-ups against a real
+    population is a true 0, not a perfect score.
     """
-    del start_date, end_date
     if not payload.get("_ok", True) or payload.get("error"):
         return _unavailable("—", "Seguimientos no respondió")
 
@@ -776,25 +792,32 @@ def _sapf_metric(payload: Dict[str, Any], population_result: Dict[str, Any], sta
     closed_cases = safe_int(payload.get("closed_cases"))
     total_fichas = safe_int(payload.get("total_fichas"))
     total_followups = total_fichas if total_fichas > 0 else open_cases + closed_cases
+    monthly_target_per_100 = 5.0
+    target_per_100 = _monthly_target_per_100_for_period(start_date, end_date, monthly_target_per_100)
+    target_followups = round((population * target_per_100) / 100.0, 1) if population > 0 and target_per_100 > 0 else 0.0
     followups_per_100 = round((total_followups / population) * 100.0, 1) if population > 0 else None
+    score = pct(total_followups, target_followups) if target_followups > 0 else None
 
     return _metric(
-        None,
-        f"{total_followups:,} seguimientos" if total_followups > 0 else "0 seguimientos",
+        score,
+        f"{total_followups:,} de {target_followups:.1f} esperados" if target_followups > 0 else "—",
         (
-            f"{followups_per_100:.1f} por 100 alumnos · {open_cases:,} abiertos · {closed_cases:,} cerrados"
+            f"{followups_per_100:.1f} por 100 alumnos · meta {target_per_100:.2f} por 100"
             if population > 0
             else f"{open_cases:,} abiertos · {closed_cases:,} cerrados · sin población"
         ),
         {
             "total_followups": total_followups,
+            "target_followups": target_followups,
             "population": population,
             "followups_per_100_students": followups_per_100,
+            "target_per_100_students": target_per_100,
+            "monthly_target_per_100_students": monthly_target_per_100,
             "open_cases": open_cases,
             "closed_cases": closed_cases,
             "total_fichas": total_fichas,
             "complaints": safe_int(payload.get("complaints")),
-            "basis": "informative_followups_no_score",
+            "basis": "followups_against_population_prorated_monthly_target",
         },
     )
 
@@ -1025,6 +1048,19 @@ def _metric_evidence(metric: Dict[str, Any], keys: Iterable[str]) -> Dict[str, A
     return output
 
 
+def _followups_evidence(metric: Dict[str, Any]) -> Dict[str, Any]:
+    """Compact diagnostic for Seguimientos target scoring."""
+    return {
+        "score": metric.get("score"),
+        "total": safe_int(metric.get("total_followups")),
+        "esperados": metric.get("target_followups"),
+        "poblacion": safe_int(metric.get("population")),
+        "por_100": metric.get("followups_per_100_students"),
+        "meta_por_100_periodo": metric.get("target_per_100_students"),
+        "basis": metric.get("basis"),
+    }
+
+
 def _diagnostic(planteles: List[Dict[str, Any]], start_date: date, end_date: date, business_days: List[date]) -> Dict[str, Any]:
     rows: Dict[str, Any] = {}
     for plantel in sorted(planteles, key=lambda item: item.get("order", 999)):
@@ -1041,12 +1077,12 @@ def _diagnostic(planteles: List[Dict[str, Any]], start_date: date, end_date: dat
                 "planeaciones": _metric_evidence(metrics.get("planning") or {}, ["submitted", "reviewed", "pending", "raw_rows", "active_teachers", "submitted_teachers", "created_at_start", "created_at_end", "min_created_at", "max_created_at", "basis"]),
                 "observaciones": _metric_evidence(metrics.get("observations") or {}, ["total_observations", "monthly_goal", "active_teachers", "window_start", "window_end", "active_window_start", "active_window_end", "basis"]),
                 "cobertura_observaciones": _metric_evidence(metrics.get("observation_coverage") or {}, ["active_teachers", "observed_teachers", "teachers_with_2plus", "without_observation", "window_start", "window_end", "basis"]),
-                "seguimientos": _metric_evidence(metrics.get("sapf") or {}, ["total_followups", "population", "followups_per_100_students", "open_cases", "closed_cases", "total_fichas", "complaints", "basis"]),
+                "seguimientos": _followups_evidence(metrics.get("sapf") or {}),
             },
             "general": _metric_evidence(metrics.get("general") or {}, ["weights_used", "weights_total", "metrics_used", "minimum_weight", "minimum_metrics"]),
         }
     return {
-        "v": "corp-diagnostic-v12",
+        "v": "corp-diagnostic-v14",
         "range": {"start": start_date.isoformat(), "end": end_date.isoformat(), "business_days": len(business_days)},
         "planteles": rows,
         "hora_promedio_entrada_nivel": _level_access_summary(planteles, business_days),
