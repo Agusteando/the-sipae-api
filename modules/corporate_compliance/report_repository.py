@@ -274,7 +274,11 @@ async def fetch_husky_daily_scan_counts(plantel_values: List[str] | str, start_d
         SELECT
             DATE(src.timestamp) AS fecha,
             LOWER(TRIM(src.tipo_accion)) AS tipo_accion,
-            COUNT(DISTINCT src.user_id) AS total_scans
+            COUNT(DISTINCT src.user_id) AS total_scans,
+            COUNT(*) AS samples,
+            AVG(TIME_TO_SEC(TIME(src.timestamp))) AS avg_entry_seconds,
+            MIN(TIME(src.timestamp)) AS first_entry_time,
+            MAX(TIME(src.timestamp)) AS last_entry_time
         FROM (
             SELECT A.timestamp, A.type AS tipo_accion, B.id AS user_id
             FROM acceso A

@@ -15,7 +15,6 @@ from integrations.external_bot import fetch_expected_groups, fetch_expected_popu
 from .report_repository import (
     count_active_academic_teachers,
     fetch_attendance_rollup,
-    fetch_husky_daily_first_entry_time_stats,
     fetch_husky_daily_scan_counts,
     fetch_husky_tardy_daily_counts,
     fetch_observation_monthly_totals,
@@ -762,55 +761,40 @@ async def _academic_metrics(plantel_info: Dict[str, Any], start_date: date, end_
 
 
 def _sapf_metric(payload: Dict[str, Any], population_result: Dict[str, Any], start_date: date, end_date: date) -> Dict[str, Any]:
-    """Seguimientos normalized by student population.
+    """Seguimientos as neutral activity information.
 
-    This is a positive executive score: 100 means no seguimiento burden in the
-    period; lower values mean a larger seguimiento load relative to total
-    students. It intentionally does not use an arbitrary monthly target.
+    There is no validated compliance target yet. This metric must not reward zero
+    activity or punish high activity, so it is intentionally not scored and is
+    excluded from General until a business target is defined.
     """
     del start_date, end_date
     if not payload.get("_ok", True) or payload.get("error"):
         return _unavailable("—", "Seguimientos no respondió")
+
     population = safe_int(population_result.get("value")) if population_result.get("_ok") else 0
-    total_followups = safe_int(payload.get("total_fichas"))
-    if total_followups <= 0:
-        total_followups = safe_int(payload.get("open_cases")) + safe_int(payload.get("closed_cases"))
+    open_cases = safe_int(payload.get("open_cases"))
+    closed_cases = safe_int(payload.get("closed_cases"))
+    total_fichas = safe_int(payload.get("total_fichas"))
+    total_followups = total_fichas if total_fichas > 0 else open_cases + closed_cases
+    followups_per_100 = round((total_followups / population) * 100.0, 1) if population > 0 else None
 
-    if population <= 0:
-        return _metric(
-            None,
-            "—",
-            "Sin población para normalizar seguimientos",
-            {
-                "total_followups": total_followups,
-                "population": population,
-                "followups_per_100_students": None,
-                "load_pct": None,
-                "open_cases": safe_int(payload.get("open_cases")),
-                "closed_cases": safe_int(payload.get("closed_cases")),
-                "total_fichas": safe_int(payload.get("total_fichas")),
-                "complaints": safe_int(payload.get("complaints")),
-                "basis": "population_normalized_followup_load",
-            },
-        )
-
-    load_pct = (total_followups / population) * 100.0
-    followups_per_100 = round(load_pct, 1)
-    score = clamp_score(100.0 - load_pct)
     return _metric(
-        score,
-        f"{total_followups:,} seguimientos · {followups_per_100:.1f} por 100 alumnos",
-        f"Carga relativa sobre población {population:,}",
+        None,
+        f"{total_followups:,} seguimientos" if total_followups > 0 else "0 seguimientos",
+        (
+            f"{followups_per_100:.1f} por 100 alumnos · {open_cases:,} abiertos · {closed_cases:,} cerrados"
+            if population > 0
+            else f"{open_cases:,} abiertos · {closed_cases:,} cerrados · sin población"
+        ),
         {
             "total_followups": total_followups,
             "population": population,
             "followups_per_100_students": followups_per_100,
-            "load_pct": round(load_pct, 2),
-            "open_cases": safe_int(payload.get("open_cases")),
-            "closed_cases": safe_int(payload.get("closed_cases")),
-            "total_fichas": safe_int(payload.get("total_fichas")),
+            "open_cases": open_cases,
+            "closed_cases": closed_cases,
+            "total_fichas": total_fichas,
             "complaints": safe_int(payload.get("complaints")),
-            "basis": "population_normalized_followup_load",
+            "basis": "informative_followups_no_score",
         },
     )
 
@@ -825,7 +809,7 @@ def _general_metric(metrics: Dict[str, Dict[str, Any]]) -> Dict[str, Any]:
     minimum_weight = 50
     minimum_metrics = 3
     has_operational_base = any(key in usable_keys for key in ("roll_call", "student_attendance", "scans", "scan_balance", "student_punctuality"))
-    has_followup_base = any(key in usable_keys for key in ("planning", "observations", "observation_coverage", "sapf"))
+    has_followup_base = any(key in usable_keys for key in ("planning", "observations", "observation_coverage"))
     has_enough_evidence = (
         used_weight >= minimum_weight
         and len(usable_keys) >= minimum_metrics
@@ -957,7 +941,6 @@ async def _collect_plantel(code: str, start_date: date, end_date: date, scope: s
         _safe_value_call("expected_population", lambda: fetch_expected_population(sheets_code), 12.0),
         _safe_value_call("attendance_db", lambda: fetch_attendance_rollup(attendance_aliases, start_date, end_date), 20.0),
         _safe_value_call("husky_scans_db", lambda: fetch_husky_daily_scan_counts(husky_values, start_date, end_date), 20.0),
-        _safe_value_call("entry_time_db", lambda: fetch_husky_daily_first_entry_time_stats(husky_values, start_date, end_date), 20.0),
         _safe_value_call("retardos_db", lambda: fetch_husky_tardy_daily_counts(husky_values, start_date, end_date, threshold_time), 20.0),
         _safe_call("academic", lambda: _academic_metrics(plantel_info, start_date, end_date, business_days), SOURCE_TIMEOUTS["academic"]),
         _safe_call("sapf", lambda: get_sapf_overview_report(code, start_date, end_date, scope), SOURCE_TIMEOUTS["sapf"]),
@@ -967,17 +950,15 @@ async def _collect_plantel(code: str, start_date: date, end_date: date, scope: s
         "expected_population": sources[1],
         "attendance": sources[2],
         "husky": sources[3],
-        "entry_time": sources[4],
-        "retardos": sources[5],
-        "academic": sources[6],
-        "seguimientos": sources[7],
+        "retardos": sources[4],
+        "academic": sources[5],
+        "seguimientos": sources[6],
     }
 
     attendance_rows = source_map["attendance"].get("value") if source_map["attendance"].get("_ok") else []
     husky_rows = source_map["husky"].get("value") if source_map["husky"].get("_ok") else []
     tardy_rows = source_map["retardos"].get("value") if source_map["retardos"].get("_ok") else []
-    entry_time_rows = source_map["entry_time"].get("value") if source_map["entry_time"].get("_ok") else []
-    entry_time_daily = _entry_time_daily_points(entry_time_rows, business_days) if source_map["entry_time"].get("_ok") else []
+    entry_time_daily = _entry_time_daily_points(husky_rows, business_days) if source_map["husky"].get("_ok") else []
 
     if source_map["attendance"].get("_ok"):
         roll_call, student_attendance, attendance_daily = _attendance_metrics_from_rollup(attendance_rows, source_map["expected_groups"], business_days)
@@ -1060,12 +1041,12 @@ def _diagnostic(planteles: List[Dict[str, Any]], start_date: date, end_date: dat
                 "planeaciones": _metric_evidence(metrics.get("planning") or {}, ["submitted", "reviewed", "pending", "raw_rows", "active_teachers", "submitted_teachers", "created_at_start", "created_at_end", "min_created_at", "max_created_at", "basis"]),
                 "observaciones": _metric_evidence(metrics.get("observations") or {}, ["total_observations", "monthly_goal", "active_teachers", "window_start", "window_end", "active_window_start", "active_window_end", "basis"]),
                 "cobertura_observaciones": _metric_evidence(metrics.get("observation_coverage") or {}, ["active_teachers", "observed_teachers", "teachers_with_2plus", "without_observation", "window_start", "window_end", "basis"]),
-                "seguimientos": _metric_evidence(metrics.get("sapf") or {}, ["total_followups", "population", "followups_per_100_students", "load_pct", "open_cases", "closed_cases", "basis"]),
+                "seguimientos": _metric_evidence(metrics.get("sapf") or {}, ["total_followups", "population", "followups_per_100_students", "open_cases", "closed_cases", "total_fichas", "complaints", "basis"]),
             },
             "general": _metric_evidence(metrics.get("general") or {}, ["weights_used", "weights_total", "metrics_used", "minimum_weight", "minimum_metrics"]),
         }
     return {
-        "v": "corp-diagnostic-v11",
+        "v": "corp-diagnostic-v12",
         "range": {"start": start_date.isoformat(), "end": end_date.isoformat(), "business_days": len(business_days)},
         "planteles": rows,
         "hora_promedio_entrada_nivel": _level_access_summary(planteles, business_days),
@@ -1134,14 +1115,18 @@ def _format_hhmm(seconds: Any) -> Optional[str]:
 
 
 def _entry_time_daily_points(rows: List[Dict[str, Any]], business_days: List[date]) -> List[Dict[str, Any]]:
+    """Average hora of entrada access rows from the lightweight Husky rollup."""
     allowed = {day.isoformat() for day in business_days}
     points: List[Dict[str, Any]] = []
     for row in rows or []:
-        day = _date_key(row.get("date"))
+        day = _date_key(row.get("date") or row.get("fecha"))
+        tipo = str(row.get("tipo_accion") or "").strip().lower()
+        if tipo and tipo != "entrada":
+            continue
         if not day or day not in allowed:
             continue
         avg_seconds = safe_float(row.get("avg_entry_seconds"))
-        samples = safe_int(row.get("samples"))
+        samples = safe_int(row.get("samples")) or safe_int(row.get("total_scans"))
         if avg_seconds is None or samples <= 0:
             continue
         first_entry = str(row.get("first_entry_time") or "")[:5] or None
@@ -1159,11 +1144,11 @@ def _entry_time_daily_points(rows: List[Dict[str, Any]], business_days: List[dat
 
 
 def _level_access_summary(planteles: List[Dict[str, Any]], business_days: List[date]) -> Dict[str, Any]:
-    """Average first entrada time by derived school level.
+    """Average entrada access time by derived school level.
 
     Husky does not expose a `nivel` field. The level is derived from the plantel
     code: PT/PM=Primaria, ST/SM=Secundaria, PREET/PREEM=Preescolar.
-    The average uses the first entrada per student/day, weighted by samples.
+    The average is weighted by entrada samples returned by the Husky rollup.
     """
     level_stats: Dict[str, Dict[str, Any]] = {
         level: {"weighted_seconds": 0.0, "samples": 0, "days": set(), "planteles": set(), "first_times": [], "last_times": []}
@@ -1206,7 +1191,7 @@ def _level_access_summary(planteles: List[Dict[str, Any]], business_days: List[d
             "business_days": len(business_days),
             "first_entry_time": min(stats.get("first_times") or []) if stats.get("first_times") else None,
             "last_entry_time": max(stats.get("last_times") or []) if stats.get("last_times") else None,
-            "basis": "first_entrada_per_student_day_derived_level",
+            "basis": "entrada_access_time_derived_level",
         })
     return {
         "basis": "nivel_derivado_por_plantel_no_campo_db",
@@ -1316,7 +1301,7 @@ async def get_corporate_compliance_index(
         "source_audit": {p["plantel"]: p.get("source_audit") for p in plantel_payloads},
         "diagnostic": _diagnostic(plantel_payloads, start_date, end_date, business_days),
         "meta": {
-            "logic_version": "2026-06-22-reporte-sipae-v13",
+            "logic_version": "2026-06-22-reporte-sipae-v14",
             "start_date": start_date.isoformat(),
             "end_date": end_date.isoformat(),
             "business_days": len(business_days),

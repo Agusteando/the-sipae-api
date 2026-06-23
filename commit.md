@@ -1,1 +1,1 @@
-Corrige promedio de hora de entrada por nivel
+Corrige seguimientos y consolida hora de entrada
