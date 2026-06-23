@@ -110,6 +110,29 @@ async def fetch_planning_review_totals(
         async with conn.cursor(aiomysql.DictCursor) as cur:
             await cur.execute(query, params)
             row = await cur.fetchone() or {}
+            monthly_query = f"""
+                SELECT
+                    DATE_FORMAT(p.created_at, '%%Y-%%m') AS month_key,
+                    COUNT(DISTINCT {unit_key}) AS submitted_units,
+                    COUNT(DISTINCT CASE WHEN {reviewed} THEN {unit_key} END) AS reviewed_units,
+                    COUNT(DISTINCT CASE WHEN NOT {reviewed} THEN {unit_key} END) AS pending_units
+                FROM planeaciones p
+                JOIN usuarios u ON u.username = p.docente
+                WHERE {user_where}
+                  AND {plan_where}
+                  AND p.created_at >= %s
+                  AND p.created_at < DATE_ADD(%s, INTERVAL 1 DAY)
+                  AND p.flagged = 0
+                  AND p.docente IS NOT NULL
+                  AND TRIM(p.docente) <> ''
+                  AND COALESCE(u.coordinador, 0) = 0
+                  AND COALESCE(u.banned, 0) = 0
+                  AND (u.ISSSTE IS NULL OR u.ISSSTE = 0)
+                GROUP BY month_key
+                ORDER BY month_key
+            """
+            await cur.execute(monthly_query, params)
+            row["monthly"] = await cur.fetchall() or []
             # Backward-compatible aliases used by the service/diagnostic.
             row["period_submitted_units"] = row.get("submitted_units") or 0
             row["period_reviewed_units"] = row.get("reviewed_units") or 0

@@ -181,6 +181,80 @@ def _monthly_target_per_100_for_period(start_date: date, end_date: date, monthly
     return round(prorated, 2)
 
 
+def _month_bounds(month_key: str, report_start: date, report_end: date) -> tuple[date, date]:
+    year, month = [int(part) for part in str(month_key).split("-")[:2]]
+    month_start = date(year, month, 1)
+    month_end = date(year, month, calendar.monthrange(year, month)[1])
+    return max(month_start, report_start), min(month_end, report_end)
+
+
+def _month_label(month_key: str) -> str:
+    try:
+        year, month = [int(part) for part in str(month_key).split("-")[:2]]
+        month_names = ["", "ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"]
+        return f"{month_names[month]} {year}"
+    except Exception:
+        return str(month_key)
+
+
+def _with_breakdown(metric: Dict[str, Any], breakdown: Dict[str, Any]) -> Dict[str, Any]:
+    metric["breakdown"] = breakdown
+    return metric
+
+
+def _plain_unavailable_reason(metric: Dict[str, Any]) -> str:
+    detail = str(metric.get("detail") or "").strip()
+    label = str(metric.get("label") or "").strip()
+    if detail and detail != "—":
+        return detail
+    if label and label != "—":
+        return label
+    return "No hay datos suficientes para calcular esta métrica."
+
+
+def _daily_monthly_breakdown(
+    daily: List[Dict[str, Any]],
+    business_days: List[date],
+    score_key: str,
+    numerator_key: str,
+    denominator_key: str,
+    numerator_label: str,
+    denominator_label: str,
+) -> List[Dict[str, Any]]:
+    by_day = {str(item.get("date")): item for item in daily or []}
+    months: List[Dict[str, Any]] = []
+    month_keys = _month_keys_between(business_days[0], business_days[-1]) if business_days else []
+    for month_key in month_keys:
+        month_days = [day for day in business_days if day.isoformat().startswith(month_key)]
+        scores: List[Optional[float]] = []
+        numerator = 0
+        denominator = 0
+        available_days = 0
+        for day in month_days:
+            item = by_day.get(day.isoformat()) or {}
+            score = item.get(score_key)
+            if clamp_score(score) is not None:
+                scores.append(score)
+                available_days += 1
+            numerator += safe_int(item.get(numerator_key))
+            denominator += safe_int(item.get(denominator_key))
+        months.append({
+            "period": month_key,
+            "label": _month_label(month_key),
+            "start": month_days[0].isoformat() if month_days else None,
+            "end": month_days[-1].isoformat() if month_days else None,
+            "numerator": numerator,
+            "denominator": denominator,
+            "numerator_label": numerator_label,
+            "denominator_label": denominator_label,
+            "score": average_score(scores),
+            "available_days": available_days,
+            "business_days": len(month_days),
+            "unavailable_reason": None if available_days else "Sin días calculables en el mes",
+        })
+    return months
+
+
 def _date_key(value: Any) -> Optional[str]:
     if value is None:
         return None
@@ -723,6 +797,22 @@ async def _planning_metric(plantel_info: Dict[str, Any], start_date: date, end_d
     pending_submitted = safe_int(totals.get("pending_units")) or max(submitted - reviewed, 0)
     submitted_teachers = safe_int(totals.get("docentes_con_planeacion"))
     raw_rows = safe_int(totals.get("raw_rows"))
+    monthly_rows = []
+    for row in totals.get("monthly") or []:
+        submitted_month = safe_int(row.get("submitted_units"))
+        reviewed_month = safe_int(row.get("reviewed_units"))
+        pending_month = safe_int(row.get("pending_units")) or max(submitted_month - reviewed_month, 0)
+        monthly_rows.append({
+            "period": str(row.get("month_key") or ""),
+            "label": _month_label(str(row.get("month_key") or "")),
+            "numerator": reviewed_month,
+            "denominator": submitted_month,
+            "numerator_label": "Planeaciones revisadas",
+            "denominator_label": "Planeaciones creadas",
+            "pending": pending_month,
+            "score": pct(min(reviewed_month, submitted_month), submitted_month),
+            "unavailable_reason": None if submitted_month > 0 else "Sin planeaciones creadas en el mes",
+        })
 
     score = pct(min(reviewed, submitted), submitted)
     return _metric(
@@ -743,6 +833,17 @@ async def _planning_metric(plantel_info: Dict[str, Any], start_date: date, end_d
             "min_created_at": str(totals.get("min_created_at") or ""),
             "max_created_at": str(totals.get("max_created_at") or ""),
             "basis": "created_at_period_plans",
+            "breakdown": {
+                "method": "Razón del periodo",
+                "formula": "planeaciones revisadas / planeaciones creadas en el periodo",
+                "numerator": reviewed,
+                "denominator": submitted,
+                "numerator_label": "Planeaciones revisadas",
+                "denominator_label": "Planeaciones creadas",
+                "aggregation": "El valor final usa el total del periodo, no el promedio simple de meses.",
+                "excluded": ["Planeaciones flagged", "Docentes coordinadores, banned o ISSSTE"],
+                "monthly": monthly_rows,
+            },
         },
     )
 
@@ -781,6 +882,8 @@ async def _observation_metrics(plantel_info: Dict[str, Any], start_date: date, e
         monthly_active_counts: List[int] = []
         monthly_two_plus_counts: List[int] = []
         months_with_active = 0
+        observation_monthly_rows: List[Dict[str, Any]] = []
+        coverage_monthly_rows: List[Dict[str, Any]] = []
         for month_key in month_keys:
             teacher_counts = observations_by_month.get(month_key) or {}
             month_total = sum(teacher_counts.values())
@@ -792,6 +895,31 @@ async def _observation_metrics(plantel_info: Dict[str, Any], start_date: date, e
             if active_teachers > 0:
                 months_with_active += 1
                 monthly_coverage_scores.append(pct(min(teachers_with_2plus, active_teachers), active_teachers))
+            month_start, month_end = _month_bounds(month_key, start_date, end_date)
+            observation_monthly_rows.append({
+                "period": month_key,
+                "label": _month_label(month_key),
+                "start": month_start.isoformat(),
+                "end": month_end.isoformat(),
+                "numerator": month_total,
+                "denominator": monthly_goal,
+                "numerator_label": "Observaciones realizadas",
+                "denominator_label": "Meta mensual",
+                "score": pct(min(month_total, monthly_goal), monthly_goal),
+                "unavailable_reason": None,
+            })
+            coverage_monthly_rows.append({
+                "period": month_key,
+                "label": _month_label(month_key),
+                "start": month_start.isoformat(),
+                "end": month_end.isoformat(),
+                "numerator": teachers_with_2plus,
+                "denominator": active_teachers,
+                "numerator_label": "Docentes con 2+ observaciones",
+                "denominator_label": "Docentes activos",
+                "score": pct(min(teachers_with_2plus, active_teachers), active_teachers),
+                "unavailable_reason": None if active_teachers > 0 else "Sin docentes activos en el mes",
+            })
 
         avg_monthly_observations = total_observations / month_count if month_count else 0.0
         observation_score = pct(min(avg_monthly_observations, monthly_goal), monthly_goal)
@@ -810,6 +938,17 @@ async def _observation_metrics(plantel_info: Dict[str, Any], start_date: date, e
                 "window_start": start_date.isoformat(),
                 "window_end": end_date.isoformat(),
                 "basis": "period_monthly_average_observation_goal",
+                "breakdown": {
+                    "method": "Promedio mensual contra meta",
+                    "formula": "promedio mensual de observaciones / meta mensual",
+                    "numerator": round(avg_monthly_observations, 1),
+                    "denominator": monthly_goal,
+                    "numerator_label": "Promedio mensual de observaciones",
+                    "denominator_label": "Meta mensual",
+                    "aggregation": "Se suman las observaciones del ciclo, se dividen entre meses evaluados y luego se compara contra la meta mensual.",
+                    "excluded": ["Meses fuera del periodo seleccionado", "Observaciones sin docente"],
+                    "monthly": observation_monthly_rows,
+                },
             },
         )
         coverage = _metric(
@@ -824,6 +963,17 @@ async def _observation_metrics(plantel_info: Dict[str, Any], start_date: date, e
                 "window_start": start_date.isoformat(),
                 "window_end": end_date.isoformat(),
                 "basis": "period_monthly_average_teachers_observed_twice",
+                "breakdown": {
+                    "method": "Promedio mensual de cobertura",
+                    "formula": "promedio de (docentes con 2+ observaciones / docentes activos)",
+                    "numerator": round(avg_two_plus, 1),
+                    "denominator": round(avg_active_teachers, 1),
+                    "numerator_label": "Promedio mensual docentes con 2+",
+                    "denominator_label": "Promedio mensual docentes activos",
+                    "aggregation": "El valor final es el promedio de los porcentajes mensuales calculables.",
+                    "excluded": ["Meses sin docentes activos", "Usuarios coordinadores, banned o ISSSTE"],
+                    "monthly": coverage_monthly_rows,
+                },
             },
         )
         return {"observations": observations, "observation_coverage": coverage}
@@ -860,6 +1010,28 @@ async def _observation_metrics(plantel_info: Dict[str, Any], start_date: date, e
             "window_start": month_start.isoformat(),
             "window_end": month_end.isoformat(),
             "basis": "monthly_observation_goal_active_teachers",
+            "breakdown": {
+                "method": "Meta mensual",
+                "formula": "observaciones realizadas / meta mensual",
+                "numerator": total_observations,
+                "denominator": monthly_goal,
+                "numerator_label": "Observaciones realizadas",
+                "denominator_label": "Meta mensual",
+                "aggregation": "El valor final usa el mes seleccionado.",
+                "excluded": ["Observaciones fuera del mes seleccionado", "Observaciones sin docente"],
+                "monthly": [{
+                    "period": f"{month_end.year:04d}-{month_end.month:02d}",
+                    "label": _month_label(f"{month_end.year:04d}-{month_end.month:02d}"),
+                    "start": month_start.isoformat(),
+                    "end": month_end.isoformat(),
+                    "numerator": total_observations,
+                    "denominator": monthly_goal,
+                    "numerator_label": "Observaciones realizadas",
+                    "denominator_label": "Meta mensual",
+                    "score": observation_score,
+                    "unavailable_reason": None if active_teachers > 0 else "Sin docentes activos recientes",
+                }],
+            },
         },
     )
 
@@ -877,6 +1049,28 @@ async def _observation_metrics(plantel_info: Dict[str, Any], start_date: date, e
             "window_start": month_start.isoformat(),
             "window_end": month_end.isoformat(),
             "basis": "teachers_observed_twice_monthly",
+            "breakdown": {
+                "method": "Cobertura mensual",
+                "formula": "docentes con 2+ observaciones / docentes activos",
+                "numerator": teachers_with_2plus,
+                "denominator": active_teachers,
+                "numerator_label": "Docentes con 2+ observaciones",
+                "denominator_label": "Docentes activos",
+                "aggregation": "El valor final usa el mes seleccionado.",
+                "excluded": ["Docentes no activos en la ventana reciente", "Usuarios coordinadores, banned o ISSSTE"],
+                "monthly": [{
+                    "period": f"{month_end.year:04d}-{month_end.month:02d}",
+                    "label": _month_label(f"{month_end.year:04d}-{month_end.month:02d}"),
+                    "start": month_start.isoformat(),
+                    "end": month_end.isoformat(),
+                    "numerator": teachers_with_2plus,
+                    "denominator": active_teachers,
+                    "numerator_label": "Docentes con 2+ observaciones",
+                    "denominator_label": "Docentes activos",
+                    "score": coverage_score,
+                    "unavailable_reason": None if active_teachers > 0 else "Sin docentes activos recientes",
+                }],
+            },
         },
     )
     return {"observations": observations, "observation_coverage": coverage}
@@ -910,7 +1104,77 @@ async def _academic_metrics(plantel_info: Dict[str, Any], start_date: date, end_
     return payload
 
 
-def _sapf_metric(payload: Dict[str, Any], population_result: Dict[str, Any], start_date: date, end_date: date) -> Dict[str, Any]:
+def _sapf_population_base(
+    population_result: Dict[str, Any],
+    attendance_daily: List[Dict[str, Any]],
+    scans_daily: List[Dict[str, Any]],
+) -> tuple[int, str]:
+    expected_population = safe_int(population_result.get("value")) if population_result.get("_ok") else 0
+    if expected_population > 0:
+        return expected_population, "expected_population"
+
+    observed_scan_population = max((safe_int(item.get("entries")) for item in scans_daily or []), default=0)
+    if observed_scan_population > 0:
+        return observed_scan_population, "observed_max_daily_entries"
+
+    observed_attendance_population = max((safe_int(item.get("records")) for item in attendance_daily or []), default=0)
+    if observed_attendance_population > 0:
+        return observed_attendance_population, "observed_max_daily_attendance_records"
+
+    return 0, "none"
+
+
+def _sapf_monthly_breakdown(
+    payload: Dict[str, Any],
+    population: int,
+    start_date: date,
+    end_date: date,
+    monthly_target_per_100: float,
+) -> List[Dict[str, Any]]:
+    by_month: Dict[str, Dict[str, int]] = defaultdict(lambda: {"fichas": 0, "followups": 0})
+    for row in payload.get("monthly_activity") or []:
+        month_key = str(row.get("month_key") or "")
+        source = str(row.get("source") or "").strip().lower()
+        total = safe_int(row.get("total"))
+        if not month_key:
+            continue
+        if source == "seguimiento":
+            by_month[month_key]["followups"] += total
+        else:
+            by_month[month_key]["fichas"] += total
+
+    rows: List[Dict[str, Any]] = []
+    for month_key in _month_keys_between(start_date, end_date):
+        month_start, month_end = _month_bounds(month_key, start_date, end_date)
+        target_per_100 = _monthly_target_per_100_for_period(month_start, month_end, monthly_target_per_100)
+        denominator = round((population * target_per_100) / 100.0, 1) if population > 0 else 0.0
+        followups = by_month[month_key]["followups"]
+        fichas = by_month[month_key]["fichas"]
+        rows.append({
+            "period": month_key,
+            "label": _month_label(month_key),
+            "start": month_start.isoformat(),
+            "end": month_end.isoformat(),
+            "numerator": followups,
+            "denominator": denominator,
+            "numerator_label": "Seguimientos registrados",
+            "denominator_label": "Seguimientos esperados",
+            "score": pct(followups, denominator),
+            "fichas": fichas,
+            "followups": followups,
+            "unavailable_reason": None if denominator > 0 else "Sin población base para meta mensual",
+        })
+    return rows
+
+
+def _sapf_metric(
+    payload: Dict[str, Any],
+    population_result: Dict[str, Any],
+    attendance_daily: List[Dict[str, Any]],
+    scans_daily: List[Dict[str, Any]],
+    start_date: date,
+    end_date: date,
+) -> Dict[str, Any]:
     """Seguimientos scored as positive activity against a prorated target.
 
     A higher score means the plantel registered enough follow-up activity for
@@ -920,22 +1184,37 @@ def _sapf_metric(payload: Dict[str, Any], population_result: Dict[str, Any], sta
     if not payload.get("_ok", True) or payload.get("error"):
         return _unavailable("—", "Seguimientos no respondió")
 
-    population = safe_int(population_result.get("value")) if population_result.get("_ok") else 0
+    population, population_basis = _sapf_population_base(population_result, attendance_daily, scans_daily)
     open_cases = safe_int(payload.get("open_cases"))
     closed_cases = safe_int(payload.get("closed_cases"))
     total_fichas = safe_int(payload.get("total_fichas"))
-    total_followups = total_fichas if total_fichas > 0 else open_cases + closed_cases
-    monthly_target_per_100 = 5.0
+    total_followups = safe_int(payload.get("total_followups"))
+    total_interactions = safe_int(payload.get("total_interactions")) or (total_fichas + total_followups)
+    monthly_target_per_100 = 6.0
     target_per_100 = _monthly_target_per_100_for_period(start_date, end_date, monthly_target_per_100)
     target_followups = round((population * target_per_100) / 100.0, 1) if population > 0 and target_per_100 > 0 else 0.0
     followups_per_100 = round((total_followups / population) * 100.0, 1) if population > 0 else None
-    score = pct(total_followups, target_followups) if target_followups > 0 else None
+    activity_score = pct(total_followups, target_followups) if target_followups > 0 else None
+    closure_score = pct(closed_cases, total_fichas) if total_fichas > 0 else None
+    followup_density_score = pct(total_followups, total_fichas) if total_fichas > 0 else None
+    if target_followups > 0:
+        score = weighted_score(
+            {
+                "activity": activity_score,
+                "closure": closure_score,
+                "density": followup_density_score,
+            },
+            {"activity": 60, "closure": 25, "density": 15},
+        )
+    else:
+        score = None
+    monthly_rows = _sapf_monthly_breakdown(payload, population, start_date, end_date, monthly_target_per_100)
 
     return _metric(
         score,
-        f"{total_followups:,} de {target_followups:.1f} esperados" if target_followups > 0 else "—",
+        f"{total_followups:,} de {target_followups:.1f} seguimientos esperados" if target_followups > 0 else "—",
         (
-            f"{followups_per_100:.1f} por 100 alumnos · meta {target_per_100:.2f} por 100"
+            f"{followups_per_100:.1f} seguimientos por 100 alumnos · {closed_cases:,}/{total_fichas:,} fichas cerradas"
             if population > 0
             else f"{open_cases:,} abiertos · {closed_cases:,} cerrados · sin población"
         ),
@@ -943,14 +1222,36 @@ def _sapf_metric(payload: Dict[str, Any], population_result: Dict[str, Any], sta
             "total_followups": total_followups,
             "target_followups": target_followups,
             "population": population,
+            "population_basis": population_basis,
             "followups_per_100_students": followups_per_100,
             "target_per_100_students": target_per_100,
             "monthly_target_per_100_students": monthly_target_per_100,
+            "activity_score": activity_score,
+            "closure_score": closure_score,
+            "followup_density_score": followup_density_score,
             "open_cases": open_cases,
             "closed_cases": closed_cases,
             "total_fichas": total_fichas,
+            "total_interactions": total_interactions,
+            "total_followups_raw": total_followups,
             "complaints": safe_int(payload.get("complaints")),
-            "basis": "followups_against_population_prorated_monthly_target",
+            "basis": "blended_followups_population_closure_density",
+            "breakdown": {
+                "method": "Puntaje combinado de seguimiento",
+                "formula": "60% volumen de seguimientos vs meta poblacional + 25% fichas cerradas + 15% densidad de seguimiento por ficha",
+                "numerator": total_followups,
+                "denominator": target_followups,
+                "numerator_label": "Seguimientos registrados",
+                "denominator_label": "Seguimientos esperados",
+                "aggregation": "La meta se prorratea por población y periodo. El componente principal usa seguimientos reales, no solo fichas creadas.",
+                "excluded": ["Actividad fuera del periodo", "Registros sin campus que coincida con el plantel"],
+                "components": [
+                    {"label": "Volumen vs meta poblacional", "score": activity_score, "weight": 60, "numerator": total_followups, "denominator": target_followups},
+                    {"label": "Fichas cerradas", "score": closure_score, "weight": 25, "numerator": closed_cases, "denominator": total_fichas},
+                    {"label": "Seguimientos por ficha", "score": followup_density_score, "weight": 15, "numerator": total_followups, "denominator": total_fichas},
+                ],
+                "monthly": monthly_rows,
+            },
         },
     )
 
@@ -1039,6 +1340,211 @@ def _merge_daily_points(
         point["general"] = _daily_general_score(point)
         output.append(point)
     return output
+
+
+def _balance_monthly_breakdown(daily: List[Dict[str, Any]], business_days: List[date]) -> List[Dict[str, Any]]:
+    by_day = {str(item.get("date")): item for item in daily or []}
+    rows: List[Dict[str, Any]] = []
+    month_keys = _month_keys_between(business_days[0], business_days[-1]) if business_days else []
+    for month_key in month_keys:
+        month_days = [day for day in business_days if day.isoformat().startswith(month_key)]
+        numerator = 0
+        denominator = 0
+        scores: List[Optional[float]] = []
+        available_days = 0
+        for day in month_days:
+            item = by_day.get(day.isoformat()) or {}
+            entries = safe_int(item.get("scan_entries"))
+            exits = safe_int(item.get("scan_exits"))
+            if max(entries, exits) > 0:
+                numerator += min(entries, exits)
+                denominator += max(entries, exits)
+                scores.append(item.get("scan_balance"))
+                available_days += 1
+        rows.append({
+            "period": month_key,
+            "label": _month_label(month_key),
+            "numerator": numerator,
+            "denominator": denominator,
+            "numerator_label": "Accesos balanceados",
+            "denominator_label": "Mayor total entradas/salidas",
+            "score": average_score(scores),
+            "available_days": available_days,
+            "business_days": len(month_days),
+            "unavailable_reason": None if available_days else "Sin días con entradas o salidas",
+        })
+    return rows
+
+
+def _punctuality_monthly_breakdown(daily: List[Dict[str, Any]], business_days: List[date]) -> List[Dict[str, Any]]:
+    by_day = {str(item.get("date")): item for item in daily or []}
+    rows: List[Dict[str, Any]] = []
+    month_keys = _month_keys_between(business_days[0], business_days[-1]) if business_days else []
+    for month_key in month_keys:
+        month_days = [day for day in business_days if day.isoformat().startswith(month_key)]
+        numerator = 0
+        denominator = 0
+        scores: List[Optional[float]] = []
+        available_days = 0
+        tardies = 0
+        for day in month_days:
+            item = by_day.get(day.isoformat()) or {}
+            opportunities = safe_int(item.get("punctuality_opportunities"))
+            day_tardies = safe_int(item.get("tardies"))
+            if opportunities > 0:
+                numerator += max(opportunities - day_tardies, 0)
+                denominator += opportunities
+                tardies += day_tardies
+                scores.append(item.get("student_punctuality"))
+                available_days += 1
+        rows.append({
+            "period": month_key,
+            "label": _month_label(month_key),
+            "numerator": numerator,
+            "denominator": denominator,
+            "numerator_label": "Oportunidades sin retardo",
+            "denominator_label": "Oportunidades alumno/día",
+            "tardies": tardies,
+            "score": average_score(scores),
+            "available_days": available_days,
+            "business_days": len(month_days),
+            "unavailable_reason": None if available_days else "Sin oportunidades calculables",
+        })
+    return rows
+
+
+def _general_monthly_breakdown(daily: List[Dict[str, Any]], business_days: List[date]) -> List[Dict[str, Any]]:
+    by_day = {str(item.get("date")): item for item in daily or []}
+    rows: List[Dict[str, Any]] = []
+    month_keys = _month_keys_between(business_days[0], business_days[-1]) if business_days else []
+    for month_key in month_keys:
+        month_days = [day for day in business_days if day.isoformat().startswith(month_key)]
+        scores: List[Optional[float]] = []
+        for day in month_days:
+            item = by_day.get(day.isoformat()) or {}
+            if clamp_score(item.get("general")) is not None:
+                scores.append(item.get("general"))
+        rows.append({
+            "period": month_key,
+            "label": _month_label(month_key),
+            "numerator": average_score(scores),
+            "denominator": 100,
+            "numerator_label": "Promedio diario general",
+            "denominator_label": "Escala máxima",
+            "score": average_score(scores),
+            "available_days": len(scores),
+            "business_days": len(month_days),
+            "unavailable_reason": None if scores else "Sin días con suficientes métricas operativas",
+        })
+    return rows
+
+
+def _ensure_breakdown(metric: Dict[str, Any], metric_key: str, reason: Optional[str] = None) -> Dict[str, Any]:
+    if metric.get("breakdown"):
+        return metric
+    label = _metric_label(metric_key)
+    unavailable = clamp_score(metric.get("score")) is None
+    metric["breakdown"] = {
+        "method": "Sin cálculo" if unavailable else "Valor del periodo",
+        "formula": "No disponible" if unavailable else "Ver numerador y denominador del periodo",
+        "numerator": None,
+        "denominator": None,
+        "numerator_label": label,
+        "denominator_label": "Base esperada",
+        "aggregation": (reason or _plain_unavailable_reason(metric)) if unavailable else "Valor calculado para el periodo seleccionado.",
+        "excluded": [],
+        "monthly": [],
+    }
+    return metric
+
+
+def _attach_drilldowns(
+    metrics: Dict[str, Dict[str, Any]],
+    daily: List[Dict[str, Any]],
+    business_days: List[date],
+) -> Dict[str, Dict[str, Any]]:
+    if metrics.get("roll_call"):
+        metrics["roll_call"] = _with_breakdown(metrics["roll_call"], {
+            "method": "Promedio diario",
+            "formula": "promedio de (grupos capturados / grupos esperados) por día",
+            "numerator": metrics["roll_call"].get("completed"),
+            "denominator": metrics["roll_call"].get("expected"),
+            "numerator_label": "Grupos/día capturados",
+            "denominator_label": "Grupos/día esperados",
+            "aggregation": "El valor final promedia los días hábiles con denominador real.",
+            "excluded": ["Días no hábiles", "Días sin grupos esperados"],
+            "monthly": _daily_monthly_breakdown(daily, business_days, "roll_call", "completed_lists", "expected_lists", "Grupos/día capturados", "Grupos/día esperados"),
+        })
+    if metrics.get("student_attendance"):
+        metrics["student_attendance"] = _with_breakdown(metrics["student_attendance"], {
+            "method": "Promedio diario",
+            "formula": "promedio de (alumnos presentes / registros de asistencia) por día",
+            "numerator": metrics["student_attendance"].get("present"),
+            "denominator": metrics["student_attendance"].get("records"),
+            "numerator_label": "Alumnos presentes",
+            "denominator_label": "Registros de asistencia",
+            "aggregation": "El valor final promedia la asistencia diaria capturada.",
+            "excluded": ["Días no hábiles", "Días sin listas capturadas"],
+            "monthly": _daily_monthly_breakdown(daily, business_days, "student_attendance", "present", "attendance_records", "Alumnos presentes", "Registros de asistencia"),
+        })
+    if metrics.get("scans"):
+        metrics["scans"] = _with_breakdown(metrics["scans"], {
+            "method": "Promedio diario",
+            "formula": "promedio de (entradas registradas / población esperada o base observada) por día",
+            "numerator": metrics["scans"].get("entries"),
+            "denominator": metrics["scans"].get("expected"),
+            "numerator_label": "Entradas registradas",
+            "denominator_label": "Entradas esperadas",
+            "aggregation": "El valor final promedia los porcentajes diarios.",
+            "excluded": ["Días no hábiles", "Días sin base poblacional ni accesos observados"],
+            "monthly": _daily_monthly_breakdown(daily, business_days, "scans", "scan_entries", "scan_expected", "Entradas registradas", "Entradas esperadas"),
+        })
+    if metrics.get("scan_balance"):
+        metrics["scan_balance"] = _with_breakdown(metrics["scan_balance"], {
+            "method": "Promedio diario",
+            "formula": "promedio de (menor entre entradas/salidas / mayor entre entradas/salidas) por día",
+            "numerator": min(safe_int(metrics["scan_balance"].get("entries")), safe_int(metrics["scan_balance"].get("exits"))),
+            "denominator": max(safe_int(metrics["scan_balance"].get("entries")), safe_int(metrics["scan_balance"].get("exits"))),
+            "numerator_label": "Accesos balanceados",
+            "denominator_label": "Mayor total entradas/salidas",
+            "aggregation": "El valor final promedia solo días con movimiento de acceso.",
+            "excluded": ["Días sin entradas ni salidas"],
+            "monthly": _balance_monthly_breakdown(daily, business_days),
+        })
+    if metrics.get("student_punctuality"):
+        opportunities = safe_int(metrics["student_punctuality"].get("opportunities"))
+        tardies = safe_int(metrics["student_punctuality"].get("tardies"))
+        metrics["student_punctuality"] = _with_breakdown(metrics["student_punctuality"], {
+            "method": "Promedio diario inverso",
+            "formula": "promedio de 100 - (retardos / oportunidades alumno-día)",
+            "numerator": max(opportunities - tardies, 0),
+            "denominator": opportunities,
+            "numerator_label": "Oportunidades sin retardo",
+            "denominator_label": "Oportunidades alumno/día",
+            "aggregation": "El valor final promedia los días con oportunidades calculables.",
+            "excluded": ["Días sin población, asistencia o accesos para estimar oportunidades"],
+            "monthly": _punctuality_monthly_breakdown(daily, business_days),
+        })
+    for key in DISPLAY_METRICS:
+        if key in metrics:
+            _ensure_breakdown(metrics[key], key)
+    if metrics.get("general"):
+        metrics["general"] = _with_breakdown(metrics["general"], {
+            "method": "Promedio ponderado",
+            "formula": "suma(score de cada métrica calculable x peso) / suma(pesos calculables)",
+            "numerator": metrics["general"].get("weights_used"),
+            "denominator": metrics["general"].get("weights_total"),
+            "numerator_label": "Peso calculable usado",
+            "denominator_label": "Peso total aprobado",
+            "aggregation": "Solo entran métricas con denominador real y suficiente evidencia operativa.",
+            "excluded": [key for key in METRIC_WEIGHTS if key not in (metrics["general"].get("metrics_used") or [])],
+            "components": [
+                {"key": key, "label": _metric_label(key), "score": (metrics.get(key) or {}).get("score"), "weight": METRIC_WEIGHTS.get(key)}
+                for key in METRIC_WEIGHTS
+            ],
+            "monthly": _general_monthly_breakdown(daily, business_days),
+        })
+    return metrics
 
 
 def _bucketed_trend(planteles: List[Dict[str, Any]], start_date: date, end_date: date) -> Dict[str, Any]:
@@ -1152,7 +1658,7 @@ async def _collect_plantel(code: str, start_date: date, end_date: date, scope: s
     planning = academic_payload.get("planning") if isinstance(academic_payload.get("planning"), dict) else _unavailable("—", "Sin cálculo de planeaciones")
     observations = academic_payload.get("observations") if isinstance(academic_payload.get("observations"), dict) else _unavailable("—", "Sin cálculo de observaciones")
     observation_coverage = academic_payload.get("observation_coverage") if isinstance(academic_payload.get("observation_coverage"), dict) else _unavailable("—", "Sin cálculo de cobertura docente")
-    sapf = _sapf_metric(source_map["seguimientos"], source_map["expected_population"], start_date, end_date)
+    sapf = _sapf_metric(source_map["seguimientos"], source_map["expected_population"], attendance_daily, scans_daily, start_date, end_date)
 
     metrics = {
         "roll_call": roll_call,
@@ -1167,6 +1673,8 @@ async def _collect_plantel(code: str, start_date: date, end_date: date, scope: s
     }
     general = _general_metric(metrics)
     metrics = {"general": general, **metrics}
+    daily = _merge_daily_points(attendance_daily, scans_daily, punctuality_daily, business_days)
+    metrics = _attach_drilldowns(metrics, daily, business_days)
 
     order = FIXED_PLANTEL_ORDER.index(code) if code in FIXED_PLANTEL_ORDER else 999
     return {
@@ -1177,7 +1685,7 @@ async def _collect_plantel(code: str, start_date: date, end_date: date, scope: s
         "metrics": metrics,
         "index": general,
         "domains": metrics,
-        "daily": _merge_daily_points(attendance_daily, scans_daily, punctuality_daily, business_days),
+        "daily": daily,
         "entry_time_daily": entry_time_daily,
         "source_audit": _clean_sources(source_map),
         "academic_shape": academic_payload.get("shape") if isinstance(academic_payload, dict) else {},
@@ -1199,10 +1707,16 @@ def _followups_evidence(metric: Dict[str, Any]) -> Dict[str, Any]:
     return {
         "score": metric.get("score"),
         "total": safe_int(metric.get("total_followups")),
+        "seguimientos": safe_int(metric.get("total_followups_raw")),
+        "fichas": safe_int(metric.get("total_fichas")),
         "esperados": metric.get("target_followups"),
         "poblacion": safe_int(metric.get("population")),
+        "population_basis": metric.get("population_basis"),
         "por_100": metric.get("followups_per_100_students"),
         "meta_por_100_periodo": metric.get("target_per_100_students"),
+        "activity_score": metric.get("activity_score"),
+        "closure_score": metric.get("closure_score"),
+        "followup_density_score": metric.get("followup_density_score"),
         "basis": metric.get("basis"),
     }
 
@@ -1228,7 +1742,7 @@ def _diagnostic(planteles: List[Dict[str, Any]], start_date: date, end_date: dat
             "general": _metric_evidence(metrics.get("general") or {}, ["weights_used", "weights_total", "metrics_used", "minimum_weight", "minimum_metrics"]),
         }
     return {
-        "v": "corp-diagnostic-v18",
+        "v": "corp-diagnostic-v19",
         "range": {"start": start_date.isoformat(), "end": end_date.isoformat(), "business_days": len(business_days)},
         "planteles": rows,
         "hora_promedio_entrada_nivel": _level_access_summary(planteles, business_days),
@@ -1508,7 +2022,7 @@ async def get_corporate_compliance_index(
         "source_audit": {p["plantel"]: p.get("source_audit") for p in plantel_payloads},
         "diagnostic": _diagnostic(plantel_payloads, start_date, end_date, business_days),
         "meta": {
-            "logic_version": "2026-06-22-cycle-observations-average-v18",
+            "logic_version": "2026-06-23-drilldown-sapf-v19",
             "start_date": start_date.isoformat(),
             "end_date": end_date.isoformat(),
             "business_days": len(business_days),

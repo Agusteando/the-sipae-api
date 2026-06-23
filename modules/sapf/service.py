@@ -196,4 +196,5 @@ async def get_sapf_overview_report(plantel: str, start_date: date, end_date: dat
         "followup_ratio_percent": followup_ratio,
         "open_case_rate_percent": open_case_rate,
         "areas_from_fichas": stats.get("areas_from_fichas") or [],
+        "monthly_activity": stats.get("monthly_activity") or [],
     }

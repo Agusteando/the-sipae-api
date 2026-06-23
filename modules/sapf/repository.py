@@ -397,6 +397,39 @@ async def _fetch_followups_count(
     return dict(await cur.fetchone() or {"total_followups": 0})
 
 
+async def _fetch_monthly_activity_counts(
+    cur: aiomysql.DictCursor,
+    table_name: str,
+    table_alias: str,
+    campus_values: Iterable[str],
+    start_date: date,
+    end_date: date,
+    source_label: str,
+) -> List[Dict[str, Any]]:
+    columns = await _get_columns(cur, table_name)
+    if not columns:
+        return []
+    date_expression = _date_expr(table_alias, columns)
+    if not date_expression:
+        return []
+    campus_clause, campus_params = _normalized_campus_clause(table_alias, columns, campus_values)
+
+    sql = f"""
+        SELECT /*+ MAX_EXECUTION_TIME(5000) */
+            DATE_FORMAT({date_expression}, '%%Y-%%m') AS month_key,
+            %s AS source,
+            COUNT(*) AS total
+        FROM `{table_name}` {table_alias}
+        WHERE {campus_clause}
+          AND {date_expression} >= %s
+          AND {date_expression} < DATE_ADD(%s, INTERVAL 1 DAY)
+        GROUP BY month_key, source
+        ORDER BY month_key
+    """
+    await cur.execute(sql, [source_label, *campus_params, start_date, end_date])
+    return list(await cur.fetchall())
+
+
 async def get_sapf_overview_stats(
     map_campus: str,
     data_campuses: List[str],
@@ -412,6 +445,14 @@ async def get_sapf_overview_stats(
         async with conn.cursor(aiomysql.DictCursor) as cur:
             fichas = await _fetch_fichas_overview(cur, campus_values, map_values, start_date, end_date)
             followups = await _fetch_followups_count(cur, campus_values, start_date, end_date)
-            return {**fichas, **followups, "matched_campus_values": _normalize_sql_values(campus_values)}
+            monthly_rows = []
+            monthly_rows.extend(await _fetch_monthly_activity_counts(cur, "fichas_atencion", "fa", campus_values, start_date, end_date, "ficha"))
+            monthly_rows.extend(await _fetch_monthly_activity_counts(cur, "seguimiento", "se", campus_values, start_date, end_date, "seguimiento"))
+            return {
+                **fichas,
+                **followups,
+                "monthly_activity": monthly_rows,
+                "matched_campus_values": _normalize_sql_values(campus_values),
+            }
     finally:
         conn.close()

@@ -268,8 +268,8 @@ CORPORATE_COMPLIANCE_HTML = r'''
     .score.green { color: var(--green); } .score.yellow { color: var(--yellow); } .score.red { color: var(--red); } .score.gray { color: var(--gray); }
     .dot { width: 9px; height: 9px; display: inline-block; border-radius: 99px; margin-right: 7px; vertical-align: middle; background: var(--gray); }
     .dot.green { background: var(--green); } .dot.yellow { background: var(--yellow); } .dot.red { background: var(--red); } .dot.gray { background: var(--gray); }
-    .main-grid { display: grid; }
-    .report-section { padding: 30px; border-top: 1px solid var(--line); }
+    .main-grid { display: grid; min-width: 0; }
+    .report-section { min-width: 0; padding: 30px; border-top: 1px solid var(--line); }
     .section-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; margin-bottom: 18px; }
     .section-title { margin-top: 4px; font-family: var(--title-font); font-size: 27px; line-height: 1.08; font-weight: 700; letter-spacing: 0; }
     .section-copy { margin-top: 7px; max-width: 780px; color: var(--muted); font-size: 13px; line-height: 1.6; }
@@ -302,7 +302,7 @@ CORPORATE_COMPLIANCE_HTML = r'''
       font-weight: 700;
       white-space: nowrap;
     }
-    .matrix-wrap { overflow-x: auto; padding-bottom: 2px; }
+    .matrix-wrap { width: 100%; max-width: 100%; min-width: 0; overflow-x: auto; padding-bottom: 2px; }
     table { width: 100%; }
     .matrix {
       min-width: 1320px;
@@ -325,6 +325,16 @@ CORPORATE_COMPLIANCE_HTML = r'''
       vertical-align: middle;
     }
     .matrix th:first-child { text-align: left; width: 150px; }
+    .metric-head {
+      cursor: pointer;
+      transition: border-color .15s ease, box-shadow .15s ease, background .15s ease;
+    }
+    .metric-head:hover, .metric-head.active {
+      border-color: rgba(23,33,43,.42);
+      background: #ffffff;
+      box-shadow: inset 0 -3px 0 var(--green);
+      color: var(--ink);
+    }
     .matrix td {
       min-width: 112px;
       height: 94px;
@@ -342,6 +352,11 @@ CORPORATE_COMPLIANCE_HTML = r'''
       border-color: var(--line-strong) !important;
       box-shadow: 8px 0 18px rgba(23,33,43,.06);
     }
+    .plantel-cell.clickable { cursor: pointer; transition: border-color .15s ease, box-shadow .15s ease; }
+    .plantel-cell.clickable:hover, .plantel-cell.clickable.active {
+      border-color: rgba(23,33,43,.46) !important;
+      box-shadow: inset 4px 0 0 var(--green), 8px 0 18px rgba(23,33,43,.06);
+    }
     .plantel-code { font-family: var(--title-font); font-size: 22px; line-height: 1; font-weight: 700; letter-spacing: 0; }
     .plantel-name { margin-top: 5px; color: var(--muted); font-size: 11px; line-height: 1.35; }
     .heat {
@@ -358,6 +373,7 @@ CORPORATE_COMPLIANCE_HTML = r'''
       pointer-events: none;
     }
     .heat:hover { box-shadow: 0 10px 20px rgba(23,33,43,.10); transform: translateY(-1px); }
+    .heat.active { outline: 2px solid rgba(23,33,43,.56); outline-offset: -2px; box-shadow: 0 13px 28px rgba(23,33,43,.14); }
     .heat.green { background: var(--green-soft); } .heat.yellow { background: var(--yellow-soft); } .heat.red { background: var(--red-soft); } .heat.gray { background: var(--gray-soft); }
     .heat-cell-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; position: relative; z-index: 1; }
     .cell-score { font-family: var(--title-font); font-size: 20px; line-height: 1; font-weight: 700; letter-spacing: 0; }
@@ -434,28 +450,65 @@ CORPORATE_COMPLIANCE_HTML = r'''
     .detail-table th, .detail-table td { padding: 12px 13px; border-bottom: 1px solid var(--line); text-align: left; }
     .detail-table tr:last-child td { border-bottom: 0; }
     .detail-table th { background: #f6f8fa; color: #4b5563; font-size: 11px; letter-spacing: 0; text-transform: uppercase; font-weight: 800; }
+    .drilldown-section { background: linear-gradient(180deg, #fff, #fbfcfd); }
+    .drilldown-shell {
+      min-width: 0;
+      display: grid;
+      grid-template-columns: minmax(280px, .35fr) minmax(0, 1fr);
+      gap: 14px;
+      align-items: start;
+    }
+    .drill-panel {
+      min-width: 0;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: #fff;
+      padding: 16px;
+      box-shadow: 0 10px 26px rgba(23,33,43,.045);
+    }
+    .drill-kicker { color: var(--muted); font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0; }
+    .drill-heading { margin-top: 6px; font-family: var(--title-font); font-size: 25px; line-height: 1.04; font-weight: 700; color: var(--ink); }
+    .drill-score { margin-top: 10px; font-family: var(--title-font); font-size: 42px; line-height: .95; font-weight: 700; letter-spacing: 0; }
+    .drill-note { margin-top: 10px; color: #465365; font-size: 13px; line-height: 1.55; font-weight: 600; }
+    .drill-stat-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; margin-top: 14px; }
+    .drill-stat { border: 1px solid var(--line); border-radius: var(--radius); background: #f8fafc; padding: 11px; min-height: 76px; }
+    .drill-stat-label { color: var(--muted); font-size: 10px; line-height: 1.2; font-weight: 800; text-transform: uppercase; }
+    .drill-stat-value { margin-top: 6px; color: var(--ink); font-size: 17px; line-height: 1.2; font-weight: 800; word-break: break-word; }
+    .drill-method { display: grid; gap: 10px; }
+    .method-card { border-left: 4px solid var(--green); padding: 3px 0 3px 12px; }
+    .method-title { color: var(--ink); font-weight: 800; }
+    .method-copy { margin-top: 3px; color: var(--muted); font-size: 12px; line-height: 1.5; }
+    .component-grid { display: grid; gap: 8px; }
+    .component-row { display: grid; grid-template-columns: minmax(130px, 1fr) 64px minmax(110px, .55fr); gap: 10px; align-items: center; }
+    .component-name { color: #263341; font-size: 12px; font-weight: 800; line-height: 1.25; }
+    .component-weight { color: var(--muted); font-size: 11px; font-weight: 800; text-align: right; }
+    .month-table-wrap { width: 100%; max-width: 100%; min-width: 0; overflow-x: auto; border: 1px solid var(--line); border-radius: var(--radius); background: #fff; }
+    .month-table { border-collapse: collapse; min-width: 720px; }
+    .month-table th, .month-table td { padding: 10px 11px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+    .month-table th { background: #f6f8fa; color: #526071; font-size: 10px; line-height: 1.25; font-weight: 800; text-transform: uppercase; }
+    .month-table tr:last-child td { border-bottom: 0; }
+    .month-scorebar { width: 98px; height: 8px; margin-top: 5px; border-radius: 999px; background: #edf1f5; overflow: hidden; }
+    .month-scorebar span { display: block; height: 100%; border-radius: 999px; background: var(--gray); }
+    .month-scorebar .green { background: var(--green); } .month-scorebar .yellow { background: var(--yellow); } .month-scorebar .red { background: var(--red); } .month-scorebar .gray { background: var(--gray); }
+    .evidence-chip-row { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 7px; }
+    .evidence-chip { display: inline-flex; align-items: center; border: 1px solid var(--line); border-radius: 999px; padding: 4px 7px; color: #465365; background: #fff; font-size: 10px; font-weight: 800; line-height: 1; }
+    .plantel-score-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 9px; }
+    .plantel-score-card { border: 1px solid var(--line); border-radius: var(--radius); background: #fff; padding: 12px; cursor: pointer; text-align: left; }
+    .plantel-score-card:hover { border-color: rgba(23,33,43,.42); box-shadow: 0 8px 18px rgba(23,33,43,.08); }
+    .plantel-score-card.active { border-color: var(--ink); box-shadow: inset 4px 0 0 var(--green); }
+    .plantel-score-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+    .empty-note { border: 1px dashed var(--line-strong); border-radius: var(--radius); padding: 15px; color: var(--muted); background: #fbfcfd; font-weight: 700; }
     .print-only { display: none; }
     .methodology-section { background: #fbfcfd; }
     .methodology-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 16px; }
     .methodology-item { border-top: 1px solid var(--line); padding-top: 10px; }
     .methodology-name { font-weight: 800; color: var(--ink); }
     .methodology-copy { margin-top: 3px; color: var(--muted); font-size: 12px; line-height: 1.45; }
-    .diagnostic-box { display: grid; gap: 10px; }
-    .diag-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-    .copy-btn { border: 1px solid var(--line); background: #fff; border-radius: 999px; padding: 8px 12px; font-size: 12px; font-weight: 800; color: #374151; cursor: pointer; }
-    .diag-help { color: var(--muted); font-size: 12px; }
-    .diag-json { margin: 0; min-height: 150px; max-height: 260px; overflow: auto; border: 1px solid var(--line); border-radius: var(--radius); background: #111827; color: #e5e7eb; padding: 12px; font-size: 11px; line-height: 1.5; white-space: pre-wrap; word-break: break-word; }
-    .diagnostic-panel { display: block; border-top: 1px solid var(--line); }
-    .diagnostic-panel summary { list-style: none; cursor: pointer; padding: 16px 30px; display: flex; justify-content: space-between; align-items: center; gap: 12px; color: #334155; font-weight: 800; }
-    .diagnostic-panel summary::-webkit-details-marker { display: none; }
-    .diagnostic-panel summary small { color: var(--muted); font-size: 12px; font-weight: 700; }
-    .diagnostic-panel .section-body { padding: 0 30px 30px; }
-
     @media (max-width: 1100px) {
-      .topbar-inner, .cover-layout, .charts, .trend-grid, .detail-grid { grid-template-columns: 1fr; }
+      .topbar-inner, .cover-layout, .charts, .trend-grid, .detail-grid, .drilldown-shell { grid-template-columns: 1fr; }
       .filters { justify-content: flex-start; }
       .score-seal { min-height: auto; }
-      .report-meta-grid, .kpi-strip, .methodology-grid { grid-template-columns: 1fr; }
+      .report-meta-grid, .kpi-strip, .methodology-grid, .plantel-score-grid { grid-template-columns: 1fr; }
       .status-legend { justify-content: flex-start; }
     }
     @media (max-width: 720px) {
@@ -477,7 +530,7 @@ CORPORATE_COMPLIANCE_HTML = r'''
       * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
       html, body { background: #fff !important; color: #17212b; font-size: 8.5pt; }
       body { line-height: 1.35; }
-      .topbar, .diagnostic-panel, .refresh, .print-btn, #scopeFilters, #plantelFilters, .date-input, .metric-help, .select, .detail-section { display: none !important; }
+      .topbar, .refresh, .print-btn, #scopeFilters, #plantelFilters, .date-input, .metric-help, .select, .detail-section, .drilldown-section { display: none !important; }
       .print-only { display: block !important; }
       .page { max-width: none; padding: 0; }
       .report-sheet { border: 0; border-radius: 0; box-shadow: none; overflow: visible; }
@@ -639,6 +692,17 @@ CORPORATE_COMPLIANCE_HTML = r'''
             <div class="matrix-wrap"><table class="matrix" id="matrix"></table></div>
           </section>
 
+          <section class="report-section drilldown-section" id="drilldownSection">
+            <div class="section-head">
+              <div>
+                <div class="section-label">Auditoría del cálculo</div>
+                <div class="section-title" id="drilldownTitle">Trazabilidad de métrica</div>
+                <div class="section-copy" id="drilldownSubtitle">Selecciona una celda, un encabezado de métrica o un plantel para revisar la evidencia que sostiene el resultado.</div>
+              </div>
+            </div>
+            <div class="drilldown-shell" id="drilldownBody"></div>
+          </section>
+
           <section class="report-section methodology-section print-only">
             <div class="section-head">
               <div>
@@ -684,24 +748,6 @@ CORPORATE_COMPLIANCE_HTML = r'''
             </div>
           </section>
 
-          <section class="report-section detail-section">
-            <div class="section-head"><div><div class="section-label">Detalle</div><div class="section-title">Plantel seleccionado</div><div class="section-copy">Vista de exploración en pantalla para revisar el detalle de cada indicador.</div></div></div>
-            <div class="detail-grid">
-              <div class="plantel-list-detail" id="plantelSelector"></div>
-              <table class="detail-table" id="detailTable"></table>
-            </div>
-          </section>
-
-          <details class="diagnostic-panel">
-            <summary><span>Diagnóstico técnico</span><small>Oculto por defecto</small></summary>
-            <div class="section-body diagnostic-box">
-              <div class="diag-actions">
-                <button class="copy-btn" id="copyDiagnosticBtn">Copiar diagnóstico</button>
-                <span class="diag-help">Solo para validación técnica; no se imprime.</span>
-              </div>
-              <pre class="diag-json" id="diagnosticJson">{}</pre>
-            </div>
-          </details>
         </div>
       </article>
     </div>
@@ -721,10 +767,10 @@ CORPORATE_COMPLIANCE_HTML = r'''
       planning: "Planeaciones creadas en el periodo que ya tienen revisión registrada.",
       observations: "Mes/rango corto: observaciones del mes contra meta 40. Ciclo escolar/rango largo: promedio mensual contra meta 40.",
       observation_coverage: "Mes/rango corto: docentes activos con 2+ observaciones. Ciclo escolar/rango largo: promedio mensual de esa cobertura.",
-      sapf: "Seguimientos realizados contra meta poblacional positiva del periodo: 0 seguimientos = 0; cumplir/superar meta = 100."
+      sapf: "Puntaje combinado: 60% seguimientos reales contra meta poblacional del periodo, 25% fichas cerradas y 15% densidad de seguimiento por ficha."
     };
     var LINE_COLORS = ["#111827", "#009F5A", "#D1182C", "#D97706", "#2563eb", "#7c3aed"];
-    var state = { scope: "ciclo_escolar", planteles: {}, data: null, selectedPlantel: null };
+    var state = { scope: "ciclo_escolar", planteles: {}, data: null, selectedPlantel: null, selectedMetric: "general", drilldownMode: "cell" };
     for (var p0 = 0; p0 < PLANTELES.length; p0 += 1) state.planteles[PLANTELES[p0]] = true;
 
     function byId(id) { return document.getElementById(id); }
@@ -751,6 +797,20 @@ CORPORATE_COMPLIANCE_HTML = r'''
     function pct(value) {
       var n = num(value);
       return n === null ? "—" : n.toFixed(1) + "%";
+    }
+    function fmt(value, digits) {
+      var n = num(value);
+      if (n === null) return "—";
+      var useDigits = digits === undefined ? (Math.abs(n % 1) > 0.001 ? 1 : 0) : digits;
+      return n.toLocaleString("es-MX", { maximumFractionDigits: useDigits, minimumFractionDigits: useDigits });
+    }
+    function periodRangeText(win) {
+      if (!win || !win.start || !win.end) return "Periodo sin fechas";
+      return win.start + " a " + win.end;
+    }
+    function scoreWidth(value) {
+      var n = num(value);
+      return n === null ? 0 : Math.max(0, Math.min(100, n));
     }
     function colorFor(score) {
       var n = num(score);
@@ -782,8 +842,14 @@ CORPORATE_COMPLIANCE_HTML = r'''
     function dot(metric) { return '<span class="dot ' + metricColor(metric) + '"></span>'; }
     function isInformational(metric) { return !!(metric && metric.informational); }
     function metricCellHtml(metric) {
+      if (!metric) {
+        return '<div class="heat-cell-top"><div class="info-title">Sin dato</div><span class="cell-status">Sin dato</span></div><div class="cell-label">No se recibió información para esta métrica.</div>';
+      }
       if (isInformational(metric)) {
         return '<div class="heat-cell-top"><div class="info-title">' + esc(metric.label || 'Sin registros') + '</div><span class="cell-status">Info</span></div><div class="cell-label">' + esc(metric.detail || 'Dato informativo') + '</div>';
+      }
+      if (num(metric.score) === null) {
+        return '<div class="heat-cell-top"><div class="info-title">' + esc(metric.label || 'Sin cálculo') + '</div><span class="cell-status">Sin dato</span></div><div class="cell-label">' + esc(metric.detail || 'No hay denominador suficiente para calcular.') + '</div>';
       }
       return '<div class="heat-cell-top"><div class="cell-score score ' + metricColor(metric) + '">' + pct(metric.score) + '</div><span class="cell-status">' + esc(statusText(metric)) + '</span></div><div class="cell-label">' + esc(metric.label || "Sin datos") + '</div>';
     }
@@ -884,8 +950,7 @@ CORPORATE_COMPLIANCE_HTML = r'''
         });
       }
       byId("refreshBtn").addEventListener("click", function () { loadReport(true); });
-      byId("printBtn").addEventListener("click", function () { window.print(); });
-      byId("copyDiagnosticBtn").addEventListener("click", copyDiagnostic);
+      byId("printBtn").addEventListener("click", printExecutiveReport);
       byId("startDate").addEventListener("change", function () { if (state.scope === "range") loadReport(false); });
       byId("endDate").addEventListener("change", function () { if (state.scope === "range") loadReport(false); });
       byId("trendMetric").addEventListener("change", renderTrend);
@@ -934,8 +999,7 @@ CORPORATE_COMPLIANCE_HTML = r'''
       renderBars();
       renderLevelAccess();
       renderTrend();
-      renderDetail();
-      renderDiagnostic();
+      renderDrilldown();
     }
     function renderHero() {
       var aggregate = get(state.data, ["aggregate"], {});
@@ -968,23 +1032,50 @@ CORPORATE_COMPLIANCE_HTML = r'''
     }
     function renderMatrix() {
       var rows = get(state.data, ["matrix"], []);
-      var html = "<tr><th>Plantel</th>";
-      for (var h = 0; h < METRIC_ORDER.length; h += 1) html += "<th>" + metricHead(METRIC_ORDER[h]) + "</th>";
+      var html = '<tr><th class="plantel-header">Plantel</th>';
+      for (var h = 0; h < METRIC_ORDER.length; h += 1) {
+        var headKey = METRIC_ORDER[h];
+        var headActive = state.drilldownMode === "metric" && state.selectedMetric === headKey ? " active" : "";
+        html += '<th class="metric-head' + headActive + '" data-metric="' + esc(headKey) + '">' + metricHead(headKey) + "</th>";
+      }
       html += "</tr>";
       for (var r = 0; r < rows.length; r += 1) {
         var row = rows[r];
-        html += "<tr><td class=\"plantel-cell\"><div class=\"plantel-code\">" + esc(row.plantel) + "</div><div class=\"plantel-name\">" + esc(row.name) + "</div></td>";
+        var plantelActive = state.selectedPlantel === row.plantel && state.selectedMetric === "general" && state.drilldownMode !== "metric" ? " active" : "";
+        html += '<tr><td class="plantel-cell clickable' + plantelActive + '" data-plantel="' + esc(row.plantel) + '"><div class="plantel-code">' + esc(row.plantel) + '</div><div class="plantel-name">' + esc(row.name) + "</div></td>";
         for (var c = 0; c < METRIC_ORDER.length; c += 1) {
           var key = METRIC_ORDER[c];
           var metric = get(row, ["cells", key], {});
           var infoClass = isInformational(metric) ? ' info-cell' : '';
-          html += '<td class="heat ' + metricColor(metric) + infoClass + '" data-plantel="' + esc(row.plantel) + '"' + heatStyle(metric) + '>' + metricCellHtml(metric) + '</td>';
+          var active = state.drilldownMode !== "metric" && state.selectedPlantel === row.plantel && state.selectedMetric === key ? " active" : "";
+          html += '<td class="heat ' + metricColor(metric) + infoClass + active + '" data-plantel="' + esc(row.plantel) + '" data-metric="' + esc(key) + '"' + heatStyle(metric) + '>' + metricCellHtml(metric) + '</td>';
         }
         html += "</tr>";
       }
       byId("matrix").innerHTML = html;
-      var cells = document.querySelectorAll(".heat[data-plantel]");
-      for (var i = 0; i < cells.length; i += 1) cells[i].addEventListener("click", function () { state.selectedPlantel = this.getAttribute("data-plantel"); renderDetail(); });
+      var heads = document.querySelectorAll(".metric-head[data-metric]");
+      for (var mh = 0; mh < heads.length; mh += 1) heads[mh].addEventListener("click", function () {
+        state.selectedMetric = this.getAttribute("data-metric") || "general";
+        state.drilldownMode = "metric";
+        renderMatrix();
+        renderDrilldown();
+      });
+      var plantelCells = document.querySelectorAll(".plantel-cell[data-plantel]");
+      for (var pc = 0; pc < plantelCells.length; pc += 1) plantelCells[pc].addEventListener("click", function () {
+        state.selectedPlantel = this.getAttribute("data-plantel");
+        state.selectedMetric = "general";
+        state.drilldownMode = "plantel";
+        renderMatrix();
+        renderDrilldown();
+      });
+      var cells = document.querySelectorAll(".heat[data-plantel][data-metric]");
+      for (var i = 0; i < cells.length; i += 1) cells[i].addEventListener("click", function () {
+        state.selectedPlantel = this.getAttribute("data-plantel");
+        state.selectedMetric = this.getAttribute("data-metric") || "general";
+        state.drilldownMode = "cell";
+        renderMatrix();
+        renderDrilldown();
+      });
     }
     function renderBars() {
       renderBarList("plantelBars", get(state.data, ["rankings", "planteles"], []), "plantel");
@@ -1079,56 +1170,321 @@ CORPORATE_COMPLIANCE_HTML = r'''
       }
       byId("trendSvg").innerHTML = html;
     }
-    function renderDetail() {
+    function findPlantel(code) {
       var planteles = get(state.data, ["planteles"], []);
-      if (!planteles.length) return;
-      var selected = planteles[0];
-      for (var i = 0; i < planteles.length; i += 1) if (planteles[i].plantel === state.selectedPlantel) selected = planteles[i];
-      state.selectedPlantel = selected.plantel;
+      for (var i = 0; i < planteles.length; i += 1) if (planteles[i].plantel === code) return planteles[i];
+      return planteles.length ? planteles[0] : null;
+    }
+    function metricFromPlantel(plantel, key) {
+      return get(plantel || {}, ["metrics", key], {});
+    }
+    function breakdownOf(metric) {
+      return metric && metric.breakdown ? metric.breakdown : {};
+    }
+    function ratioText(numerator, denominator) {
+      if (num(numerator) === null && num(denominator) === null) return "—";
+      return fmt(numerator) + " / " + fmt(denominator, Math.abs((num(denominator) || 0) % 1) > 0.001 ? 1 : 0);
+    }
+    function evidenceReason(metric, breakdown) {
+      if (!metric) return "No se recibió información para esta métrica.";
+      if (num(metric.score) === null) return breakdown.aggregation || metric.detail || "No hay base suficiente para calcular el indicador.";
+      var base = "Resultado final: " + pct(metric.score) + ".";
+      if (breakdown.numerator_label || breakdown.denominator_label) {
+        base += " " + (breakdown.numerator_label || "Numerador") + ": " + fmt(breakdown.numerator) + "; " + (breakdown.denominator_label || "Denominador") + ": " + fmt(breakdown.denominator, Math.abs((num(breakdown.denominator) || 0) % 1) > 0.001 ? 1 : 0) + ".";
+      }
+      if (breakdown.aggregation) base += " " + breakdown.aggregation;
+      return base;
+    }
+    function chip(label, value) {
+      if (value === null || value === undefined || value === "" || value === "—") return "";
+      return '<span class="evidence-chip">' + esc(label) + ': ' + esc(value) + '</span>';
+    }
+    function componentHtml(components) {
+      if (!components || !components.length) return "";
+      var html = '<div class="method-card"><div class="method-title">Componentes del puntaje</div><div class="component-grid">';
+      for (var i = 0; i < components.length; i += 1) {
+        var item = components[i] || {};
+        var score = num(item.score);
+        var color = colorFor(score);
+        html += '<div class="component-row"><div><div class="component-name">' + esc(item.label || item.key || "Componente") + '</div><div class="evidence-chip-row">' + chip("Base", ratioText(item.numerator, item.denominator)) + '</div></div><div class="component-weight">' + (item.weight ? esc(item.weight + "%") : "") + '</div><div><div class="bar-value score ' + color + '">' + pct(score) + '</div><div class="month-scorebar"><span class="' + color + '" style="width:' + scoreWidth(score) + '%"></span></div></div></div>';
+      }
+      html += '</div></div>';
+      return html;
+    }
+    function monthlyEvidence(row) {
+      var parts = "";
+      parts += chip("Días", row.available_days !== undefined && row.business_days !== undefined ? (row.available_days + "/" + row.business_days) : null);
+      parts += chip("Retardos", row.tardies);
+      parts += chip("Fichas", row.fichas);
+      parts += chip("Seguimientos", row.followups);
+      parts += chip("Observadores", row.observed_teachers);
+      parts += chip("Docentes 2+", row.teachers_with_2plus);
+      if (row.unavailable_reason) parts += '<span class="evidence-chip">' + esc(row.unavailable_reason) + '</span>';
+      return parts || '<span class="evidence-chip">Sin notas adicionales</span>';
+    }
+    function monthlyTableHtml(rows) {
+      if (!rows || !rows.length) return '<div class="empty-note">Esta métrica no tiene desglose mensual aplicable para el periodo seleccionado.</div>';
+      var html = '<div class="month-table-wrap"><table class="month-table"><thead><tr><th>Periodo</th><th>Score</th><th>Numerador</th><th>Denominador</th><th>Evidencia</th></tr></thead><tbody>';
+      for (var i = 0; i < rows.length; i += 1) {
+        var row = rows[i] || {};
+        var color = colorFor(row.score);
+        html += '<tr><td><strong>' + esc(row.label || row.period || "—") + '</strong></td><td><div class="score ' + color + '">' + pct(row.score) + '</div><div class="month-scorebar"><span class="' + color + '" style="width:' + scoreWidth(row.score) + '%"></span></div></td><td>' + esc(row.numerator_label || "Numerador") + '<br><strong>' + fmt(row.numerator) + '</strong></td><td>' + esc(row.denominator_label || "Denominador") + '<br><strong>' + fmt(row.denominator, Math.abs((num(row.denominator) || 0) % 1) > 0.001 ? 1 : 0) + '</strong></td><td><div class="evidence-chip-row">' + monthlyEvidence(row) + '</div></td></tr>';
+      }
+      html += '</tbody></table></div>';
+      return html;
+    }
+    function excludedHtml(items) {
+      if (!items || !items.length) return "";
+      var html = '<div class="method-card"><div class="method-title">Excluido o no disponible</div><div class="method-copy">';
+      for (var i = 0; i < items.length; i += 1) html += (i ? " · " : "") + esc(items[i]);
+      return html + '</div></div>';
+    }
+    function plantelMetricHtml(plantel, key, metric) {
+      var b = breakdownOf(metric);
+      var win = get(state.data, ["aggregate", "window"], {});
+      var method = b.method || "Valor del periodo";
+      var formula = b.formula || METRIC_DESCRIPTIONS[key] || "Métrica del reporte ejecutivo.";
       var html = "";
+      html += '<div class="drill-panel"><div class="drill-kicker">' + esc(plantel.plantel || "Plantel") + '</div><div class="drill-heading">' + esc(METRIC_LABELS[key] || key) + '</div><div class="drill-score score ' + metricColor(metric) + '">' + metricValueHtml(metric) + '</div><div class="drill-note">' + esc(evidenceReason(metric, b)) + '</div><div class="drill-stat-grid">';
+      html += '<div class="drill-stat"><div class="drill-stat-label">' + esc(b.numerator_label || "Numerador") + '</div><div class="drill-stat-value">' + fmt(b.numerator) + '</div></div>';
+      html += '<div class="drill-stat"><div class="drill-stat-label">' + esc(b.denominator_label || "Denominador") + '</div><div class="drill-stat-value">' + fmt(b.denominator, Math.abs((num(b.denominator) || 0) % 1) > 0.001 ? 1 : 0) + '</div></div>';
+      html += '<div class="drill-stat"><div class="drill-stat-label">Periodo</div><div class="drill-stat-value">' + esc(periodLabel(win)) + '</div></div>';
+      html += '<div class="drill-stat"><div class="drill-stat-label">Método</div><div class="drill-stat-value">' + esc(method) + '</div></div>';
+      html += '</div></div>';
+      html += '<div class="drill-panel drill-method"><div class="method-card"><div class="method-title">Cómo se obtuvo</div><div class="method-copy"><strong>' + esc(method) + '.</strong> ' + esc(formula) + '</div><div class="method-copy">' + esc(b.aggregation || "El valor usa el periodo seleccionado y únicamente datos con base calculable.") + '</div></div>';
+      html += componentHtml(b.components || []);
+      html += '<div class="method-card"><div class="method-title">Desglose mensual / del periodo</div></div>' + monthlyTableHtml(b.monthly || []);
+      html += excludedHtml(b.excluded || []);
+      html += '</div>';
+      return html;
+    }
+    function aggregateMonthlyRows(key) {
+      var planteles = get(state.data, ["planteles"], []);
+      var buckets = {};
       for (var p = 0; p < planteles.length; p += 1) {
-        var row = planteles[p];
-        var general = get(row, ["metrics", "general"], {});
-        var active = row.plantel === state.selectedPlantel ? " active" : "";
-        html += '<button class="plantel-option' + active + '" data-plantel="' + esc(row.plantel) + '"><span><strong>' + esc(row.plantel) + '</strong><div class="plantel-name">' + esc(row.resolved_name) + '</div></span><span class="score ' + metricColor(general) + '">' + pct(general.score) + '</span></button>';
-      }
-      byId("plantelSelector").innerHTML = html;
-      var buttons = document.querySelectorAll(".plantel-option[data-plantel]");
-      for (var b = 0; b < buttons.length; b += 1) buttons[b].addEventListener("click", function () { state.selectedPlantel = this.getAttribute("data-plantel"); renderDetail(); });
-      var table = '<thead><tr><th>Área</th><th>Valor</th><th>Resumen</th><th>Detalle</th></tr></thead><tbody>';
-      for (var m = 0; m < METRIC_ORDER.length; m += 1) {
-        var key = METRIC_ORDER[m];
-        var metric = get(selected, ["metrics", key], {});
-        table += '<tr><td>' + dot(metric) + '<strong>' + esc(METRIC_LABELS[key]) + '</strong></td><td>' + metricValueHtml(metric) + '</td><td>' + esc(metric.label || "Sin datos") + '</td><td>' + esc(metric.detail || "—") + '</td></tr>';
-      }
-      table += '</tbody>';
-      byId("detailTable").innerHTML = table;
-    }
-
-
-    function renderDiagnostic() {
-      var diagnostic = get(state.data, ["diagnostic"], {});
-      byId("diagnosticJson").textContent = JSON.stringify(diagnostic);
-    }
-    async function copyDiagnostic() {
-      var text = byId("diagnosticJson").textContent || "{}";
-      try {
-        if (navigator.clipboard && navigator.clipboard.writeText) await navigator.clipboard.writeText(text);
-        else {
-          var area = document.createElement("textarea");
-          area.value = text;
-          document.body.appendChild(area);
-          area.select();
-          document.execCommand("copy");
-          document.body.removeChild(area);
+        var metric = metricFromPlantel(planteles[p], key);
+        var rows = get(metric, ["breakdown", "monthly"], []);
+        for (var i = 0; i < rows.length; i += 1) {
+          var row = rows[i] || {};
+          var period = row.period || row.label || ("periodo-" + i);
+          if (!buckets[period]) buckets[period] = { period: period, label: row.label || period, scores: [], numerator: 0, denominator: 0, unavailable: 0, planteles: 0 };
+          var bucket = buckets[period];
+          var score = num(row.score);
+          if (score !== null) bucket.scores.push(score);
+          else bucket.unavailable += 1;
+          if (num(row.numerator) !== null) bucket.numerator += Number(row.numerator);
+          if (num(row.denominator) !== null) bucket.denominator += Number(row.denominator);
+          bucket.planteles += 1;
         }
-        byId("copyDiagnosticBtn").textContent = "Copiado";
-        setTimeout(function () { byId("copyDiagnosticBtn").textContent = "Copiar diagnóstico"; }, 1400);
-      } catch (err) {
-        byId("copyDiagnosticBtn").textContent = "No se pudo copiar";
-        setTimeout(function () { byId("copyDiagnosticBtn").textContent = "Copiar diagnóstico"; }, 1800);
       }
+      var out = [];
+      var keys = Object.keys(buckets).sort();
+      for (var k = 0; k < keys.length; k += 1) {
+        var b = buckets[keys[k]];
+        out.push({
+          period: b.period,
+          label: b.label,
+          score: average(b.scores),
+          numerator: b.numerator,
+          denominator: b.denominator,
+          numerator_label: "Suma de numeradores visibles",
+          denominator_label: "Suma de denominadores visibles",
+          available_days: b.scores.length,
+          business_days: b.planteles,
+          unavailable_reason: b.unavailable ? (b.unavailable + " planteles sin cálculo") : null,
+        });
+      }
+      return out;
     }
+    function plantelScoreCards(key) {
+      var planteles = get(state.data, ["planteles"], []);
+      var html = '<div class="plantel-score-grid">';
+      for (var i = 0; i < planteles.length; i += 1) {
+        var row = planteles[i];
+        var metric = metricFromPlantel(row, key);
+        var active = row.plantel === state.selectedPlantel ? " active" : "";
+        html += '<button class="plantel-score-card' + active + '" data-plantel="' + esc(row.plantel) + '" data-metric="' + esc(key) + '"><div class="plantel-score-top"><div><strong>' + esc(row.plantel) + '</strong><div class="plantel-name">' + esc(row.resolved_name || "") + '</div></div><div class="score ' + metricColor(metric) + '">' + pct(metric.score) + '</div></div><div class="cell-label">' + esc(metric.label || metric.detail || "Sin datos") + '</div></button>';
+      }
+      return html + '</div>';
+    }
+    function renderAggregateDrilldown(key) {
+      var aggregate = get(state.data, ["aggregate"], {});
+      var metric = key === "general" ? get(aggregate, ["corporate_index"], {}) : get(aggregate, ["domain_scores", key], {});
+      var win = get(aggregate, ["window"], {});
+      var planteles = get(state.data, ["planteles"], []);
+      var calculatedCount = 0;
+      for (var cp = 0; cp < planteles.length; cp += 1) if (num(metricFromPlantel(planteles[cp], key).score) !== null) calculatedCount += 1;
+      byId("drilldownTitle").textContent = (METRIC_LABELS[key] || key) + " · todos los planteles";
+      byId("drilldownSubtitle").textContent = "Promedio corporativo del periodo " + periodRangeText(win) + ". Selecciona un plantel abajo para abrir la evidencia exacta de su celda.";
+      var b = {
+        method: "Promedio corporativo",
+        formula: "Promedio de planteles con cálculo real para la métrica seleccionada.",
+        aggregation: "Esta vista resume la métrica por plantel. Para defender una celda específica, abre el plantel correspondiente.",
+        numerator: calculatedCount,
+        denominator: planteles.length,
+        numerator_label: "Planteles con cálculo",
+        denominator_label: "Planteles evaluados",
+        monthly: aggregateMonthlyRows(key),
+      };
+      var html = '<div class="drill-panel"><div class="drill-kicker">Corporativo</div><div class="drill-heading">' + esc(METRIC_LABELS[key] || key) + '</div><div class="drill-score score ' + metricColor(metric) + '">' + pct(metric.score) + '</div><div class="drill-note">' + esc(evidenceReason(metric, b)) + '</div><div class="drill-stat-grid"><div class="drill-stat"><div class="drill-stat-label">Periodo</div><div class="drill-stat-value">' + esc(periodLabel(win)) + '</div></div><div class="drill-stat"><div class="drill-stat-label">Planteles</div><div class="drill-stat-value">' + fmt(b.numerator) + ' / ' + fmt(b.denominator) + '</div></div></div></div>';
+      html += '<div class="drill-panel drill-method"><div class="method-card"><div class="method-title">Vista por plantel</div><div class="method-copy">El encabezado muestra una lectura corporativa. La reconciliación exacta del score final está disponible en cada celda.</div></div>' + plantelScoreCards(key) + '<div class="method-card"><div class="method-title">Historia mensual corporativa</div></div>' + monthlyTableHtml(b.monthly) + '</div>';
+      byId("drilldownBody").innerHTML = html;
+      var cards = document.querySelectorAll(".plantel-score-card[data-plantel][data-metric]");
+      for (var c = 0; c < cards.length; c += 1) cards[c].addEventListener("click", function () {
+        state.selectedPlantel = this.getAttribute("data-plantel");
+        state.selectedMetric = this.getAttribute("data-metric") || "general";
+        state.drilldownMode = "cell";
+        renderMatrix();
+        renderDrilldown();
+      });
+    }
+    function renderDrilldown() {
+      var planteles = get(state.data, ["planteles"], []);
+      if (!planteles.length) {
+        byId("drilldownBody").innerHTML = '<div class="empty-note">Sin planteles para auditar.</div>';
+        return;
+      }
+      if (!state.selectedMetric) state.selectedMetric = "general";
+      if (state.drilldownMode === "metric") {
+        renderAggregateDrilldown(state.selectedMetric);
+        return;
+      }
+      var plantel = findPlantel(state.selectedPlantel);
+      if (!plantel) return;
+      state.selectedPlantel = plantel.plantel;
+      var key = state.selectedMetric || "general";
+      var metric = metricFromPlantel(plantel, key);
+      var win = get(state.data, ["aggregate", "window"], {});
+      byId("drilldownTitle").textContent = (METRIC_LABELS[key] || key) + " · " + plantel.plantel;
+      byId("drilldownSubtitle").textContent = "Evidencia del periodo " + periodRangeText(win) + " para " + (plantel.resolved_name || plantel.plantel) + ".";
+      byId("drilldownBody").innerHTML = plantelMetricHtml(plantel, key, metric);
+    }
+
+    function printDocumentCss() {
+      return [
+        "@page { size: landscape; margin: 8mm; }",
+        "* { box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; }",
+        "body { margin: 0; color: #17212b; background: #fff; font-family: 'Montserrat', Arial, sans-serif; font-size: 7pt; line-height: 1.28; }",
+        "h1,h2,h3,.score,.brand-title { font-family: 'Fredoka', 'Montserrat', Arial, sans-serif; letter-spacing: 0; }",
+        ".cover { position: relative; padding: 0 0 4mm; border-bottom: .6pt solid #c7d2df; break-inside: avoid; }",
+        ".cover:before { content: ''; display: block; height: 3.5pt; background: linear-gradient(90deg, #008f5a 0 40%, #2f6fe4 40% 62%, #c88400 62% 80%, #ef6b5b 80% 100%); margin: 0 0 3mm; }",
+        ".brand { display: flex; justify-content: space-between; align-items: center; gap: 8mm; }",
+        ".brand-left { display: flex; align-items: center; gap: 4mm; }",
+        ".logo { width: 32mm; height: auto; }",
+        ".brand-title { font-size: 15pt; font-weight: 700; }",
+        ".badge { border: .6pt solid rgba(0,143,90,.3); border-radius: 999px; padding: 1.2mm 2.3mm; color: #0a6b45; font-weight: 800; }",
+        ".hero { display: grid; grid-template-columns: minmax(0,1fr) 38mm; gap: 5mm; margin-top: 4mm; align-items: end; }",
+        "h1 { margin: 0; font-size: 18pt; line-height: 1.02; }",
+        ".summary { margin-top: 1.8mm; max-width: 186mm; color: #465365; font-weight: 600; }",
+        ".meta { display: grid; grid-template-columns: repeat(3,1fr); gap: 2mm; margin-top: 2.4mm; max-width: 190mm; }",
+        ".meta-tile,.kpi,.seal { border: .6pt solid #dfe6ee; border-radius: 2mm; padding: 2mm; background: #fff; }",
+        ".label { color: #67717f; font-size: 5.6pt; text-transform: uppercase; font-weight: 800; }",
+        ".value { margin-top: .8mm; font-weight: 800; font-size: 7.2pt; }",
+        ".seal { min-height: 31mm; background: linear-gradient(135deg, rgba(0,143,90,.09), rgba(47,111,228,.06)); display: flex; flex-direction: column; justify-content: space-between; }",
+        ".seal .score { font-size: 22pt; }",
+        ".kpis { display: grid; grid-template-columns: repeat(3,1fr); gap: 2.3mm; margin: 2.6mm 0 3.2mm; break-inside: avoid; }",
+        ".kpi .score { font-size: 14pt; margin-top: .8mm; }",
+        ".section { padding-top: 2.6mm; break-inside: avoid; }",
+        ".section.break { break-before: page; }",
+        ".section-head { display: flex; justify-content: space-between; gap: 4mm; align-items: end; margin-bottom: 1.6mm; }",
+        "h2 { margin: 0; font-size: 12.8pt; line-height: 1.05; }",
+        ".copy { margin-top: .8mm; color: #67717f; max-width: 170mm; }",
+        ".period { display: inline-block; margin-left: 1.2mm; padding: .7mm 1.7mm; border-radius: 999px; background: #eaf1ff; color: #274e9a; font-family: 'Montserrat', Arial; font-size: 6.3pt; font-weight: 800; }",
+        ".legend { display: flex; gap: 1.5mm; flex-wrap: wrap; justify-content: flex-end; }",
+        ".stamp { border: .6pt solid #dfe6ee; border-radius: 999px; padding: .8mm 1.5mm; font-weight: 800; white-space: nowrap; }",
+        ".matrix { width: 100%; border-collapse: separate; border-spacing: 1.05mm; table-layout: fixed; }",
+        ".matrix th { padding: 1.2mm .7mm; border: .6pt solid #dfe6ee; border-radius: 1.8mm; background: #f5f7fa; color: #526071; font-size: 5pt; line-height: 1.08; text-transform: uppercase; font-weight: 800; text-align: center; }",
+        ".matrix th:first-child { width: 25mm; text-align: left; }",
+        ".matrix td { height: 12.4mm; min-width: 0; padding: 1.05mm; border: .6pt solid rgba(23,33,43,.12); border-radius: 1.8mm; vertical-align: top; overflow: hidden; }",
+        ".plantel-code { font-family: 'Fredoka'; font-size: 9.5pt; font-weight: 700; }",
+        ".plantel-name { margin-top: .3mm; color: #67717f; font-size: 4.8pt; line-height: 1.08; }",
+        ".heat-cell-top { display: flex; justify-content: space-between; gap: 1mm; }",
+        ".cell-score { font-size: 8pt; line-height: 1; font-weight: 700; }",
+        ".cell-status { border-radius: 999px; background: rgba(255,255,255,.66); padding: .45mm .7mm; color: #374558; font-size: 4.1pt; line-height: 1; font-weight: 800; text-transform: uppercase; white-space: nowrap; }",
+        ".cell-label { margin-top: .6mm; color: #3e4b5b; font-size: 4.65pt; line-height: 1.1; }",
+        ".info-title { font-size: 5.2pt; font-weight: 800; line-height: 1.1; }",
+        ".score.green { color: #008f5a; } .score.yellow { color: #c88400; } .score.red { color: #c63d35; } .score.gray { color: #667085; }",
+        ".method-grid { display: grid; grid-template-columns: repeat(2,1fr); gap: 2.2mm 5mm; }",
+        ".method-item { border-top: .6pt solid #dfe6ee; padding-top: 1.5mm; }",
+        ".method-name { font-weight: 800; font-size: 7pt; }",
+        ".method-copy { margin-top: .5mm; color: #67717f; font-size: 6pt; line-height: 1.22; }",
+        ".trace-grid { display: grid; grid-template-columns: 50mm minmax(0,1fr); gap: 4mm; }",
+        ".trace-card { border: .6pt solid #dfe6ee; border-radius: 2mm; padding: 2mm; }",
+        ".month-table { width: 100%; border-collapse: collapse; }",
+        ".month-table th,.month-table td { border-bottom: .6pt solid #dfe6ee; padding: 1.2mm; text-align: left; vertical-align: top; }",
+        ".month-table th { background: #f6f8fa; color: #526071; font-size: 5.2pt; text-transform: uppercase; }",
+      ].join("\n");
+    }
+    function printScoreCard(label, metric, title, detail) {
+      return '<div class="kpi"><div class="label">' + esc(label) + '</div><div class="score ' + metricColor(metric) + '">' + pct(metric ? metric.score : null) + '</div><div class="value">' + esc(title || "—") + '</div><div class="copy">' + esc(detail || "—") + '</div></div>';
+    }
+    function printMatrixHtml() {
+      var rows = get(state.data, ["matrix"], []);
+      var html = '<table class="matrix"><thead><tr><th>Plantel</th>';
+      for (var h = 0; h < METRIC_ORDER.length; h += 1) html += '<th>' + esc(METRIC_LABELS[METRIC_ORDER[h]] || METRIC_ORDER[h]) + '</th>';
+      html += '</tr></thead><tbody>';
+      for (var r = 0; r < rows.length; r += 1) {
+        var row = rows[r];
+        html += '<tr><td><div class="plantel-code">' + esc(row.plantel) + '</div><div class="plantel-name">' + esc(row.name || "") + '</div></td>';
+        for (var c = 0; c < METRIC_ORDER.length; c += 1) {
+          var metric = get(row, ["cells", METRIC_ORDER[c]], {});
+          html += '<td class="heat ' + metricColor(metric) + '"' + heatStyle(metric) + '>' + metricCellHtml(metric) + '</td>';
+        }
+        html += '</tr>';
+      }
+      return html + '</tbody></table>';
+    }
+    function printMethodologyHtml() {
+      var html = '<div class="method-grid">';
+      for (var i = 0; i < METRIC_ORDER.length; i += 1) {
+        var key = METRIC_ORDER[i];
+        html += '<div class="method-item"><div class="method-name">' + esc(METRIC_LABELS[key] || key) + '</div><div class="method-copy">' + esc(METRIC_DESCRIPTIONS[key] || "Métrica del reporte ejecutivo.") + '</div></div>';
+      }
+      return html + '</div>';
+    }
+    function printTraceHtml() {
+      var plantel = findPlantel(state.selectedPlantel);
+      if (!plantel) return "";
+      var key = state.selectedMetric || "general";
+      var metric = metricFromPlantel(plantel, key);
+      var b = breakdownOf(metric);
+      var rows = b.monthly || [];
+      var html = '<section class="section"><div class="section-head"><div><div class="label">Trazabilidad seleccionada</div><h2>' + esc(METRIC_LABELS[key] || key) + ' · ' + esc(plantel.plantel) + '</h2><div class="copy">' + esc(evidenceReason(metric, b)) + '</div></div><div class="score ' + metricColor(metric) + '" style="font-size:18pt">' + pct(metric.score) + '</div></div>';
+      html += '<div class="trace-grid"><div class="trace-card"><div class="label">' + esc(b.numerator_label || "Numerador") + '</div><div class="value">' + fmt(b.numerator) + '</div><div class="label" style="margin-top:2mm">' + esc(b.denominator_label || "Denominador") + '</div><div class="value">' + fmt(b.denominator, Math.abs((num(b.denominator) || 0) % 1) > 0.001 ? 1 : 0) + '</div><div class="label" style="margin-top:2mm">Método</div><div class="value">' + esc(b.method || "Valor del periodo") + '</div></div><div>';
+      html += '<table class="month-table"><thead><tr><th>Periodo</th><th>Score</th><th>Numerador</th><th>Denominador</th><th>Notas</th></tr></thead><tbody>';
+      for (var i = 0; i < rows.length; i += 1) {
+        var row = rows[i] || {};
+        html += '<tr><td>' + esc(row.label || row.period || "—") + '</td><td class="score ' + colorFor(row.score) + '">' + pct(row.score) + '</td><td>' + fmt(row.numerator) + '</td><td>' + fmt(row.denominator, Math.abs((num(row.denominator) || 0) % 1) > 0.001 ? 1 : 0) + '</td><td>' + esc(row.unavailable_reason || "") + '</td></tr>';
+      }
+      html += '</tbody></table></div></div></section>';
+      return html;
+    }
+    function buildPrintDocument() {
+      var aggregate = get(state.data, ["aggregate"], {});
+      var general = get(aggregate, ["corporate_index"], {});
+      var win = get(aggregate, ["window"], {});
+      var best = aggregate.best_plantel || {};
+      var worst = aggregate.worst_plantel || {};
+      var generated = get(state.data, ["generated_at"], null);
+      var generatedText = generated ? new Date(generated).toLocaleString("es-MX") : "—";
+      var title = periodLabel(win);
+      return '<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Reporte SIPAE PDF</title><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Montserrat:wght@400;500;600;700;800&display=swap" rel="stylesheet"><style>' + printDocumentCss() + '</style></head><body>' +
+        '<section class="cover"><div class="brand"><div class="brand-left"><img class="logo" src="https://sipae.casitaapps.com/logo-h.png" alt="SIPAE Casita"><div class="brand-title">Reporte SIPAE</div></div><div class="badge">Informe institucional</div></div><div class="hero"><div><h1>Índice corporativo de cumplimiento</h1><div class="summary">' + esc(executiveSummaryText(aggregate, general)) + '</div><div class="meta"><div class="meta-tile"><div class="label">Periodo</div><div class="value">' + esc(title) + '<br>' + esc(periodRangeText(win)) + '</div></div><div class="meta-tile"><div class="label">Días hábiles</div><div class="value">' + esc(win.business_days || 0) + '</div></div><div class="meta-tile"><div class="label">Generado</div><div class="value">' + esc(generatedText) + '</div></div></div></div><div class="seal"><div><div class="label">Índice general</div><div class="score ' + metricColor(general) + '">' + pct(general.score) + '</div></div><div class="copy">' + esc(general.detail || general.traffic_label || "Sin datos") + '</div></div></div></section>' +
+        '<section class="kpis">' + printScoreCard("General", general, general.traffic_label, general.detail) + printScoreCard("Mejor plantel", best, best.plantel, best.resolved_name) + printScoreCard("Menor resultado", worst, worst.plantel, worst.resolved_name) + '</section>' +
+        '<section class="section"><div class="section-head"><div><div class="label">Centro ejecutivo</div><h2>Mapa de cumplimiento <span class="period">' + esc(title) + '</span></h2><div class="copy">Mapa institucional con colores PDF-safe y trazabilidad de métrica preservada.</div></div><div class="legend"><span class="stamp">85-100 sano</span><span class="stamp">70-84 atención</span><span class="stamp">1-69 crítico</span></div></div>' + printMatrixHtml() + '</section>' +
+        '<section class="section break"><div class="section-head"><div><div class="label">Notas de lectura</div><h2>Metodología de métricas</h2><div class="copy">Resumen autocontenido para lectura ejecutiva del PDF.</div></div></div>' + printMethodologyHtml() + '</section>' +
+        printTraceHtml() +
+        '<script>window.addEventListener("load",function(){setTimeout(function(){window.focus();window.print();},350);});<\/script></body></html>';
+    }
+    function printExecutiveReport() {
+      if (!state.data) { window.print(); return; }
+      var printWindow = window.open("", "sipae_print_report");
+      if (!printWindow) { window.print(); return; }
+      printWindow.document.open();
+      printWindow.document.write(buildPrintDocument());
+      printWindow.document.close();
+    }
+    window.buildSipaePrintDocument = buildPrintDocument;
 
     initControls();
     loadReport(false);
