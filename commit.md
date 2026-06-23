@@ -1,1 +1,1 @@
-Ajusta planeaciones activas sin revertir reintentos
+Mejora visual del Reporte SIPAE inspirado en referencia

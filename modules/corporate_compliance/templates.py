@@ -10,27 +10,27 @@ CORPORATE_COMPLIANCE_HTML = r'''
   <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Montserrat:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
   <style>
     :root {
-      --bg: #eef2f5;
+      --bg: #f6f9fc;
       --paper: #ffffff;
-      --paper-soft: #f7fafc;
-      --text: #17212b;
-      --muted: #67717f;
-      --muted-2: #8d98a7;
-      --line: #dfe6ee;
-      --line-strong: #c7d2df;
-      --green: #008f5a;
-      --green-soft: #e5f7ee;
-      --yellow: #c88400;
-      --yellow-soft: #fff4d8;
-      --red: #c63d35;
-      --red-soft: #fde9e7;
-      --blue: #2f6fe4;
-      --coral: #ef6b5b;
-      --gray: #667085;
-      --gray-soft: #edf1f5;
-      --ink: #17212b;
-      --radius: 8px;
-      --shadow: 0 22px 60px rgba(23, 33, 43, .10);
+      --paper-soft: #f8fbfd;
+      --text: #10233f;
+      --muted: #62728a;
+      --muted-2: #94a3b8;
+      --line: #d9e2ec;
+      --line-strong: #bfccd9;
+      --green: #009b68;
+      --green-soft: #dff7ec;
+      --yellow: #ffb703;
+      --yellow-soft: #fff1c7;
+      --red: #ef3e42;
+      --red-soft: #fde2e1;
+      --blue: #0f2a4f;
+      --coral: #ff6b5f;
+      --gray: #6b7280;
+      --gray-soft: #eef3f8;
+      --ink: #11233f;
+      --radius: 14px;
+      --shadow: 0 18px 45px rgba(16, 35, 63, .08);
       --font: "Montserrat", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       --title-font: "Fredoka", "Montserrat", ui-sans-serif, system-ui, sans-serif;
     }
@@ -40,7 +40,8 @@ CORPORATE_COMPLIANCE_HTML = r'''
       margin: 0;
       color: var(--text);
       background:
-        linear-gradient(90deg, rgba(0,143,90,.10), rgba(47,111,228,.06), rgba(239,107,91,.08)) 0 0 / 100% 210px no-repeat,
+        radial-gradient(circle at 8% 0%, rgba(0,155,104,.08), transparent 30%),
+        radial-gradient(circle at 92% 8%, rgba(239,62,66,.07), transparent 26%),
         var(--bg);
       font-family: var(--font);
       font-size: 14px;
@@ -517,6 +518,66 @@ CORPORATE_COMPLIANCE_HTML = r'''
     .methodology-item { border-top: 1px solid var(--line); padding-top: 10px; }
     .methodology-name { font-weight: 800; color: var(--ink); }
     .methodology-copy { margin-top: 3px; color: var(--muted); font-size: 12px; line-height: 1.45; }
+
+    .topbar { position: sticky; background: rgba(255,255,255,.98); border-bottom: 1px solid rgba(217,226,236,.9); }
+    .brand-logo { width: 158px; }
+    .title { font-size: 23px; color: var(--ink); }
+    .eyebrow { color: #58708e; }
+    .chip-row { background:#fff; border-color:#d8e2ee; box-shadow:0 5px 16px rgba(16,35,63,.04); }
+    .chip { padding: 9px 16px; color: var(--ink); }
+    .chip.active { background: var(--ink); color:#fff; box-shadow:0 8px 22px rgba(16,35,63,.22); }
+    .page { max-width: 1520px; }
+    .report-sheet { border: 0; background: transparent; box-shadow: none; overflow: visible; }
+    .executive-cover { border: 1px solid var(--line); border-radius: 18px; box-shadow: var(--shadow); margin-bottom: 14px; overflow: hidden; }
+    .executive-cover::before { height: 5px; background: linear-gradient(90deg, var(--green), var(--yellow), var(--red)); }
+    .report-name { font-size: 26px; }
+    h1 { font-size: 34px; color: var(--ink); }
+    .score-seal { border-radius: 18px; background: linear-gradient(135deg, rgba(0,155,104,.12), rgba(255,255,255,.92)); }
+    .kpi-strip { grid-template-columns: repeat(4, minmax(0, 1fr)); padding: 0; margin: 14px 0; gap: 18px; background: transparent; }
+    .kpi { min-height: 146px; border-radius: 18px; border-color: #d8e2ee; box-shadow: 0 16px 36px rgba(16,35,63,.07); }
+    .kpi-value { font-size: 42px; }
+    .distribution-mini { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 8px; margin-top: 12px; }
+    .distribution-item { display: grid; gap: 3px; align-content: center; min-height: 58px; border-radius: 14px; background: #f7fafc; padding: 9px; text-align: center; }
+    .distribution-count { font-family: var(--title-font); font-size: 25px; line-height: 1; font-weight: 700; }
+    .distribution-label { color: var(--muted); font-size: 9px; line-height: 1.1; font-weight: 900; text-transform: uppercase; }
+    .report-section { background:#fff; border: 1px solid var(--line); border-radius: 18px; box-shadow: 0 16px 36px rgba(16,35,63,.055); margin-bottom: 18px; padding: 26px; }
+    .section-head { align-items: flex-end; }
+    .status-legend { gap: 12px; }
+    .stamp { border-radius: 999px; padding: 9px 13px; box-shadow:0 8px 20px rgba(16,35,63,.04); }
+    .matrix { min-width: 1380px; border-spacing: 8px; }
+    .matrix th { height: 58px; border: 0; border-radius: 13px; background: linear-gradient(180deg,#ffffff,#f4f7fb); color: #233a5d; box-shadow: inset 0 0 0 1px #d9e2ec; font-size: 9.5px; }
+    .matrix th:first-child { width: 148px; }
+    .matrix .summary-header { width: 150px; }
+    .metric-head-inner { display:grid; justify-items:center; gap:4px; }
+    .metric-icon { font-size: 18px; line-height:1; color: var(--ink); }
+    .matrix td { min-width: 106px; height: 70px; padding: 9px; border: 0; border-radius: 13px; }
+    .plantel-cell { background:#fff; box-shadow: inset 0 0 0 1px #d9e2ec, 8px 0 18px rgba(16,35,63,.05); }
+    .plantel-code { font-size: 24px; color: var(--ink); }
+    .plantel-name { font-size: 10px; color: #66788f; }
+    .summary-cell { background:#fff; box-shadow: inset 0 0 0 1px #d9e2ec; vertical-align: middle !important; }
+    .summary-bars { display:grid; gap:7px; }
+    .summary-track { display:flex; height:10px; border-radius:999px; overflow:hidden; background:#eef3f8; }
+    .summary-seg.green { background: linear-gradient(90deg,#00b978,#008f5a); }
+    .summary-seg.yellow { background: linear-gradient(90deg,#ffc928,#ffad00); }
+    .summary-seg.red { background: linear-gradient(90deg,#ff6468,#ef3e42); }
+    .summary-counts { display:flex; justify-content:space-around; color:#223653; font-size:10px; font-weight:900; }
+    .heat { overflow: visible; box-shadow: inset 0 0 0 1px rgba(16,35,63,.07), 0 8px 18px rgba(16,35,63,.04); text-align:center; vertical-align: middle; }
+    .heat::before { display:none; }
+    .heat.green { background: linear-gradient(135deg, #5fc494 0%, #008f5a 100%) !important; }
+    .heat.yellow { background: linear-gradient(135deg, #ffd963 0%, #f4a900 100%) !important; }
+    .heat.red { background: linear-gradient(135deg, #ff7a7d 0%, #ef3e42 100%) !important; }
+    .heat.gray { background: linear-gradient(135deg, #f8fafc 0%, #eef3f8 100%) !important; }
+    .heat-cell-top { min-height: 50px; align-items:center; justify-content:center; flex-direction: column; gap: 6px; }
+    .heat .cell-score { font-size: 21px; color: #fff !important; text-shadow: 0 1px 5px rgba(16,35,63,.14); }
+    .heat.yellow .cell-score { color: #7c4a00 !important; text-shadow: none; }
+    .heat.gray .cell-score, .heat.gray .info-title { color: #516176 !important; }
+    .cell-status { padding: 3px 8px; font-size: 8px; background: rgba(255,255,255,.86); color: var(--ink); }
+    .cell-label { display: none; }
+    .cell-hover-detail { display:none; position:absolute; left:50%; top:calc(100% + 8px); transform:translateX(-50%); width:220px; z-index:50; padding:10px 12px; border:1px solid #cdd8e5; border-radius:12px; background:#fff; color:#223653; box-shadow:0 20px 40px rgba(16,35,63,.18); font-size:11px; line-height:1.45; text-align:left; pointer-events:none; }
+    .cell-hover-detail strong { display:block; margin-bottom:3px; font-size:12px; color:var(--ink); }
+    .heat:hover .cell-hover-detail { display:block; }
+    .debug-section { background:#0b1628; border-color:#15243b; }
+
     @media (max-width: 1100px) {
       .topbar-inner, .cover-layout, .charts, .trend-grid, .detail-grid, .drilldown-shell { grid-template-columns: 1fr; }
       .filters { justify-content: flex-start; }
@@ -591,7 +652,7 @@ CORPORATE_COMPLIANCE_HTML = r'''
       .heat::before { border-top-width: 1.6pt; }
       .cell-score { font-size: 8pt; }
       .cell-status { padding: .55mm .8mm; font-size: 4.3pt; }
-      .cell-label { margin-top: .7mm; font-size: 4.8pt; line-height: 1.12; }
+      .cell-label, .cell-hover-detail { display: none !important; }
       .info-title { font-size: 5.6pt; }
       .methodology-section { break-before: page; background: #fff; }
       .methodology-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 2.4mm 5mm; }
@@ -687,6 +748,7 @@ CORPORATE_COMPLIANCE_HTML = r'''
           <div class="kpi"><div><div class="kpi-label">General</div><div class="kpi-value score gray" id="generalScore">—</div></div><div><div class="kpi-name" id="generalTitle">Sin datos</div><div class="kpi-detail" id="generalDetail">—</div></div></div>
           <div class="kpi"><div><div class="kpi-label">Mejor plantel</div><div class="kpi-value score gray" id="bestScore">—</div></div><div><div class="kpi-name" id="bestTitle">—</div><div class="kpi-detail" id="bestDetail">—</div></div></div>
           <div class="kpi"><div><div class="kpi-label">Menor resultado</div><div class="kpi-value score gray" id="worstScore">—</div></div><div><div class="kpi-name" id="worstTitle">—</div><div class="kpi-detail" id="worstDetail">—</div></div></div>
+          <div class="kpi"><div><div class="kpi-label">Distribución de métricas</div><div class="distribution-mini" id="distributionMini"></div></div><div class="kpi-detail" id="distributionDetail">—</div></div>
         </section>
 
         <div class="main-grid">
@@ -778,6 +840,7 @@ CORPORATE_COMPLIANCE_HTML = r'''
     var PLANTELES = ["PT", "PM", "ST", "SM", "PREET", "PREEM"];
     var METRIC_ORDER = ["general", "roll_call", "student_attendance", "scans", "scan_balance", "student_punctuality", "planning", "observations", "observation_coverage", "sapf"];
     var METRIC_LABELS = { general: "General", roll_call: "Pase de lista", student_attendance: "Asistencia alumnos", scans: "Escaneos", scan_balance: "Balance accesos", student_punctuality: "Puntualidad alumnos", planning: "Planeaciones", observations: "Observaciones", observation_coverage: "Cobertura obs.", sapf: "Seguimientos" };
+    var METRIC_ICONS = { general: "▦", roll_call: "☷", student_attendance: "♙", scans: "▥", scan_balance: "⚖", student_punctuality: "◷", planning: "▤", observations: "●", observation_coverage: "♟", sapf: "↗" };
     var METRIC_DESCRIPTIONS = {
       general: "Promedio ponderado de las métricas con cálculo real. En ciclo escolar usa el periodo completo salvo observaciones, que se promedian por mes.",
       roll_call: "Promedio del periodo: grupos/día con pase de lista capturado contra grupos esperados por día.",
@@ -891,20 +954,47 @@ CORPORATE_COMPLIANCE_HTML = r'''
     function metricColor(metric) { return metric && metric.color ? metric.color : colorFor(metric ? metric.score : null); }
     function dot(metric) { return '<span class="dot ' + metricColor(metric) + '"></span>'; }
     function isInformational(metric) { return !!(metric && metric.informational); }
+    function metricDetailText(metric) {
+      if (!metric) return "No se recibió la métrica; el reporte seguirá intentando.";
+      var parts = [];
+      if (metric.label) parts.push(metric.label);
+      if (metric.detail && metric.detail !== metric.label) parts.push(metric.detail);
+      if (metric.failure_reason) parts.push(metric.failure_reason);
+      if (metric.unavailable_reason) parts.push(metric.unavailable_reason);
+      return parts.join(" · ") || "Sin detalle adicional.";
+    }
+    function hoverDetailHtml(metric) {
+      return '<div class="cell-hover-detail"><strong>Detalle</strong>' + esc(metricDetailText(metric)) + '</div>';
+    }
+    function rowSummaryHtml(row) {
+      var counts = { green: 0, yellow: 0, red: 0, total: 0 };
+      for (var i = 0; i < METRIC_ORDER.length; i += 1) {
+        var key = METRIC_ORDER[i];
+        if (key === "general") continue;
+        var metric = get(row, ["cells", key], {});
+        if (isInformational(metric) || isRetryMetric(metric) || num(metric.score) === null) continue;
+        var color = metricColor(metric);
+        if (color !== "green" && color !== "yellow" && color !== "red") continue;
+        counts[color] += 1;
+        counts.total += 1;
+      }
+      var total = counts.total || 1;
+      return '<div class="summary-bars" title="Resumen calculado con métricas disponibles"><div class="summary-track"><span class="summary-seg green" style="width:' + (counts.green / total * 100) + '%"></span><span class="summary-seg yellow" style="width:' + (counts.yellow / total * 100) + '%"></span><span class="summary-seg red" style="width:' + (counts.red / total * 100) + '%"></span></div><div class="summary-counts"><span>' + counts.green + '</span><span>' + counts.yellow + '</span><span>' + counts.red + '</span></div></div>';
+    }
     function metricCellHtml(metric) {
       if (!metric) {
-        return '<div class="heat-cell-top"><div class="info-title"><span class="loading-mini">Reintentando</span></div><span class="cell-status">Cargando</span></div><div class="cell-label">No se recibió la métrica; el reporte seguirá intentando.</div>';
+        return '<div class="heat-cell-top"><div class="info-title"><span class="loading-mini">Reintentando</span></div><span class="cell-status">Cargando</span></div>' + hoverDetailHtml(metric);
       }
       if (isInformational(metric)) {
-        return '<div class="heat-cell-top"><div class="info-title">' + esc(metric.label || 'Sin registros') + '</div><span class="cell-status">Info</span></div><div class="cell-label">' + esc(metric.detail || 'Dato informativo') + '</div>';
+        return '<div class="heat-cell-top"><div class="info-title">' + esc(metric.label || 'Sin registros') + '</div><span class="cell-status">Info</span></div>' + hoverDetailHtml(metric);
       }
       if (isRetryMetric(metric)) {
-        return '<div class="heat-cell-top"><div class="info-title"><span class="loading-mini">Reintentando</span></div><span class="cell-status">Cargando</span></div><div class="cell-label">Fuente pendiente; el reporte seguirá intentando obtener el dato.</div>';
+        return '<div class="heat-cell-top"><div class="info-title"><span class="loading-mini">Reintentando</span></div><span class="cell-status">Cargando</span></div>' + hoverDetailHtml(metric);
       }
       if (num(metric.score) === null) {
-        return '<div class="heat-cell-top"><div class="info-title">' + esc(metric.label || 'Sin cálculo') + '</div><span class="cell-status">—</span></div><div class="cell-label">' + esc(metric.detail || 'Sin base aplicable verificada.') + '</div>';
+        return '<div class="heat-cell-top"><div class="info-title">—</div><span class="cell-status">Sin base</span></div>' + hoverDetailHtml(metric);
       }
-      return '<div class="heat-cell-top"><div class="cell-score score ' + metricColor(metric) + '">' + pct(metric.score) + '</div><span class="cell-status">' + esc(statusText(metric)) + '</span></div><div class="cell-label">' + esc(metric.label || "Sin datos") + '</div>';
+      return '<div class="heat-cell-top"><div class="cell-score score ' + metricColor(metric) + '">' + pct(metric.score) + '</div><span class="cell-status">' + esc(statusText(metric)) + '</span></div>' + hoverDetailHtml(metric);
     }
     function metricValueHtml(metric) {
       if (isInformational(metric)) return '<span class="score gray">Informativo</span>';
@@ -961,7 +1051,8 @@ CORPORATE_COMPLIANCE_HTML = r'''
     function metricHead(key) {
       var label = METRIC_LABELS[key] || key;
       var desc = METRIC_DESCRIPTIONS[key] || "";
-      return esc(label) + '<span class="metric-help" title="' + esc(desc) + '" aria-label="' + esc(desc) + '">?</span>';
+      var icon = METRIC_ICONS[key] || "•";
+      return '<div class="metric-head-inner"><span class="metric-icon" aria-hidden="true">' + esc(icon) + '</span><span>' + esc(label) + '<span class="metric-help" title="' + esc(desc) + '" aria-label="' + esc(desc) + '">?</span></span></div>';
     }
     function renderMethodology() {
       var target = byId("methodologyList");
@@ -1127,6 +1218,7 @@ CORPORATE_COMPLIANCE_HTML = r'''
       byId("generalDetail").textContent = general.detail || "—";
       renderKpi("best", aggregate.best_plantel);
       renderKpi("worst", aggregate.worst_plantel);
+      renderDistributionKpi();
     }
     function renderKpi(prefix, item) {
       var metric = item || {};
@@ -1135,9 +1227,16 @@ CORPORATE_COMPLIANCE_HTML = r'''
       byId(prefix + "Title").innerHTML = item ? dot(metric) + esc(item.plantel) : "—";
       byId(prefix + "Detail").textContent = item && item.resolved_name ? item.resolved_name : "—";
     }
+    function renderDistributionKpi() {
+      var counts = complianceCounts();
+      var target = byId("distributionMini");
+      if (!target) return;
+      target.innerHTML = '<div class="distribution-item"><div class="distribution-count score green">' + counts.green + '</div><div class="distribution-label">Sano</div></div><div class="distribution-item"><div class="distribution-count score yellow">' + counts.yellow + '</div><div class="distribution-label">Atención</div></div><div class="distribution-item"><div class="distribution-count score red">' + counts.red + '</div><div class="distribution-label">Crítico</div></div>';
+      byId("distributionDetail").textContent = counts.total + " celdas con cálculo en el mapa";
+    }
     function renderMatrix() {
       var rows = get(state.data, ["matrix"], []);
-      var html = '<tr><th class="plantel-header">Plantel</th>';
+      var html = '<tr><th class="plantel-header">Plantel</th><th class="summary-header">Resumen</th>';
       for (var h = 0; h < METRIC_ORDER.length; h += 1) {
         var headKey = METRIC_ORDER[h];
         var headActive = state.drilldownMode === "metric" && state.selectedMetric === headKey ? " active" : "";
@@ -1147,13 +1246,13 @@ CORPORATE_COMPLIANCE_HTML = r'''
       for (var r = 0; r < rows.length; r += 1) {
         var row = rows[r];
         var plantelActive = state.selectedPlantel === row.plantel && state.selectedMetric === "general" && state.drilldownMode !== "metric" ? " active" : "";
-        html += '<tr><td class="plantel-cell clickable' + plantelActive + '" data-plantel="' + esc(row.plantel) + '"><div class="plantel-code">' + esc(row.plantel) + '</div><div class="plantel-name">' + esc(row.name) + "</div></td>";
+        html += '<tr><td class="plantel-cell clickable' + plantelActive + '" data-plantel="' + esc(row.plantel) + '"><div class="plantel-code">' + esc(row.plantel) + '</div><div class="plantel-name">' + esc(row.name) + '</div></td><td class="summary-cell">' + rowSummaryHtml(row) + '</td>';
         for (var c = 0; c < METRIC_ORDER.length; c += 1) {
           var key = METRIC_ORDER[c];
           var metric = get(row, ["cells", key], {});
           var infoClass = isInformational(metric) ? ' info-cell' : '';
           var active = state.drilldownMode !== "metric" && state.selectedPlantel === row.plantel && state.selectedMetric === key ? " active" : "";
-          html += '<td class="heat ' + metricColor(metric) + infoClass + active + '" data-plantel="' + esc(row.plantel) + '" data-metric="' + esc(key) + '"' + heatStyle(metric) + '>' + metricCellHtml(metric) + '</td>';
+          html += '<td class="heat ' + metricColor(metric) + infoClass + active + '" data-plantel="' + esc(row.plantel) + '" data-metric="' + esc(key) + '" title="' + esc(metricDetailText(metric)) + '"' + heatStyle(metric) + '>' + metricCellHtml(metric) + '</td>';
         }
         html += "</tr>";
       }
@@ -1510,7 +1609,13 @@ CORPORATE_COMPLIANCE_HTML = r'''
         ".heat-cell-top { display: flex; justify-content: space-between; gap: 1mm; }",
         ".cell-score { font-size: 8pt; line-height: 1; font-weight: 700; }",
         ".cell-status { border-radius: 999px; background: rgba(255,255,255,.66); padding: .45mm .7mm; color: #374558; font-size: 4.1pt; line-height: 1; font-weight: 800; text-transform: uppercase; white-space: nowrap; }",
-        ".cell-label { margin-top: .6mm; color: #3e4b5b; font-size: 4.65pt; line-height: 1.1; }",
+        ".cell-label,.cell-hover-detail { display: none !important; }",
+        ".summary-header { width: 22mm; }",
+        ".summary-cell { background: #fff; }",
+        ".summary-bars { display: grid; gap: 1.2mm; }",
+        ".summary-track { display: flex; height: 2mm; border-radius: 999px; overflow: hidden; background: #eef3f8; }",
+        ".summary-seg.green { background: #009b68; } .summary-seg.yellow { background: #ffb703; } .summary-seg.red { background: #ef3e42; }",
+        ".summary-counts { display: flex; justify-content: space-around; font-size: 4.8pt; font-weight: 800; }",
         ".info-title { font-size: 5.2pt; font-weight: 800; line-height: 1.1; }",
         ".score.green { color: #008f5a; } .score.yellow { color: #c88400; } .score.red { color: #c63d35; } .score.gray { color: #667085; }",
         ".method-grid { display: grid; grid-template-columns: repeat(2,1fr); gap: 2.2mm 5mm; }",
@@ -1526,12 +1631,12 @@ CORPORATE_COMPLIANCE_HTML = r'''
     }
     function printMatrixHtml() {
       var rows = get(state.data, ["matrix"], []);
-      var html = '<table class="matrix"><thead><tr><th>Plantel</th>';
+      var html = '<table class="matrix"><thead><tr><th>Plantel</th><th class="summary-header">Resumen</th>';
       for (var h = 0; h < METRIC_ORDER.length; h += 1) html += '<th>' + esc(METRIC_LABELS[METRIC_ORDER[h]] || METRIC_ORDER[h]) + '</th>';
       html += '</tr></thead><tbody>';
       for (var r = 0; r < rows.length; r += 1) {
         var row = rows[r];
-        html += '<tr><td><div class="plantel-code">' + esc(row.plantel) + '</div><div class="plantel-name">' + esc(row.name || "") + '</div></td>';
+        html += '<tr><td><div class="plantel-code">' + esc(row.plantel) + '</div><div class="plantel-name">' + esc(row.name || "") + '</div></td><td class="summary-cell">' + rowSummaryHtml(row) + '</td>';
         for (var c = 0; c < METRIC_ORDER.length; c += 1) {
           var metric = get(row, ["cells", METRIC_ORDER[c]], {});
           html += '<td class="heat ' + metricColor(metric) + '"' + heatStyle(metric) + '>' + metricCellHtml(metric) + '</td>';

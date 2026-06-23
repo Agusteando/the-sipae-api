@@ -11,7 +11,7 @@ from .service import get_corporate_compliance_index
 from .templates import CORPORATE_COMPLIANCE_HTML
 
 router = APIRouter(tags=["Cumplimiento operativo"])
-DASHBOARD_DATA_VERSION = "2026-06-23-heatmap-retry-planning-active-v21"
+DASHBOARD_DATA_VERSION = "2026-06-23-visual-reference-minimal-v22"
 _REPORT_PENDING: dict[str, asyncio.Task] = {}
 _REPORT_PENDING_LOCK = asyncio.Lock()
 
