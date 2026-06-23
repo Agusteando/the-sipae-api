@@ -1,1 +1,1 @@
-Mejora visual del Reporte SIPAE inspirado en referencia
+Ajusta heatmap minimalista y hover visible

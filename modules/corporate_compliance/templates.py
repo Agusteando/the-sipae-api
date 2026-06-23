@@ -563,19 +563,19 @@ CORPORATE_COMPLIANCE_HTML = r'''
     .summary-counts { display:flex; justify-content:space-around; color:#223653; font-size:10px; font-weight:900; }
     .heat { overflow: visible; box-shadow: inset 0 0 0 1px rgba(16,35,63,.07), 0 8px 18px rgba(16,35,63,.04); text-align:center; vertical-align: middle; }
     .heat::before { display:none; }
-    .heat.green { background: linear-gradient(135deg, #5fc494 0%, #008f5a 100%) !important; }
-    .heat.yellow { background: linear-gradient(135deg, #ffd963 0%, #f4a900 100%) !important; }
-    .heat.red { background: linear-gradient(135deg, #ff7a7d 0%, #ef3e42 100%) !important; }
-    .heat.gray { background: linear-gradient(135deg, #f8fafc 0%, #eef3f8 100%) !important; }
-    .heat-cell-top { min-height: 50px; align-items:center; justify-content:center; flex-direction: column; gap: 6px; }
+    .heat.green { background: #10a871; }
+    .heat.yellow { background: #f8bd26; }
+    .heat.red { background: #ef4d4f; }
+    .heat.gray { background: #f4f7fb; }
+    .heat-cell-top { min-height: 50px; align-items:center; justify-content:center; flex-direction: column; gap: 0; }
     .heat .cell-score { font-size: 21px; color: #fff !important; text-shadow: 0 1px 5px rgba(16,35,63,.14); }
-    .heat.yellow .cell-score { color: #7c4a00 !important; text-shadow: none; }
+    .heat.yellow .cell-score { color: #4f3300 !important; text-shadow: none; }
     .heat.gray .cell-score, .heat.gray .info-title { color: #516176 !important; }
-    .cell-status { padding: 3px 8px; font-size: 8px; background: rgba(255,255,255,.86); color: var(--ink); }
+    .cell-status { display: none !important; }
     .cell-label { display: none; }
-    .cell-hover-detail { display:none; position:absolute; left:50%; top:calc(100% + 8px); transform:translateX(-50%); width:220px; z-index:50; padding:10px 12px; border:1px solid #cdd8e5; border-radius:12px; background:#fff; color:#223653; box-shadow:0 20px 40px rgba(16,35,63,.18); font-size:11px; line-height:1.45; text-align:left; pointer-events:none; }
-    .cell-hover-detail strong { display:block; margin-bottom:3px; font-size:12px; color:var(--ink); }
-    .heat:hover .cell-hover-detail { display:block; }
+    .heat-tooltip { position: fixed; z-index: 2147483000; display: none; max-width: 280px; padding: 11px 13px; border: 1px solid #cbd8e8; border-radius: 14px; background: rgba(255,255,255,.98); color: #223653; box-shadow: 0 22px 55px rgba(16,35,63,.24); font-size: 11.5px; line-height: 1.45; text-align: left; pointer-events: none; backdrop-filter: blur(8px); }
+    .heat-tooltip.visible { display: block; }
+    .heat-tooltip strong { display:block; margin-bottom:4px; color:var(--ink); font-size:12px; font-weight:900; }
     .debug-section { background:#0b1628; border-color:#15243b; }
 
     @media (max-width: 1100px) {
@@ -651,8 +651,8 @@ CORPORATE_COMPLIANCE_HTML = r'''
       .plantel-name { margin-top: .6mm; font-size: 5pt; line-height: 1.1; }
       .heat::before { border-top-width: 1.6pt; }
       .cell-score { font-size: 8pt; }
-      .cell-status { padding: .55mm .8mm; font-size: 4.3pt; }
-      .cell-label, .cell-hover-detail { display: none !important; }
+      .cell-status { display: none !important; }
+      .cell-label, .cell-hover-detail, .heat-tooltip { display: none !important; }
       .info-title { font-size: 5.6pt; }
       .methodology-section { break-before: page; background: #fff; }
       .methodology-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 2.4mm 5mm; }
@@ -835,6 +835,7 @@ CORPORATE_COMPLIANCE_HTML = r'''
       </article>
     </div>
   </main>
+  <div id="heatTooltip" class="heat-tooltip" role="tooltip" aria-hidden="true"></div>
 
   <script>
     var PLANTELES = ["PT", "PM", "ST", "SM", "PREET", "PREEM"];
@@ -940,17 +941,20 @@ CORPORATE_COMPLIANCE_HTML = r'''
       return out;
     }
     function hasFailedHeatmapCells() { return failedHeatmapCells().length > 0; }
+    function mixColor(a, b, t) {
+      var out = [];
+      for (var i = 0; i < 3; i += 1) out.push(Math.round(a[i] + (b[i] - a[i]) * t));
+      return 'rgb(' + out.join(',') + ')';
+    }
     function heatBackground(score) {
       var n = num(score);
-      if (n === null) return "linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%)";
-      var red = [198, 61, 53], yellow = [200, 132, 0], green = [0, 143, 90];
-      var from = n < 70 ? red : (n < 85 ? yellow : green);
-      var alpha = 0.18 + (Math.max(0, Math.min(100, n)) / 100) * 0.18;
-      var top = 'rgba(' + from[0] + ',' + from[1] + ',' + from[2] + ',' + alpha.toFixed(3) + ')';
-      var bottom = 'rgba(' + from[0] + ',' + from[1] + ',' + from[2] + ',' + (alpha * 0.46).toFixed(3) + ')';
-      return 'linear-gradient(135deg, ' + top + ' 0%, ' + bottom + ' 100%)';
+      if (n === null) return "#f4f7fb";
+      n = Math.max(0, Math.min(100, n));
+      if (n < 70) return mixColor([255, 226, 225], [239, 67, 72], n / 69);
+      if (n < 85) return mixColor([255, 238, 190], [255, 184, 28], (n - 70) / 14);
+      return mixColor([188, 238, 216], [0, 155, 104], (n - 85) / 15);
     }
-    function heatStyle(metric) { return ' style="background:' + heatBackground(metric ? metric.score : null) + '"'; }
+    function heatStyle(metric) { return ' style="background-color:' + heatBackground(metric ? metric.score : null) + '"'; }
     function metricColor(metric) { return metric && metric.color ? metric.color : colorFor(metric ? metric.score : null); }
     function dot(metric) { return '<span class="dot ' + metricColor(metric) + '"></span>'; }
     function isInformational(metric) { return !!(metric && metric.informational); }
@@ -963,9 +967,7 @@ CORPORATE_COMPLIANCE_HTML = r'''
       if (metric.unavailable_reason) parts.push(metric.unavailable_reason);
       return parts.join(" · ") || "Sin detalle adicional.";
     }
-    function hoverDetailHtml(metric) {
-      return '<div class="cell-hover-detail"><strong>Detalle</strong>' + esc(metricDetailText(metric)) + '</div>';
-    }
+    function hoverDetailHtml(metric) { return ''; }
     function rowSummaryHtml(row) {
       var counts = { green: 0, yellow: 0, red: 0, total: 0 };
       for (var i = 0; i < METRIC_ORDER.length; i += 1) {
@@ -982,19 +984,40 @@ CORPORATE_COMPLIANCE_HTML = r'''
       return '<div class="summary-bars" title="Resumen calculado con métricas disponibles"><div class="summary-track"><span class="summary-seg green" style="width:' + (counts.green / total * 100) + '%"></span><span class="summary-seg yellow" style="width:' + (counts.yellow / total * 100) + '%"></span><span class="summary-seg red" style="width:' + (counts.red / total * 100) + '%"></span></div><div class="summary-counts"><span>' + counts.green + '</span><span>' + counts.yellow + '</span><span>' + counts.red + '</span></div></div>';
     }
     function metricCellHtml(metric) {
-      if (!metric) {
-        return '<div class="heat-cell-top"><div class="info-title"><span class="loading-mini">Reintentando</span></div><span class="cell-status">Cargando</span></div>' + hoverDetailHtml(metric);
-      }
-      if (isInformational(metric)) {
-        return '<div class="heat-cell-top"><div class="info-title">' + esc(metric.label || 'Sin registros') + '</div><span class="cell-status">Info</span></div>' + hoverDetailHtml(metric);
-      }
-      if (isRetryMetric(metric)) {
-        return '<div class="heat-cell-top"><div class="info-title"><span class="loading-mini">Reintentando</span></div><span class="cell-status">Cargando</span></div>' + hoverDetailHtml(metric);
-      }
-      if (num(metric.score) === null) {
-        return '<div class="heat-cell-top"><div class="info-title">—</div><span class="cell-status">Sin base</span></div>' + hoverDetailHtml(metric);
-      }
-      return '<div class="heat-cell-top"><div class="cell-score score ' + metricColor(metric) + '">' + pct(metric.score) + '</div><span class="cell-status">' + esc(statusText(metric)) + '</span></div>' + hoverDetailHtml(metric);
+      if (!metric) return '<div class="heat-cell-top"><div class="info-title"><span class="loading-mini">Reintentando</span></div></div>';
+      if (isInformational(metric)) return '<div class="heat-cell-top"><div class="info-title">' + esc(metric.label || '—') + '</div></div>';
+      if (isRetryMetric(metric)) return '<div class="heat-cell-top"><div class="info-title"><span class="loading-mini">Reintentando</span></div></div>';
+      if (num(metric.score) === null) return '<div class="heat-cell-top"><div class="info-title">—</div></div>';
+      return '<div class="heat-cell-top"><div class="cell-score">' + pct(metric.score) + '</div></div>';
+    }
+    function tooltipHtml(title, detail) {
+      return '<strong>' + esc(title || 'Detalle') + '</strong>' + esc(detail || 'Sin detalle adicional.');
+    }
+    function showHeatTooltip(event, title, detail) {
+      var tip = byId("heatTooltip");
+      if (!tip) return;
+      tip.innerHTML = tooltipHtml(title, detail);
+      tip.classList.add("visible");
+      tip.setAttribute("aria-hidden", "false");
+      moveHeatTooltip(event);
+    }
+    function moveHeatTooltip(event) {
+      var tip = byId("heatTooltip");
+      if (!tip || !tip.classList.contains("visible")) return;
+      var pad = 14;
+      var x = event.clientX + 14;
+      var y = event.clientY + 14;
+      var rect = tip.getBoundingClientRect();
+      if (x + rect.width + pad > window.innerWidth) x = event.clientX - rect.width - 14;
+      if (y + rect.height + pad > window.innerHeight) y = event.clientY - rect.height - 14;
+      tip.style.left = Math.max(pad, x) + "px";
+      tip.style.top = Math.max(pad, y) + "px";
+    }
+    function hideHeatTooltip() {
+      var tip = byId("heatTooltip");
+      if (!tip) return;
+      tip.classList.remove("visible");
+      tip.setAttribute("aria-hidden", "true");
     }
     function metricValueHtml(metric) {
       if (isInformational(metric)) return '<span class="score gray">Informativo</span>';
@@ -1252,7 +1275,7 @@ CORPORATE_COMPLIANCE_HTML = r'''
           var metric = get(row, ["cells", key], {});
           var infoClass = isInformational(metric) ? ' info-cell' : '';
           var active = state.drilldownMode !== "metric" && state.selectedPlantel === row.plantel && state.selectedMetric === key ? " active" : "";
-          html += '<td class="heat ' + metricColor(metric) + infoClass + active + '" data-plantel="' + esc(row.plantel) + '" data-metric="' + esc(key) + '" title="' + esc(metricDetailText(metric)) + '"' + heatStyle(metric) + '>' + metricCellHtml(metric) + '</td>';
+          html += '<td class="heat ' + metricColor(metric) + infoClass + active + '" data-plantel="' + esc(row.plantel) + '" data-metric="' + esc(key) + '" data-title="' + esc(METRIC_LABELS[key] || key) + ' · ' + esc(row.plantel) + '" data-detail="' + esc(metricDetailText(metric)) + '"' + heatStyle(metric) + '>' + metricCellHtml(metric) + '</td>';
         }
         html += "</tr>";
       }
@@ -1273,13 +1296,20 @@ CORPORATE_COMPLIANCE_HTML = r'''
         renderDrilldown();
       });
       var cells = document.querySelectorAll(".heat[data-plantel][data-metric]");
-      for (var i = 0; i < cells.length; i += 1) cells[i].addEventListener("click", function () {
-        state.selectedPlantel = this.getAttribute("data-plantel");
-        state.selectedMetric = this.getAttribute("data-metric") || "general";
-        state.drilldownMode = "cell";
-        renderMatrix();
-        renderDrilldown();
-      });
+      for (var i = 0; i < cells.length; i += 1) {
+        cells[i].addEventListener("click", function () {
+          state.selectedPlantel = this.getAttribute("data-plantel");
+          state.selectedMetric = this.getAttribute("data-metric") || "general";
+          state.drilldownMode = "cell";
+          renderMatrix();
+          renderDrilldown();
+        });
+        cells[i].addEventListener("mouseenter", function (event) {
+          showHeatTooltip(event, this.getAttribute("data-title") || "Detalle", this.getAttribute("data-detail") || "");
+        });
+        cells[i].addEventListener("mousemove", moveHeatTooltip);
+        cells[i].addEventListener("mouseleave", hideHeatTooltip);
+      }
     }
     function renderBars() {
       renderBarList("plantelBars", get(state.data, ["rankings", "planteles"], []), "plantel");
@@ -1608,8 +1638,8 @@ CORPORATE_COMPLIANCE_HTML = r'''
         ".plantel-name { margin-top: .3mm; color: #67717f; font-size: 4.8pt; line-height: 1.08; }",
         ".heat-cell-top { display: flex; justify-content: space-between; gap: 1mm; }",
         ".cell-score { font-size: 8pt; line-height: 1; font-weight: 700; }",
-        ".cell-status { border-radius: 999px; background: rgba(255,255,255,.66); padding: .45mm .7mm; color: #374558; font-size: 4.1pt; line-height: 1; font-weight: 800; text-transform: uppercase; white-space: nowrap; }",
-        ".cell-label,.cell-hover-detail { display: none !important; }",
+        ".cell-status { display:none !important; }",
+        ".cell-label,.cell-hover-detail,.heat-tooltip { display: none !important; }",
         ".summary-header { width: 22mm; }",
         ".summary-cell { background: #fff; }",
         ".summary-bars { display: grid; gap: 1.2mm; }",
