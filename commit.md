@@ -1,1 +1,1 @@
-Corrige reintentos y diagnóstico de fuentes del heatmap
+Ajusta planeaciones a docentes activos

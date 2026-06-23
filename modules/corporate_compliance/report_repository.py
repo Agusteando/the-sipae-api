@@ -69,21 +69,42 @@ async def fetch_planning_review_totals(
     academic_filters: List[Dict[str, str]],
     start_date: date,
     end_date: date,
-    period_week_start: date,
-    period_week_end: date,
+    active_start_date: date,
+    active_end_date: date,
 ) -> Dict[str, Any]:
     """Review status for planeaciones created inside the selected period.
 
-    The report intentionally uses p.created_at as the source of truth. week/weekEnd
-    are not used because their stored shape is inconsistent across planteles.
+    Only academically active docentes are accounted for. A docente is considered
+    active for this metric when they belong to the selected plantel/nivel, have
+    a non-banned/non-coordinator/non-ISSSTE user, and have recent non-flagged
+    planning activity inside the active window. Planeaciones from stale docentes
+    are excluded from the score and surfaced only as diagnostics.
     """
-    del period_week_start, period_week_end
     user_where, user_params = _build_academic_where(academic_filters, "u")
     plan_where, plan_params = _build_academic_where(academic_filters, "p")
+    active_user_where, active_user_params = _build_academic_where(academic_filters, "recent_u")
+    active_plan_where, active_plan_params = _build_academic_where(academic_filters, "recent")
     reviewed = _reviewed_clause("p")
     unit_key = "CONCAT_WS('|', p.docente, DATE(p.created_at), IFNULL(p.ciclo, ''), IFNULL(p.id, ''))"
+    active_docentes_sql = f"""
+        SELECT DISTINCT recent.docente
+        FROM planeaciones recent
+        JOIN usuarios recent_u ON recent_u.username = recent.docente
+        WHERE {active_user_where}
+          AND {active_plan_where}
+          AND recent.created_at >= %s
+          AND recent.created_at < DATE_ADD(%s, INTERVAL 1 DAY)
+          AND recent.flagged = 0
+          AND recent.week IS NOT NULL
+          AND recent.docente IS NOT NULL
+          AND TRIM(recent.docente) <> ''
+          AND COALESCE(recent_u.coordinador, 0) = 0
+          AND COALESCE(recent_u.banned, 0) = 0
+          AND (recent_u.ISSSTE IS NULL OR recent_u.ISSSTE = 0)
+    """
     query = f"""
         SELECT
+            COUNT(DISTINCT active_docentes.docente) AS active_teachers,
             COUNT(DISTINCT {unit_key}) AS submitted_units,
             COUNT(DISTINCT CASE WHEN {reviewed} THEN {unit_key} END) AS reviewed_units,
             COUNT(DISTINCT CASE WHEN NOT {reviewed} THEN {unit_key} END) AS pending_units,
@@ -93,6 +114,7 @@ async def fetch_planning_review_totals(
             COUNT(*) AS raw_rows
         FROM planeaciones p
         JOIN usuarios u ON u.username = p.docente
+        JOIN ({active_docentes_sql}) active_docentes ON active_docentes.docente = p.docente
         WHERE {user_where}
           AND {plan_where}
           AND p.created_at >= %s
@@ -104,35 +126,64 @@ async def fetch_planning_review_totals(
           AND COALESCE(u.banned, 0) = 0
           AND (u.ISSSTE IS NULL OR u.ISSSTE = 0)
     """
-    params = (*user_params, *plan_params, start_date, end_date)
+    monthly_query = f"""
+        SELECT
+            DATE_FORMAT(p.created_at, '%%Y-%%m') AS month_key,
+            COUNT(DISTINCT {unit_key}) AS submitted_units,
+            COUNT(DISTINCT CASE WHEN {reviewed} THEN {unit_key} END) AS reviewed_units,
+            COUNT(DISTINCT CASE WHEN NOT {reviewed} THEN {unit_key} END) AS pending_units,
+            COUNT(DISTINCT p.docente) AS docentes_con_planeacion
+        FROM planeaciones p
+        JOIN usuarios u ON u.username = p.docente
+        JOIN ({active_docentes_sql}) active_docentes ON active_docentes.docente = p.docente
+        WHERE {user_where}
+          AND {plan_where}
+          AND p.created_at >= %s
+          AND p.created_at < DATE_ADD(%s, INTERVAL 1 DAY)
+          AND p.flagged = 0
+          AND p.docente IS NOT NULL
+          AND TRIM(p.docente) <> ''
+          AND COALESCE(u.coordinador, 0) = 0
+          AND COALESCE(u.banned, 0) = 0
+          AND (u.ISSSTE IS NULL OR u.ISSSTE = 0)
+        GROUP BY month_key
+        ORDER BY month_key
+    """
+    inactive_query = f"""
+        SELECT
+            COUNT(DISTINCT {unit_key}) AS excluded_inactive_units,
+            COUNT(DISTINCT p.docente) AS excluded_inactive_teachers
+        FROM planeaciones p
+        JOIN usuarios u ON u.username = p.docente
+        LEFT JOIN ({active_docentes_sql}) active_docentes ON active_docentes.docente = p.docente
+        WHERE {user_where}
+          AND {plan_where}
+          AND p.created_at >= %s
+          AND p.created_at < DATE_ADD(%s, INTERVAL 1 DAY)
+          AND p.flagged = 0
+          AND p.docente IS NOT NULL
+          AND TRIM(p.docente) <> ''
+          AND COALESCE(u.coordinador, 0) = 0
+          AND COALESCE(u.banned, 0) = 0
+          AND (u.ISSSTE IS NULL OR u.ISSSTE = 0)
+          AND active_docentes.docente IS NULL
+    """
+    active_params = (*active_user_params, *active_plan_params, active_start_date, active_end_date)
+    period_params = (*user_params, *plan_params, start_date, end_date)
     conn = await get_attendance_db_connection()
     try:
         async with conn.cursor(aiomysql.DictCursor) as cur:
-            await cur.execute(query, params)
+            await cur.execute(query, (*active_params, *period_params))
             row = await cur.fetchone() or {}
-            monthly_query = f"""
-                SELECT
-                    DATE_FORMAT(p.created_at, '%%Y-%%m') AS month_key,
-                    COUNT(DISTINCT {unit_key}) AS submitted_units,
-                    COUNT(DISTINCT CASE WHEN {reviewed} THEN {unit_key} END) AS reviewed_units,
-                    COUNT(DISTINCT CASE WHEN NOT {reviewed} THEN {unit_key} END) AS pending_units
-                FROM planeaciones p
-                JOIN usuarios u ON u.username = p.docente
-                WHERE {user_where}
-                  AND {plan_where}
-                  AND p.created_at >= %s
-                  AND p.created_at < DATE_ADD(%s, INTERVAL 1 DAY)
-                  AND p.flagged = 0
-                  AND p.docente IS NOT NULL
-                  AND TRIM(p.docente) <> ''
-                  AND COALESCE(u.coordinador, 0) = 0
-                  AND COALESCE(u.banned, 0) = 0
-                  AND (u.ISSSTE IS NULL OR u.ISSSTE = 0)
-                GROUP BY month_key
-                ORDER BY month_key
-            """
-            await cur.execute(monthly_query, params)
+            await cur.execute(monthly_query, (*active_params, *period_params))
             row["monthly"] = await cur.fetchall() or []
+            await cur.execute(inactive_query, (*active_params, *period_params))
+            inactive = await cur.fetchone() or {}
+            row["excluded_inactive_units"] = inactive.get("excluded_inactive_units") or 0
+            row["excluded_inactive_teachers"] = inactive.get("excluded_inactive_teachers") or 0
+            row["active_window_start"] = active_start_date.isoformat()
+            row["active_window_end"] = active_end_date.isoformat()
+            row["active_basis"] = "recent_non_flagged_planeaciones_active_window"
             # Backward-compatible aliases used by the service/diagnostic.
             row["period_submitted_units"] = row.get("submitted_units") or 0
             row["period_reviewed_units"] = row.get("reviewed_units") or 0

@@ -14,11 +14,8 @@ from modules.sapf.service import get_sapf_overview_report
 from integrations.external_bot import fetch_expected_groups, fetch_expected_population
 
 from .report_repository import (
-    count_active_academic_teachers,
     fetch_attendance_rollup,
     fetch_husky_access_user_rollup,
-    fetch_husky_daily_scan_counts,
-    fetch_husky_tardy_daily_counts,
     fetch_observation_monthly_totals,
     fetch_observation_period_monthly_totals,
     fetch_planning_review_totals,
@@ -906,16 +903,17 @@ async def _planning_metric(plantel_info: Dict[str, Any], start_date: date, end_d
     academic_filters = plantel_info.get("academic_filters") or []
     if not academic_filters:
         return _unavailable("—", "Plantel sin filtro académico")
-    active_teachers = await count_active_academic_teachers(academic_filters)
+    active_start = end_date - timedelta(days=20)
     period_week_start, period_week_end = _week_window_for_period(start_date, end_date)
     weeks = _weeks_touched(_business_days(period_week_start, period_week_end))
     totals = await fetch_planning_review_totals(
         academic_filters,
         start_date,
         end_date,
-        period_week_start,
-        period_week_end,
+        active_start,
+        end_date,
     )
+    active_teachers = safe_int(totals.get("active_teachers"))
     submitted = safe_int(totals.get("submitted_units"))
     reviewed = safe_int(totals.get("reviewed_units"))
     pending_submitted = safe_int(totals.get("pending_units")) or max(submitted - reviewed, 0)
@@ -932,10 +930,11 @@ async def _planning_metric(plantel_info: Dict[str, Any], start_date: date, end_d
             "numerator": reviewed_month,
             "denominator": submitted_month,
             "numerator_label": "Planeaciones revisadas",
-            "denominator_label": "Planeaciones creadas",
+            "denominator_label": "Planeaciones creadas por docentes activos",
             "pending": pending_month,
+            "active_submitted_teachers": safe_int(row.get("docentes_con_planeacion")),
             "score": pct(min(reviewed_month, submitted_month), submitted_month),
-            "unavailable_reason": None if submitted_month > 0 else "Sin planeaciones creadas en el mes",
+            "unavailable_reason": None if submitted_month > 0 else "Sin planeaciones creadas por docentes activos en el mes",
         })
 
     score = pct(min(reviewed, submitted), submitted)
@@ -952,20 +951,25 @@ async def _planning_metric(plantel_info: Dict[str, Any], start_date: date, end_d
             "pending": pending_submitted,
             "submitted_teachers": submitted_teachers,
             "raw_rows": raw_rows,
+            "excluded_inactive_units": safe_int(totals.get("excluded_inactive_units")),
+            "excluded_inactive_teachers": safe_int(totals.get("excluded_inactive_teachers")),
+            "active_window_start": str(totals.get("active_window_start") or active_start.isoformat()),
+            "active_window_end": str(totals.get("active_window_end") or end_date.isoformat()),
+            "active_basis": str(totals.get("active_basis") or "recent_non_flagged_planeaciones_active_window"),
             "created_at_start": start_date.isoformat(),
             "created_at_end": end_date.isoformat(),
             "min_created_at": str(totals.get("min_created_at") or ""),
             "max_created_at": str(totals.get("max_created_at") or ""),
-            "basis": "created_at_period_plans",
+            "basis": "created_at_period_plans_active_docentes_only",
             "breakdown": {
                 "method": "Razón del periodo",
-                "formula": "planeaciones revisadas / planeaciones creadas en el periodo",
+                "formula": "planeaciones revisadas de docentes activos / planeaciones creadas por docentes activos en el periodo",
                 "numerator": reviewed,
                 "denominator": submitted,
                 "numerator_label": "Planeaciones revisadas",
-                "denominator_label": "Planeaciones creadas",
-                "aggregation": "El valor final usa el total del periodo, no el promedio simple de meses.",
-                "excluded": ["Planeaciones flagged", "Docentes coordinadores, banned o ISSSTE"],
+                "denominator_label": "Planeaciones creadas por docentes activos",
+                "aggregation": "El valor final usa el total del periodo, limitado a docentes académicamente activos; no es promedio simple de meses.",
+                "excluded": ["Planeaciones flagged", "Docentes sin actividad académica reciente", "Docentes coordinadores, banned o ISSSTE"],
                 "monthly": monthly_rows,
             },
         },
@@ -1706,43 +1710,6 @@ def _bucketed_trend(planteles: List[Dict[str, Any]], start_date: date, end_date:
     }
 
 
-async def _fetch_husky_cycle_bundle(
-    husky_values: List[str],
-    start_date: date,
-    end_date: date,
-    threshold_time: str,
-) -> Dict[str, Any]:
-    """Fetch Husky access evidence with small aggregate queries.
-
-    The Ciclo Escolar heatmap must not publish failed access cells just because
-    a per-user year-sized rollup is too heavy.  This bundle reads the exact
-    daily aggregates required by Escaneos/Balance and the daily tardy counts
-    required by Puntualidad, chunked across the requested period.
-    """
-    scan_rows = await _chunked_rows(
-        fetch_husky_daily_scan_counts,
-        husky_values,
-        start_date=start_date,
-        end_date=end_date,
-        max_days=14,
-    )
-    tardy_rows = await _chunked_rows(
-        fetch_husky_tardy_daily_counts,
-        husky_values,
-        start_date=start_date,
-        end_date=end_date,
-        max_days=14,
-        threshold_time=threshold_time,
-    )
-    return {
-        "scans": scan_rows,
-        "retardos": tardy_rows,
-        "scan_rows": len(scan_rows or []),
-        "tardy_rows": len(tardy_rows or []),
-        "strategy": "chunked_daily_aggregate_husky_queries",
-    }
-
-
 def _clean_sources(sources: Dict[str, Dict[str, Any]]) -> Dict[str, Any]:
     clean: Dict[str, Any] = {}
     for key, payload in sources.items():
@@ -1751,8 +1718,6 @@ def _clean_sources(sources: Dict[str, Dict[str, Any]]) -> Dict[str, Any]:
             "duration_ms": payload.get("_duration_ms"),
             "error": payload.get("error"),
             "timeout": bool(payload.get("timeout")),
-            "strategy": payload.get("strategy") or payload.get("derived_from"),
-            "rows": payload.get("raw_rows"),
         }
     return clean
 
@@ -1776,39 +1741,31 @@ async def _collect_plantel(code: str, start_date: date, end_date: date, scope: s
         ),
         _safe_value_call(
             "husky_access_db",
-            lambda: _fetch_husky_cycle_bundle(husky_values, start_date, end_date, threshold_time),
+            lambda: _chunked_rows(fetch_husky_access_user_rollup, husky_values, start_date=start_date, end_date=end_date, max_days=14),
             heavy_timeout,
         ),
         _safe_call("academic", lambda: _academic_metrics(plantel_info, start_date, end_date, business_days), max(SOURCE_TIMEOUTS["academic"], heavy_timeout)),
         _safe_call("sapf", lambda: get_sapf_overview_report(code, start_date, end_date, scope), max(SOURCE_TIMEOUTS["sapf"], heavy_timeout)),
     )
-    husky_bundle = dict(sources[3])
-    if husky_bundle.get("_ok"):
-        bundle_value = husky_bundle.get("value") or {}
-        husky_source = {
-            "_ok": True,
-            "value": bundle_value.get("scans") or [],
-            "_duration_ms": husky_bundle.get("_duration_ms"),
-            "strategy": bundle_value.get("strategy"),
-            "raw_rows": bundle_value.get("scan_rows"),
-        }
+    husky_source = dict(sources[3])
+    if husky_source.get("_ok"):
+        summarized_husky_rows, summarized_tardy_rows = _summarize_husky_access_rollup(husky_source.get("value") or [], threshold_time)
+        husky_source["raw_rows"] = len(husky_source.get("value") or [])
+        husky_source["value"] = summarized_husky_rows
         retardos_source = {
             "_ok": True,
-            "value": bundle_value.get("retardos") or [],
-            "_duration_ms": husky_bundle.get("_duration_ms"),
+            "value": summarized_tardy_rows,
+            "_duration_ms": husky_source.get("_duration_ms"),
             "derived_from": "husky_access_db",
-            "strategy": bundle_value.get("strategy"),
-            "raw_rows": bundle_value.get("tardy_rows"),
+            "raw_rows": husky_source.get("raw_rows"),
         }
     else:
-        husky_source = dict(husky_bundle)
-        husky_source["value"] = []
         retardos_source = {
             "_ok": False,
             "value": [],
-            "_duration_ms": husky_bundle.get("_duration_ms"),
-            "error": husky_bundle.get("error"),
-            "timeout": husky_bundle.get("timeout"),
+            "_duration_ms": husky_source.get("_duration_ms"),
+            "error": husky_source.get("error"),
+            "timeout": husky_source.get("timeout"),
             "derived_from": "husky_access_db",
         }
     source_map = {
@@ -1836,17 +1793,14 @@ async def _collect_plantel(code: str, start_date: date, end_date: date, scope: s
     if source_map["husky"].get("_ok"):
         scans, scan_balance, scans_daily = _scans_metric_from_rows(husky_rows, source_map["expected_population"], attendance_daily, business_days)
     else:
-        scans = _unavailable("—", "Escaneos en reintento")
-        scans.update({"source_failure": True, "retryable": True, "source_key": "husky", "failure_reason": source_map["husky"].get("error")})
-        scan_balance = _unavailable("—", "Balance en reintento")
-        scan_balance.update({"source_failure": True, "retryable": True, "source_key": "husky", "failure_reason": source_map["husky"].get("error")})
+        scans = _unavailable("—", "Escaneos no respondió")
+        scan_balance = _unavailable("—", "Escaneos no respondió")
         scans_daily = []
 
     if source_map["retardos"].get("_ok"):
         student_punctuality, punctuality_daily = _student_punctuality_metric_from_counts(tardy_rows, source_map["expected_population"], attendance_daily, scans_daily, business_days)
     else:
-        student_punctuality = _unavailable("—", "Puntualidad en reintento")
-        student_punctuality.update({"source_failure": True, "retryable": True, "source_key": "retardos", "failure_reason": source_map["retardos"].get("error")})
+        student_punctuality = _unavailable("—", "Retardos no respondió")
         punctuality_daily = []
     academic_payload = source_map["academic"] if isinstance(source_map["academic"], dict) else {}
     planning = academic_payload.get("planning") if isinstance(academic_payload.get("planning"), dict) else _unavailable("—", "Sin cálculo de planeaciones")
@@ -1929,7 +1883,7 @@ def _diagnostic(planteles: List[Dict[str, Any]], start_date: date, end_date: dat
                 "escaneos": _metric_evidence(metrics.get("scans") or {}, ["entries", "exits", "expected", "expected_population", "observed_max_entries", "observed_max_attendance_records", "population_candidates", "days_with_records", "basis"]),
                 "balance_escaneos": _metric_evidence(metrics.get("scan_balance") or {}, ["entries", "exits", "gap_total", "days_with_records", "basis"]),
                 "puntualidad_alumnos": _metric_evidence(metrics.get("student_punctuality") or {}, ["tardies", "opportunities", "expected_population", "observed_max_entries", "observed_max_attendance_records", "population_candidates", "days_with_records", "basis"]),
-                "planeaciones": _metric_evidence(metrics.get("planning") or {}, ["submitted", "reviewed", "pending", "raw_rows", "active_teachers", "submitted_teachers", "created_at_start", "created_at_end", "min_created_at", "max_created_at", "basis"]),
+                "planeaciones": _metric_evidence(metrics.get("planning") or {}, ["submitted", "reviewed", "pending", "raw_rows", "active_teachers", "submitted_teachers", "excluded_inactive_units", "excluded_inactive_teachers", "active_window_start", "active_window_end", "active_basis", "created_at_start", "created_at_end", "min_created_at", "max_created_at", "basis"]),
                 "observaciones": _metric_evidence(metrics.get("observations") or {}, ["total_observations", "avg_monthly_observations", "monthly_goal", "months_count", "active_teachers", "window_start", "window_end", "active_window_start", "active_window_end", "basis"]),
                 "cobertura_observaciones": _metric_evidence(metrics.get("observation_coverage") or {}, ["active_teachers", "avg_active_teachers", "avg_teachers_with_2plus", "observed_teachers", "teachers_with_2plus", "without_observation", "months_count", "window_start", "window_end", "basis"]),
                 "seguimientos": _followups_evidence(metrics.get("sapf") or {}),
@@ -2217,7 +2171,7 @@ async def get_corporate_compliance_index(
         "source_audit": {p["plantel"]: p.get("source_audit") for p in plantel_payloads},
         "diagnostic": _diagnostic(plantel_payloads, start_date, end_date, business_days),
         "meta": {
-            "logic_version": "2026-06-23-heatmap-data-retry-v20",
+            "logic_version": "2026-06-23-drilldown-sapf-v19",
             "start_date": start_date.isoformat(),
             "end_date": end_date.isoformat(),
             "business_days": len(business_days),

@@ -98,19 +98,6 @@ CORPORATE_COMPLIANCE_HTML = r'''
       font-weight: 700;
     }
     .state.error { border-color: rgba(198,61,53,.38); background: #fff7f6; color: var(--red); }
-    .state.retrying { border-color: rgba(47,111,228,.24); background: #f4f8ff; color: #2354a6; }
-    .loading-mini { display:inline-flex; align-items:center; gap:6px; color:#2354a6; font-size:11px; font-weight:800; text-transform:uppercase; }
-    .loading-mini::before { content:""; width:8px; height:8px; border-radius:50%; border:2px solid rgba(47,111,228,.22); border-top-color:#2f6fe4; animation:spin .9s linear infinite; }
-    @keyframes spin { to { transform: rotate(360deg); } }
-    .debug-section { background:#0f172a; color:#e5edf7; border-color:#1e293b; }
-    .debug-section .section-label, .debug-section .section-copy { color:#a8b6c8; }
-    .debug-section .section-title { color:#fff; }
-    .debug-log { display:grid; gap:8px; margin-top:12px; }
-    .debug-row { display:grid; grid-template-columns:80px 140px minmax(0,1fr); gap:10px; padding:10px 12px; border:1px solid rgba(226,232,240,.14); border-radius:10px; background:rgba(255,255,255,.04); font-size:12px; }
-    .debug-row strong { color:#fff; }
-    .debug-pill { justify-self:start; border-radius:999px; padding:3px 8px; background:#1d4ed8; color:#fff; font-size:10px; font-weight:900; text-transform:uppercase; }
-    .debug-pill.ok { background:#047857; }
-    .debug-pill.fail { background:#b91c1c; }
     .report-sheet {
       background: var(--paper);
       border: 1px solid rgba(199,210,223,.92);
@@ -543,7 +530,7 @@ CORPORATE_COMPLIANCE_HTML = r'''
       * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
       html, body { background: #fff !important; color: #17212b; font-size: 8.5pt; }
       body { line-height: 1.35; }
-      .topbar, .refresh, .print-btn, #scopeFilters, #plantelFilters, .date-input, .metric-help, .select, .detail-section, .drilldown-section, .debug-section, #retrying, #loading, #error { display: none !important; }
+      .topbar, .refresh, .print-btn, #scopeFilters, #plantelFilters, .date-input, .metric-help, .select, .detail-section, .drilldown-section { display: none !important; }
       .print-only { display: block !important; }
       .page { max-width: none; padding: 0; }
       .report-sheet { border: 0; border-radius: 0; box-shadow: none; overflow: visible; }
@@ -645,7 +632,6 @@ CORPORATE_COMPLIANCE_HTML = r'''
 
   <main class="page">
     <div id="loading" class="state">Cargando reporte...</div>
-    <div id="retrying" class="state retrying hidden"></div>
     <div id="error" class="state error hidden"></div>
 
     <div id="report" class="hidden">
@@ -762,13 +748,6 @@ CORPORATE_COMPLIANCE_HTML = r'''
             </div>
           </section>
 
-          <section class="report-section debug-section no-print" id="debugSection">
-            <div class="section-head">
-              <div><div class="section-label">Diagnóstico de fuentes</div><div class="section-title">Estado de carga del heatmap</div><div class="section-copy">Visible solo en pantalla. Se oculta en impresión/PDF. Sirve para verificar reintentos, timeouts y origen de datos.</div></div>
-            </div>
-            <div id="debugLog" class="debug-log"></div>
-          </section>
-
         </div>
       </article>
     </div>
@@ -785,13 +764,13 @@ CORPORATE_COMPLIANCE_HTML = r'''
       scans: "Promedio diario del periodo: entradas registradas contra población esperada del plantel.",
       scan_balance: "Promedio diario del periodo: correspondencia entre entradas y salidas registradas; mayor balance = mejor.",
       student_punctuality: "Métrica positiva: 100 es sin retardos; baja según retardos contra oportunidades alumno-día del periodo.",
-      planning: "Planeaciones creadas en el periodo que ya tienen revisión registrada.",
+      planning: "Planeaciones creadas por docentes académicamente activos en el periodo que ya tienen revisión registrada. Excluye docentes sin actividad académica reciente.",
       observations: "Mes/rango corto: observaciones del mes contra meta 40. Ciclo escolar/rango largo: promedio mensual contra meta 40.",
       observation_coverage: "Mes/rango corto: docentes activos con 2+ observaciones. Ciclo escolar/rango largo: promedio mensual de esa cobertura.",
       sapf: "Puntaje combinado: 60% seguimientos reales contra meta poblacional del periodo, 25% fichas cerradas y 15% densidad de seguimiento por ficha."
     };
     var LINE_COLORS = ["#111827", "#009F5A", "#D1182C", "#D97706", "#2563eb", "#7c3aed"];
-    var state = { scope: "ciclo_escolar", planteles: {}, data: null, selectedPlantel: null, selectedMetric: "general", drilldownMode: "cell", retryCount: 0, retryTimer: null, loadingRetry: false };
+    var state = { scope: "ciclo_escolar", planteles: {}, data: null, selectedPlantel: null, selectedMetric: "general", drilldownMode: "cell" };
     for (var p0 = 0; p0 < PLANTELES.length; p0 += 1) state.planteles[PLANTELES[p0]] = true;
 
     function byId(id) { return document.getElementById(id); }
@@ -846,37 +825,8 @@ CORPORATE_COMPLIANCE_HTML = r'''
       if (color === "green") return "Sano";
       if (color === "yellow") return "Atenc.";
       if (color === "red") return "Crít.";
-      return "—";
+      return "Sin dato";
     }
-    function failureText(metric) {
-      if (!metric) return "";
-      return String([metric.label, metric.detail, metric.failure_reason, metric.unavailable_reason].join(" ")).toLowerCase();
-    }
-    function isRetryMetric(metric) {
-      if (!metric) return false;
-      if (metric.retryable || metric.source_failure) return true;
-      var text = failureText(metric);
-      return text.indexOf("no respondió") >= 0 || text.indexOf("timeout") >= 0 || text.indexOf("en reintento") >= 0;
-    }
-    function failedHeatmapCells() {
-      var rows = get(state.data, ["matrix"], []);
-      var out = [];
-      for (var r = 0; r < rows.length; r += 1) {
-        var row = rows[r];
-        for (var c = 0; c < METRIC_ORDER.length; c += 1) {
-          var key = METRIC_ORDER[c];
-          var cells = row.cells || {};
-          if (!hasOwn(cells, key) || !cells[key]) {
-            out.push({ plantel: row.plantel, metric: key, label: METRIC_LABELS[key] || key, reason: "Métrica ausente en respuesta" });
-            continue;
-          }
-          var metric = cells[key];
-          if (isRetryMetric(metric)) out.push({ plantel: row.plantel, metric: key, label: METRIC_LABELS[key] || key, reason: metric.failure_reason || metric.detail || metric.label || "Fuente pendiente" });
-        }
-      }
-      return out;
-    }
-    function hasFailedHeatmapCells() { return failedHeatmapCells().length > 0; }
     function heatBackground(score) {
       var n = num(score);
       if (n === null) return "linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%)";
@@ -893,16 +843,13 @@ CORPORATE_COMPLIANCE_HTML = r'''
     function isInformational(metric) { return !!(metric && metric.informational); }
     function metricCellHtml(metric) {
       if (!metric) {
-        return '<div class="heat-cell-top"><div class="info-title"><span class="loading-mini">Reintentando</span></div><span class="cell-status">Cargando</span></div><div class="cell-label">No se recibió la métrica; el reporte seguirá intentando.</div>';
+        return '<div class="heat-cell-top"><div class="info-title">Sin dato</div><span class="cell-status">Sin dato</span></div><div class="cell-label">No se recibió información para esta métrica.</div>';
       }
       if (isInformational(metric)) {
         return '<div class="heat-cell-top"><div class="info-title">' + esc(metric.label || 'Sin registros') + '</div><span class="cell-status">Info</span></div><div class="cell-label">' + esc(metric.detail || 'Dato informativo') + '</div>';
       }
-      if (isRetryMetric(metric)) {
-        return '<div class="heat-cell-top"><div class="info-title"><span class="loading-mini">Reintentando</span></div><span class="cell-status">Cargando</span></div><div class="cell-label">Fuente pendiente; el reporte seguirá intentando obtener el dato.</div>';
-      }
       if (num(metric.score) === null) {
-        return '<div class="heat-cell-top"><div class="info-title">' + esc(metric.label || 'Sin cálculo') + '</div><span class="cell-status">—</span></div><div class="cell-label">' + esc(metric.detail || 'Sin base aplicable verificada.') + '</div>';
+        return '<div class="heat-cell-top"><div class="info-title">' + esc(metric.label || 'Sin cálculo') + '</div><span class="cell-status">Sin dato</span></div><div class="cell-label">' + esc(metric.detail || 'No hay denominador suficiente para calcular.') + '</div>';
       }
       return '<div class="heat-cell-top"><div class="cell-score score ' + metricColor(metric) + '">' + pct(metric.score) + '</div><span class="cell-status">' + esc(statusText(metric)) + '</span></div><div class="cell-label">' + esc(metric.label || "Sin datos") + '</div>';
     }
@@ -1025,11 +972,9 @@ CORPORATE_COMPLIANCE_HTML = r'''
       return "/api/v1/corporate-compliance-risk-index?" + params.toString();
     }
     async function loadReport(force) {
-      if (!force) state.loadingRetry = false;
-      if (state.retryTimer) { clearTimeout(state.retryTimer); state.retryTimer = null; }
       byId("loading").classList.remove("hidden");
       byId("error").classList.add("hidden");
-      if (!state.loadingRetry) byId("report").classList.add("hidden");
+      byId("report").classList.add("hidden");
       try {
         var response = await fetch(buildUrl(force), { cache: "no-store" });
         if (!response.ok) throw new Error("HTTP " + response.status);
@@ -1040,35 +985,12 @@ CORPORATE_COMPLIANCE_HTML = r'''
         if (!found) state.selectedPlantel = planteles.length ? planteles[0].plantel : null;
         renderReport();
         byId("report").classList.remove("hidden");
-        scheduleRetryIfNeeded();
       } catch (err) {
         byId("error").textContent = "No se pudo cargar el reporte: " + (err && err.message ? err.message : String(err));
         byId("error").classList.remove("hidden");
-        scheduleRetryAfterError();
       } finally {
         byId("loading").classList.add("hidden");
       }
-    }
-    function scheduleRetryAfterError() {
-      state.retryCount += 1;
-      var delay = Math.min(30000, 5000 + state.retryCount * 3000);
-      byId("retrying").classList.remove("hidden");
-      byId("retrying").textContent = "Reintentando carga del reporte en " + Math.round(delay / 1000) + "s · intento " + state.retryCount;
-      state.retryTimer = setTimeout(function () { state.loadingRetry = true; loadReport(true); }, delay);
-    }
-    function scheduleRetryIfNeeded() {
-      var failed = failedHeatmapCells();
-      if (!failed.length) {
-        state.retryCount = 0;
-        state.loadingRetry = false;
-        byId("retrying").classList.add("hidden");
-        return;
-      }
-      state.retryCount += 1;
-      var delay = Math.min(25000, 4000 + state.retryCount * 2500);
-      byId("retrying").classList.remove("hidden");
-      byId("retrying").textContent = failed.length + " celdas siguen pendientes; reintentando fuentes en " + Math.round(delay / 1000) + "s · intento " + state.retryCount;
-      state.retryTimer = setTimeout(function () { state.loadingRetry = true; loadReport(true); }, delay);
     }
     function renderReport() {
       renderHero();
@@ -1078,33 +1000,6 @@ CORPORATE_COMPLIANCE_HTML = r'''
       renderLevelAccess();
       renderTrend();
       renderDrilldown();
-      renderDebugLog();
-    }
-    function renderDebugLog() {
-      var audit = get(state.data, ["source_audit"], {});
-      var failed = failedHeatmapCells();
-      var rows = [];
-      for (var plantel in audit) {
-        if (!hasOwn(audit, plantel)) continue;
-        var sources = audit[plantel] || {};
-        for (var key in sources) {
-          if (!hasOwn(sources, key)) continue;
-          var item = sources[key] || {};
-          var ok = !!item.ok && !item.error && !item.timeout;
-          if (!ok || key === "husky" || key === "retardos") {
-            rows.push({ plantel: plantel, source: key, ok: ok, detail: (item.error || (ok ? "OK" : "Pendiente")) + " · " + (item.duration_ms || "—") + "ms" + (item.rows !== null && item.rows !== undefined ? " · filas " + item.rows : "") });
-          }
-        }
-      }
-      var html = '';
-      html += '<div class="debug-row"><strong>Heatmap</strong><span class="debug-pill ' + (failed.length ? 'fail' : 'ok') + '">' + (failed.length ? 'pendiente' : 'completo') + '</span><div>' + (failed.length ? esc(failed.length + ' celdas pendientes de fuente/reintento') : 'Sin fallas de fuente detectadas en celdas visibles') + '</div></div>';
-      for (var i = 0; i < failed.length; i += 1) {
-        html += '<div class="debug-row"><strong>' + esc(failed[i].plantel) + '</strong><span class="debug-pill fail">' + esc(failed[i].label) + '</span><div>' + esc(failed[i].reason) + '</div></div>';
-      }
-      for (var r = 0; r < rows.length; r += 1) {
-        html += '<div class="debug-row"><strong>' + esc(rows[r].plantel) + '</strong><span class="debug-pill ' + (rows[r].ok ? 'ok' : 'fail') + '">' + esc(rows[r].source) + '</span><div>' + esc(rows[r].detail) + '</div></div>';
-      }
-      byId("debugLog").innerHTML = html || '<div class="debug-row"><strong>OK</strong><span class="debug-pill ok">sin fallas</span><div>Diagnóstico sin incidencias.</div></div>';
     }
     function renderHero() {
       var aggregate = get(state.data, ["aggregate"], {});
@@ -1583,10 +1478,6 @@ CORPORATE_COMPLIANCE_HTML = r'''
         '<script>window.addEventListener("load",function(){setTimeout(function(){window.focus();window.print();},350);});<\/script></body></html>';
     }
     function printExecutiveReport() {
-      if (state.data && hasFailedHeatmapCells()) {
-        alert("El reporte sigue reintentando fuentes de datos. Espera a que el heatmap quede completo antes de imprimir.");
-        return;
-      }
       if (!state.data) { window.print(); return; }
       var printWindow = window.open("", "sipae_print_report");
       if (!printWindow) { window.print(); return; }
