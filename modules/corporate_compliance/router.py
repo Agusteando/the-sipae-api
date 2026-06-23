@@ -10,7 +10,7 @@ from .service import get_corporate_compliance_index
 from .templates import CORPORATE_COMPLIANCE_HTML
 
 router = APIRouter(tags=["Cumplimiento operativo"])
-DASHBOARD_DATA_VERSION = "2026-06-22-reporte-sipae-v14"
+DASHBOARD_DATA_VERSION = "2026-06-23-reporte-sipae-presentacion-v16"
 
 
 @router.get("/corporate-compliance-risk-index", response_class=HTMLResponse, include_in_schema=False)
@@ -55,7 +55,7 @@ def _resolve_corporate_dates(scope: Optional[str], start_date: Optional[date], e
     now = datetime.now(tz_mx)
     today = now.date()
     completed_day = _last_completed_operational_day(now)
-    requested_scope = (scope or "month").lower()
+    requested_scope = (scope or "ciclo_escolar").lower()
 
     if requested_scope == "range":
         resolved_start = start_date or today.replace(day=1)
@@ -89,7 +89,7 @@ def _cache_age_seconds(cache_entry) -> float:
 @router.get("/api/v1/corporate-compliance-risk-index")
 async def get_corporate_compliance_dashboard_data(
     planteles: Optional[str] = Query(None, description="Lista separada por comas en orden fijo: PT,PM,ST,SM,PREET,PREEM"),
-    scope: Optional[str] = Query("month", description="Alcance: month por defecto; también acepta today, range, ciclo_escolar."),
+    scope: Optional[str] = Query("ciclo_escolar", description="Alcance: ciclo_escolar por defecto; también acepta month, today o range."),
     start_date: Optional[date] = Query(None, description="Fecha de inicio si scope=range"),
     end_date: Optional[date] = Query(None, description="Fecha de fin si scope=range"),
     include_baselines: bool = Query(False, description="Incluye comparación histórica. Desactivado por defecto para evitar consultas pesadas."),
@@ -107,7 +107,7 @@ async def get_corporate_compliance_dashboard_data(
 
     if not force_refresh:
         cached = get_cache(cache_key)
-        if cached and _cache_age_seconds(cached) < 120:
+        if cached and _cache_age_seconds(cached) < 600:
             data = dict(cached["data"])
             meta = dict(data.get("meta") or {})
             meta.update({"is_cached": True, "cached_at": cached["timestamp"].isoformat()})
@@ -131,7 +131,7 @@ async def get_corporate_compliance_dashboard_data(
 @router.get("/api/v1/corporate-compliance-risk-index/debug")
 async def get_corporate_compliance_source_debug(
     planteles: Optional[str] = Query(None, description="Lista separada por comas en orden fijo: PT,PM,ST,SM,PREET,PREEM"),
-    scope: Optional[str] = Query("month", description="Alcance: month por defecto; también acepta today, range, ciclo_escolar."),
+    scope: Optional[str] = Query("ciclo_escolar", description="Alcance: ciclo_escolar por defecto; también acepta month, today o range."),
     start_date: Optional[date] = Query(None, description="Fecha de inicio si scope=range"),
     end_date: Optional[date] = Query(None, description="Fecha de fin si scope=range"),
 ):

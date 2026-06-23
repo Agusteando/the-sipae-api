@@ -16,15 +16,15 @@ CORPORATE_COMPLIANCE_HTML = r'''
       --line: #e5e7eb;
       --line-strong: #d1d5db;
       --soft: #f9fafb;
-      --green: #15803d;
-      --green-soft: #dcfce7;
-      --yellow: #b45309;
-      --yellow-soft: #fef3c7;
-      --red: #b91c1c;
-      --red-soft: #fee2e2;
+      --green: #009F5A;
+      --green-soft: #DDFBEA;
+      --yellow: #D97706;
+      --yellow-soft: #FFF1C7;
+      --red: #D1182C;
+      --red-soft: #FFE1E6;
       --gray: #64748b;
       --gray-soft: #f1f5f9;
-      --ink: #0f172a;
+      --ink: #111827;
       --radius: 16px;
       --shadow: 0 14px 36px rgba(15, 23, 42, .06);
       --font: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
@@ -127,6 +127,28 @@ CORPORATE_COMPLIANCE_HTML = r'''
     .diag-help { color: var(--muted); font-size: 12px; }
     .diag-json { margin: 0; min-height: 150px; max-height: 260px; overflow: auto; border: 1px solid var(--line); border-radius: 14px; background: #111827; color: #e5e7eb; padding: 12px; font-size: 11px; line-height: 1.5; white-space: pre-wrap; word-break: break-word; }
 
+
+    .print-btn { border: 1px solid var(--line); border-radius: 999px; padding: 8px 14px; background: #fff; color: var(--ink); font-size: 12px; font-weight: 850; }
+    .period-inline { display: inline-flex; align-items: center; margin-left: 8px; padding: 4px 8px; border-radius: 999px; background: #eef2ff; color: #334155; font-size: 12px; font-weight: 800; letter-spacing: 0; vertical-align: middle; }
+    .metric-help { display: inline-flex; align-items: center; justify-content: center; width: 17px; height: 17px; margin-left: 6px; border-radius: 999px; border: 1px solid #cbd5e1; color: #475569; background: #fff; font-size: 11px; font-weight: 900; line-height: 1; cursor: help; vertical-align: middle; }
+    .metric-help:hover { border-color: var(--ink); color: var(--ink); }
+    .diagnostic-panel { display: block; }
+    .diagnostic-panel summary { list-style: none; cursor: pointer; padding: 14px 17px; display: flex; justify-content: space-between; align-items: center; gap: 12px; color: #334155; font-weight: 850; }
+    .diagnostic-panel summary::-webkit-details-marker { display: none; }
+    .diagnostic-panel summary small { color: var(--muted); font-size: 12px; font-weight: 700; }
+    @media print {
+      @page { size: landscape; margin: 10mm; }
+      html, body { background: #fff !important; }
+      .topbar, .diagnostic-panel, .refresh, .print-btn, #scopeFilters, #plantelFilters, .date-input { display: none !important; }
+      .page { max-width: none; padding: 0; }
+      .panel { box-shadow: none !important; break-inside: avoid; border-color: #d1d5db; }
+      .hero { grid-template-columns: 1.2fr .4fr .4fr .4fr; }
+      .matrix-wrap { overflow: visible; }
+      .matrix { min-width: 0; font-size: 10px; }
+      .matrix th, .matrix td { padding: 7px; }
+      .charts, .trend-grid, .detail-grid { break-inside: avoid; }
+    }
+
     @media (max-width: 1100px) { .topbar-inner, .hero, .charts, .trend-grid, .detail-grid { grid-template-columns: 1fr; } .filters { justify-content: flex-start; } }
     @media (max-width: 720px) { .page { padding: 14px 12px 48px; } .topbar-inner { padding: 12px; } .kpi-value { font-size: 33px; } .chart-card, .line-chart { min-height: 300px; height: 300px; } }
   </style>
@@ -140,15 +162,15 @@ CORPORATE_COMPLIANCE_HTML = r'''
       </div>
       <div class="filters">
         <div class="chip-row" id="scopeFilters">
-          <button class="chip active" data-scope="month">Mes</button>
+          <button class="chip" data-scope="month">Mes</button>
           <button class="chip" data-scope="today">Hoy</button>
-          <button class="chip" data-scope="ciclo_escolar">Ciclo</button>
+          <button class="chip active" data-scope="ciclo_escolar">Ciclo</button>
           <button class="chip" data-scope="range">Rango</button>
         </div>
         <input id="startDate" class="date-input" type="date" />
         <input id="endDate" class="date-input" type="date" />
         <div class="chip-row" id="plantelFilters"></div>
-        <button class="refresh" id="refreshBtn">Actualizar</button>
+        <button class="refresh" id="refreshBtn">Actualizar</button><button class="print-btn" id="printBtn">Imprimir PDF</button>
       </div>
     </div>
   </header>
@@ -177,7 +199,7 @@ CORPORATE_COMPLIANCE_HTML = r'''
 
       <div class="main-grid">
         <section class="panel">
-          <div class="section-head"><div><div class="section-label">Resumen</div><div class="section-title">Mapa de cumplimiento</div></div></div>
+          <div class="section-head"><div><div class="section-label">Resumen</div><div class="section-title">Mapa de cumplimiento <span class="period-inline" id="matrixPeriod">Periodo —</span></div></div></div>
           <div class="section-body"><div class="matrix-wrap"><table class="matrix" id="matrix"></table></div></div>
         </section>
 
@@ -225,16 +247,16 @@ CORPORATE_COMPLIANCE_HTML = r'''
           </div>
         </section>
 
-        <section class="panel">
-          <div class="section-head"><div><div class="section-label">Diagnóstico</div><div class="section-title">JSON compacto para validar datos</div></div></div>
+        <details class="panel diagnostic-panel">
+          <summary><span>Diagnóstico técnico</span><small>Oculto por defecto</small></summary>
           <div class="section-body diagnostic-box">
             <div class="diag-actions">
               <button class="copy-btn" id="copyDiagnosticBtn">Copiar diagnóstico</button>
-              <span class="diag-help">Pega este bloque en el chat para ajustar la lógica con datos reales.</span>
+              <span class="diag-help">Solo para validación técnica; no se imprime.</span>
             </div>
             <pre class="diag-json" id="diagnosticJson">{}</pre>
           </div>
-        </section>
+        </details>
       </div>
     </div>
   </main>
@@ -243,8 +265,20 @@ CORPORATE_COMPLIANCE_HTML = r'''
     var PLANTELES = ["PT", "PM", "ST", "SM", "PREET", "PREEM"];
     var METRIC_ORDER = ["general", "roll_call", "student_attendance", "scans", "scan_balance", "student_punctuality", "planning", "observations", "observation_coverage", "sapf"];
     var METRIC_LABELS = { general: "General", roll_call: "Pase de lista", student_attendance: "Asistencia alumnos", scans: "Escaneos", scan_balance: "Balance accesos", student_punctuality: "Puntualidad alumnos", planning: "Planeaciones", observations: "Observaciones", observation_coverage: "Cobertura obs.", sapf: "Seguimientos" };
-    var LINE_COLORS = ["#111827", "#15803d", "#b91c1c", "#b45309", "#2563eb", "#7c3aed"];
-    var state = { scope: "month", planteles: {}, data: null, selectedPlantel: null };
+    var METRIC_DESCRIPTIONS = {
+      general: "Promedio ponderado de las métricas calculables del plantel.",
+      roll_call: "Grupos/día con pase de lista capturado contra grupos esperados.",
+      student_attendance: "Promedio diario de alumnos presentes dentro de listas capturadas.",
+      scans: "Entradas registradas contra población esperada diaria.",
+      scan_balance: "Qué tan balanceadas están entradas y salidas registradas.",
+      student_punctuality: "100 significa sin retardos; baja cuando suben los retardos contra oportunidades alumno-día.",
+      planning: "Planeaciones creadas en el periodo que ya tienen revisión.",
+      observations: "Observaciones realizadas contra la meta mensual definida.",
+      observation_coverage: "Docentes activos con al menos dos observaciones en el mes.",
+      sapf: "Seguimientos realizados contra meta poblacional del periodo."
+    };
+    var LINE_COLORS = ["#111827", "#009F5A", "#D1182C", "#D97706", "#2563eb", "#7c3aed"];
+    var state = { scope: "ciclo_escolar", planteles: {}, data: null, selectedPlantel: null };
     for (var p0 = 0; p0 < PLANTELES.length; p0 += 1) state.planteles[PLANTELES[p0]] = true;
 
     function byId(id) { return document.getElementById(id); }
@@ -285,7 +319,7 @@ CORPORATE_COMPLIANCE_HTML = r'''
       if (n === null) return "linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%)";
       var red = [185, 28, 28], yellow = [180, 83, 9], green = [21, 128, 61];
       var from = n < 70 ? red : (n < 85 ? yellow : green);
-      var alpha = 0.12 + (Math.max(1, Math.min(100, n)) / 100) * 0.18;
+      var alpha = 0.20 + (Math.max(0, Math.min(100, n)) / 100) * 0.20;
       var top = 'rgba(' + from[0] + ',' + from[1] + ',' + from[2] + ',' + alpha.toFixed(3) + ')';
       var bottom = 'rgba(' + from[0] + ',' + from[1] + ',' + from[2] + ',' + (alpha * 0.55).toFixed(3) + ')';
       return 'linear-gradient(180deg, ' + top + ' 0%, ' + bottom + ' 100%)';
@@ -308,6 +342,28 @@ CORPORATE_COMPLIANCE_HTML = r'''
       var out = [];
       for (var i = 0; i < PLANTELES.length; i += 1) if (state.planteles[PLANTELES[i]]) out.push(PLANTELES[i]);
       return out;
+    }
+
+    function monthName(index) {
+      return ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"][index] || "";
+    }
+    function periodLabel(win) {
+      if (!win || !win.start || !win.end) return "Periodo —";
+      var start = new Date(win.start + "T00:00:00");
+      var end = new Date(win.end + "T00:00:00");
+      if (state.scope === "month") return monthName(end.getMonth()) + " " + end.getFullYear();
+      if (state.scope === "today") return "Hoy · " + win.end;
+      if (state.scope === "ciclo_escolar") {
+        var cycleStart = start.getFullYear();
+        var cycleEnd = end.getFullYear();
+        return "Ciclo escolar " + cycleStart + "–" + cycleEnd;
+      }
+      return win.start + " → " + win.end;
+    }
+    function metricHead(key) {
+      var label = METRIC_LABELS[key] || key;
+      var desc = METRIC_DESCRIPTIONS[key] || "";
+      return esc(label) + '<span class="metric-help" title="' + esc(desc) + '" aria-label="' + esc(desc) + '">?</span>';
     }
 
     function initControls() {
@@ -339,6 +395,7 @@ CORPORATE_COMPLIANCE_HTML = r'''
         });
       }
       byId("refreshBtn").addEventListener("click", function () { loadReport(true); });
+      byId("printBtn").addEventListener("click", function () { window.print(); });
       byId("copyDiagnosticBtn").addEventListener("click", copyDiagnostic);
       byId("startDate").addEventListener("change", function () { if (state.scope === "range") loadReport(false); });
       byId("endDate").addEventListener("change", function () { if (state.scope === "range") loadReport(false); });
@@ -394,7 +451,9 @@ CORPORATE_COMPLIANCE_HTML = r'''
       var aggregate = get(state.data, ["aggregate"], {});
       var general = get(aggregate, ["corporate_index"], {});
       var win = get(aggregate, ["window"], {});
+      var label = periodLabel(win);
       byId("periodStamp").textContent = "Periodo evaluado: " + (win.start || "—") + " → " + (win.end || "—");
+      byId("matrixPeriod").textContent = label;
       byId("businessDaysStamp").textContent = (win.business_days || 0) + " días hábiles";
       var generated = get(state.data, ["generated_at"], null);
       byId("updatedStamp").textContent = generated ? "Actualizado " + new Date(generated).toLocaleString("es-MX") : "Actualizado —";
@@ -415,7 +474,7 @@ CORPORATE_COMPLIANCE_HTML = r'''
     function renderMatrix() {
       var rows = get(state.data, ["matrix"], []);
       var html = "<tr><th>Plantel</th>";
-      for (var h = 0; h < METRIC_ORDER.length; h += 1) html += "<th>" + esc(METRIC_LABELS[METRIC_ORDER[h]]) + "</th>";
+      for (var h = 0; h < METRIC_ORDER.length; h += 1) html += "<th>" + metricHead(METRIC_ORDER[h]) + "</th>";
       html += "</tr>";
       for (var r = 0; r < rows.length; r += 1) {
         var row = rows[r];

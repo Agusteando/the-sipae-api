@@ -89,6 +89,41 @@ def _business_days(start_date: date, end_date: date) -> List[date]:
     return days
 
 
+def _date_chunks(start_date: date, end_date: date, max_days: int = 45) -> List[tuple[date, date]]:
+    """Split long report ranges so large source tables do not time out.
+
+    The cycle-school default can span many months; chunking keeps each SQL read
+    bounded while preserving the same aggregate formulas.
+    """
+    chunks: List[tuple[date, date]] = []
+    cursor = start_date
+    while cursor <= end_date:
+        chunk_end = min(end_date, cursor + timedelta(days=max_days - 1))
+        chunks.append((cursor, chunk_end))
+        cursor = chunk_end + timedelta(days=1)
+    return chunks
+
+
+def _source_timeout_for_range(start_date: date, end_date: date, base_seconds: float = 24.0) -> float:
+    """Bound long-range source waits so ciclo escolar never holds the HTTP request indefinitely.
+
+    Long ranges are chunked before querying. The timeout only needs to cover the
+    bounded chunk loop, not a monolithic year-sized SQL scan. Keeping this under
+    typical proxy timeouts prevents HTTP 502 while still allowing slower sources
+    to return unavailable instead of breaking the whole report.
+    """
+    chunks = max(len(_date_chunks(start_date, end_date)), 1)
+    return max(base_seconds, min(45.0, chunks * 12.0))
+
+
+async def _chunked_rows(fetcher: Callable[..., Awaitable[List[Dict[str, Any]]]], *prefix_args: Any, start_date: date, end_date: date, **kwargs: Any) -> List[Dict[str, Any]]:
+    rows: List[Dict[str, Any]] = []
+    for chunk_start, chunk_end in _date_chunks(start_date, end_date):
+        chunk_rows = await fetcher(*prefix_args, chunk_start, chunk_end, **kwargs)
+        rows.extend(_as_list(chunk_rows))
+    return rows
+
+
 def _weeks_touched(days: Iterable[date]) -> int:
     weeks = {(day.isocalendar().year, day.isocalendar().week) for day in days}
     return len(weeks)
@@ -959,14 +994,27 @@ async def _collect_plantel(code: str, start_date: date, end_date: date, scope: s
     sheets_code = plantel_info.get("sheets_code") or code
     threshold_time = _tardy_threshold(plantel_info)
 
+    heavy_timeout = _source_timeout_for_range(start_date, end_date, 24.0)
     sources = await asyncio.gather(
-        _safe_value_call("expected_groups", lambda: fetch_expected_groups(sheets_code), 12.0),
-        _safe_value_call("expected_population", lambda: fetch_expected_population(sheets_code), 12.0),
-        _safe_value_call("attendance_db", lambda: fetch_attendance_rollup(attendance_aliases, start_date, end_date), 20.0),
-        _safe_value_call("husky_scans_db", lambda: fetch_husky_daily_scan_counts(husky_values, start_date, end_date), 20.0),
-        _safe_value_call("retardos_db", lambda: fetch_husky_tardy_daily_counts(husky_values, start_date, end_date, threshold_time), 20.0),
-        _safe_call("academic", lambda: _academic_metrics(plantel_info, start_date, end_date, business_days), SOURCE_TIMEOUTS["academic"]),
-        _safe_call("sapf", lambda: get_sapf_overview_report(code, start_date, end_date, scope), SOURCE_TIMEOUTS["sapf"]),
+        _safe_value_call("expected_groups", lambda: fetch_expected_groups(sheets_code), 18.0),
+        _safe_value_call("expected_population", lambda: fetch_expected_population(sheets_code), 18.0),
+        _safe_value_call(
+            "attendance_db",
+            lambda: _chunked_rows(fetch_attendance_rollup, attendance_aliases, start_date=start_date, end_date=end_date),
+            heavy_timeout,
+        ),
+        _safe_value_call(
+            "husky_scans_db",
+            lambda: _chunked_rows(fetch_husky_daily_scan_counts, husky_values, start_date=start_date, end_date=end_date),
+            heavy_timeout,
+        ),
+        _safe_value_call(
+            "retardos_db",
+            lambda: _chunked_rows(fetch_husky_tardy_daily_counts, husky_values, start_date=start_date, end_date=end_date, threshold_time=threshold_time),
+            heavy_timeout,
+        ),
+        _safe_call("academic", lambda: _academic_metrics(plantel_info, start_date, end_date, business_days), max(SOURCE_TIMEOUTS["academic"], heavy_timeout)),
+        _safe_call("sapf", lambda: get_sapf_overview_report(code, start_date, end_date, scope), max(SOURCE_TIMEOUTS["sapf"], heavy_timeout)),
     )
     source_map = {
         "expected_groups": sources[0],
@@ -1082,7 +1130,7 @@ def _diagnostic(planteles: List[Dict[str, Any]], start_date: date, end_date: dat
             "general": _metric_evidence(metrics.get("general") or {}, ["weights_used", "weights_total", "metrics_used", "minimum_weight", "minimum_metrics"]),
         }
     return {
-        "v": "corp-diagnostic-v14",
+        "v": "corp-diagnostic-v16",
         "range": {"start": start_date.isoformat(), "end": end_date.isoformat(), "business_days": len(business_days)},
         "planteles": rows,
         "hora_promedio_entrada_nivel": _level_access_summary(planteles, business_days),
@@ -1300,11 +1348,36 @@ async def get_corporate_compliance_index(
     del include_baselines
     selected = _normalize_planteles(planteles)
     business_days = _business_days(start_date, end_date)
-    semaphore = asyncio.Semaphore(1)
+
+    # Ciclo escolar is the default and must not serialize six campuses through
+    # several large source reads. The source queries are already bounded and
+    # chunked, so collecting the selected planteles concurrently prevents proxy
+    # 502s caused by request time, while each source can still fail closed as —.
+    concurrency = min(len(selected), 6 if scope == "ciclo_escolar" else 3) or 1
+    semaphore = asyncio.Semaphore(concurrency)
 
     async def collect(code: str) -> Dict[str, Any]:
         async with semaphore:
-            return await _collect_plantel(code, start_date, end_date, scope, business_days)
+            try:
+                return await _collect_plantel(code, start_date, end_date, scope, business_days)
+            except Exception as exc:
+                logger.error("Corporate report plantel collection failed for %s: %s", code, exc)
+                plantel_info = resolve_plantel(code)
+                unavailable = _unavailable("—", f"No se pudo calcular plantel: {exc}")
+                order = FIXED_PLANTEL_ORDER.index(code) if code in FIXED_PLANTEL_ORDER else 999
+                return {
+                    "plantel": code,
+                    "order": order,
+                    "resolved_name": plantel_info.get("resolved_name"),
+                    "short_name": plantel_info.get("short_name"),
+                    "metrics": {key: dict(unavailable) for key in ["general", *DISPLAY_METRICS]},
+                    "index": unavailable,
+                    "domains": {},
+                    "daily": [],
+                    "entry_time_daily": [],
+                    "source_audit": {"plantel": {"ok": False, "error": str(exc), "timeout": False}},
+                    "academic_shape": {},
+                }
 
     plantel_payloads = await asyncio.gather(*(collect(code) for code in selected))
     plantel_payloads.sort(key=lambda item: item.get("order", 999))
@@ -1337,7 +1410,7 @@ async def get_corporate_compliance_index(
         "source_audit": {p["plantel"]: p.get("source_audit") for p in plantel_payloads},
         "diagnostic": _diagnostic(plantel_payloads, start_date, end_date, business_days),
         "meta": {
-            "logic_version": "2026-06-22-reporte-sipae-v14",
+            "logic_version": "2026-06-23-reporte-sipae-presentacion-v16",
             "start_date": start_date.isoformat(),
             "end_date": end_date.isoformat(),
             "business_days": len(business_days),
