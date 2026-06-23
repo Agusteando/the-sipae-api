@@ -17,6 +17,8 @@ from .report_repository import (
     count_active_academic_teachers,
     fetch_attendance_rollup,
     fetch_husky_access_user_rollup,
+    fetch_husky_daily_scan_counts,
+    fetch_husky_tardy_daily_counts,
     fetch_observation_monthly_totals,
     fetch_observation_period_monthly_totals,
     fetch_planning_review_totals,
@@ -1704,6 +1706,43 @@ def _bucketed_trend(planteles: List[Dict[str, Any]], start_date: date, end_date:
     }
 
 
+async def _fetch_husky_cycle_bundle(
+    husky_values: List[str],
+    start_date: date,
+    end_date: date,
+    threshold_time: str,
+) -> Dict[str, Any]:
+    """Fetch Husky access evidence with small aggregate queries.
+
+    The Ciclo Escolar heatmap must not publish failed access cells just because
+    a per-user year-sized rollup is too heavy.  This bundle reads the exact
+    daily aggregates required by Escaneos/Balance and the daily tardy counts
+    required by Puntualidad, chunked across the requested period.
+    """
+    scan_rows = await _chunked_rows(
+        fetch_husky_daily_scan_counts,
+        husky_values,
+        start_date=start_date,
+        end_date=end_date,
+        max_days=14,
+    )
+    tardy_rows = await _chunked_rows(
+        fetch_husky_tardy_daily_counts,
+        husky_values,
+        start_date=start_date,
+        end_date=end_date,
+        max_days=14,
+        threshold_time=threshold_time,
+    )
+    return {
+        "scans": scan_rows,
+        "retardos": tardy_rows,
+        "scan_rows": len(scan_rows or []),
+        "tardy_rows": len(tardy_rows or []),
+        "strategy": "chunked_daily_aggregate_husky_queries",
+    }
+
+
 def _clean_sources(sources: Dict[str, Dict[str, Any]]) -> Dict[str, Any]:
     clean: Dict[str, Any] = {}
     for key, payload in sources.items():
@@ -1712,6 +1751,8 @@ def _clean_sources(sources: Dict[str, Dict[str, Any]]) -> Dict[str, Any]:
             "duration_ms": payload.get("_duration_ms"),
             "error": payload.get("error"),
             "timeout": bool(payload.get("timeout")),
+            "strategy": payload.get("strategy") or payload.get("derived_from"),
+            "rows": payload.get("raw_rows"),
         }
     return clean
 
@@ -1735,31 +1776,39 @@ async def _collect_plantel(code: str, start_date: date, end_date: date, scope: s
         ),
         _safe_value_call(
             "husky_access_db",
-            lambda: _chunked_rows(fetch_husky_access_user_rollup, husky_values, start_date=start_date, end_date=end_date, max_days=14),
+            lambda: _fetch_husky_cycle_bundle(husky_values, start_date, end_date, threshold_time),
             heavy_timeout,
         ),
         _safe_call("academic", lambda: _academic_metrics(plantel_info, start_date, end_date, business_days), max(SOURCE_TIMEOUTS["academic"], heavy_timeout)),
         _safe_call("sapf", lambda: get_sapf_overview_report(code, start_date, end_date, scope), max(SOURCE_TIMEOUTS["sapf"], heavy_timeout)),
     )
-    husky_source = dict(sources[3])
-    if husky_source.get("_ok"):
-        summarized_husky_rows, summarized_tardy_rows = _summarize_husky_access_rollup(husky_source.get("value") or [], threshold_time)
-        husky_source["raw_rows"] = len(husky_source.get("value") or [])
-        husky_source["value"] = summarized_husky_rows
+    husky_bundle = dict(sources[3])
+    if husky_bundle.get("_ok"):
+        bundle_value = husky_bundle.get("value") or {}
+        husky_source = {
+            "_ok": True,
+            "value": bundle_value.get("scans") or [],
+            "_duration_ms": husky_bundle.get("_duration_ms"),
+            "strategy": bundle_value.get("strategy"),
+            "raw_rows": bundle_value.get("scan_rows"),
+        }
         retardos_source = {
             "_ok": True,
-            "value": summarized_tardy_rows,
-            "_duration_ms": husky_source.get("_duration_ms"),
+            "value": bundle_value.get("retardos") or [],
+            "_duration_ms": husky_bundle.get("_duration_ms"),
             "derived_from": "husky_access_db",
-            "raw_rows": husky_source.get("raw_rows"),
+            "strategy": bundle_value.get("strategy"),
+            "raw_rows": bundle_value.get("tardy_rows"),
         }
     else:
+        husky_source = dict(husky_bundle)
+        husky_source["value"] = []
         retardos_source = {
             "_ok": False,
             "value": [],
-            "_duration_ms": husky_source.get("_duration_ms"),
-            "error": husky_source.get("error"),
-            "timeout": husky_source.get("timeout"),
+            "_duration_ms": husky_bundle.get("_duration_ms"),
+            "error": husky_bundle.get("error"),
+            "timeout": husky_bundle.get("timeout"),
             "derived_from": "husky_access_db",
         }
     source_map = {
@@ -1787,14 +1836,17 @@ async def _collect_plantel(code: str, start_date: date, end_date: date, scope: s
     if source_map["husky"].get("_ok"):
         scans, scan_balance, scans_daily = _scans_metric_from_rows(husky_rows, source_map["expected_population"], attendance_daily, business_days)
     else:
-        scans = _unavailable("—", "Escaneos no respondió")
-        scan_balance = _unavailable("—", "Escaneos no respondió")
+        scans = _unavailable("—", "Escaneos en reintento")
+        scans.update({"source_failure": True, "retryable": True, "source_key": "husky", "failure_reason": source_map["husky"].get("error")})
+        scan_balance = _unavailable("—", "Balance en reintento")
+        scan_balance.update({"source_failure": True, "retryable": True, "source_key": "husky", "failure_reason": source_map["husky"].get("error")})
         scans_daily = []
 
     if source_map["retardos"].get("_ok"):
         student_punctuality, punctuality_daily = _student_punctuality_metric_from_counts(tardy_rows, source_map["expected_population"], attendance_daily, scans_daily, business_days)
     else:
-        student_punctuality = _unavailable("—", "Retardos no respondió")
+        student_punctuality = _unavailable("—", "Puntualidad en reintento")
+        student_punctuality.update({"source_failure": True, "retryable": True, "source_key": "retardos", "failure_reason": source_map["retardos"].get("error")})
         punctuality_daily = []
     academic_payload = source_map["academic"] if isinstance(source_map["academic"], dict) else {}
     planning = academic_payload.get("planning") if isinstance(academic_payload.get("planning"), dict) else _unavailable("—", "Sin cálculo de planeaciones")
@@ -1885,7 +1937,7 @@ def _diagnostic(planteles: List[Dict[str, Any]], start_date: date, end_date: dat
             "general": _metric_evidence(metrics.get("general") or {}, ["weights_used", "weights_total", "metrics_used", "minimum_weight", "minimum_metrics"]),
         }
     return {
-        "v": "corp-diagnostic-v19",
+        "v": "corp-diagnostic-v20",
         "range": {"start": start_date.isoformat(), "end": end_date.isoformat(), "business_days": len(business_days)},
         "planteles": rows,
         "hora_promedio_entrada_nivel": _level_access_summary(planteles, business_days),
@@ -2165,7 +2217,7 @@ async def get_corporate_compliance_index(
         "source_audit": {p["plantel"]: p.get("source_audit") for p in plantel_payloads},
         "diagnostic": _diagnostic(plantel_payloads, start_date, end_date, business_days),
         "meta": {
-            "logic_version": "2026-06-23-drilldown-sapf-v19",
+            "logic_version": "2026-06-23-heatmap-data-retry-v20",
             "start_date": start_date.isoformat(),
             "end_date": end_date.isoformat(),
             "business_days": len(business_days),

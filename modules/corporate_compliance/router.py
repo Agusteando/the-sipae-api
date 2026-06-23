@@ -11,7 +11,7 @@ from .service import get_corporate_compliance_index
 from .templates import CORPORATE_COMPLIANCE_HTML
 
 router = APIRouter(tags=["Cumplimiento operativo"])
-DASHBOARD_DATA_VERSION = "2026-06-23-drilldown-sapf-v19"
+DASHBOARD_DATA_VERSION = "2026-06-23-heatmap-data-retry-v20"
 _REPORT_PENDING: dict[str, asyncio.Task] = {}
 _REPORT_PENDING_LOCK = asyncio.Lock()
 
@@ -89,6 +89,18 @@ def _cache_age_seconds(cache_entry) -> float:
         return 999999.0
 
 
+
+def _has_retryable_source_failures(data: dict) -> bool:
+    for plantel in data.get("planteles") or []:
+        metrics = plantel.get("metrics") or {}
+        for metric in metrics.values():
+            if isinstance(metric, dict) and metric.get("retryable"):
+                return True
+        for payload in (plantel.get("source_audit") or {}).values():
+            if isinstance(payload, dict) and (payload.get("timeout") or (payload.get("error") and not payload.get("ok"))):
+                return True
+    return False
+
 @router.get("/api/v1/corporate-compliance-risk-index")
 async def get_corporate_compliance_dashboard_data(
     planteles: Optional[str] = Query(None, description="Lista separada por comas en orden fijo: PT,PM,ST,SM,PREET,PREEM"),
@@ -128,7 +140,11 @@ async def get_corporate_compliance_dashboard_data(
         meta = dict(data.get("meta") or {})
         meta.update({"is_cached": False, "cached_at": datetime.now(ZoneInfo("America/Mexico_City")).isoformat()})
         data["meta"] = meta
-        set_cache(cache_key, data)
+        if not _has_retryable_source_failures(data):
+            set_cache(cache_key, data)
+        else:
+            meta["has_retryable_source_failures"] = True
+            data["meta"] = meta
         return data
 
     async with _REPORT_PENDING_LOCK:

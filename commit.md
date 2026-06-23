@@ -1,1 +1,1 @@
-Ajusta observaciones como promedio mensual del ciclo escolar
+Corrige reintentos y diagnóstico de fuentes del heatmap
