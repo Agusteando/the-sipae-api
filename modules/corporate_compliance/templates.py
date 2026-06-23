@@ -325,13 +325,13 @@ CORPORATE_COMPLIANCE_HTML = r'''
       table-layout: fixed;
     }
     .matrix th {
-      padding: 10px 9px;
-      border: 1px solid var(--line);
-      border-radius: var(--radius);
-      background: #f5f7fa;
-      color: #526071;
-      font-size: 10px;
-      line-height: 1.2;
+      padding: 6px 6px 8px;
+      border: 0;
+      border-radius: 0;
+      background: transparent;
+      color: #233a5d;
+      font-size: 9.5px;
+      line-height: 1.12;
       letter-spacing: 0;
       text-transform: uppercase;
       font-weight: 800;
@@ -341,22 +341,21 @@ CORPORATE_COMPLIANCE_HTML = r'''
     .matrix th:first-child { text-align: left; width: 150px; }
     .metric-head {
       cursor: pointer;
-      transition: border-color .15s ease, box-shadow .15s ease, background .15s ease;
+      transition: color .15s ease, opacity .15s ease;
     }
     .metric-head:hover, .metric-head.active {
-      border-color: rgba(23,33,43,.42);
-      background: #ffffff;
-      box-shadow: inset 0 -3px 0 var(--green);
       color: var(--ink);
+      background: transparent;
+      box-shadow: none;
     }
     .matrix td {
-      min-width: 112px;
-      height: 94px;
-      padding: 10px;
+      min-width: 104px;
+      height: 64px;
+      padding: 8px;
       border: 1px solid rgba(23,33,43,.10);
       border-radius: var(--radius);
-      text-align: left;
-      vertical-align: top;
+      text-align: center;
+      vertical-align: middle;
     }
     .plantel-cell {
       position: sticky;
@@ -544,16 +543,16 @@ CORPORATE_COMPLIANCE_HTML = r'''
     .section-head { align-items: flex-end; }
     .status-legend { gap: 12px; }
     .stamp { border-radius: 999px; padding: 9px 13px; box-shadow:0 8px 20px rgba(16,35,63,.04); }
-    .matrix { min-width: 1380px; border-spacing: 8px; }
-    .matrix th { height: 58px; border: 0; border-radius: 13px; background: linear-gradient(180deg,#ffffff,#f4f7fb); color: #233a5d; box-shadow: inset 0 0 0 1px #d9e2ec; font-size: 9.5px; }
-    .matrix th:first-child { width: 148px; }
-    .matrix .summary-header { width: 150px; }
-    .metric-head-inner { display:grid; justify-items:center; gap:4px; }
-    .metric-icon { font-size: 18px; line-height:1; color: var(--ink); }
-    .matrix td { min-width: 106px; height: 70px; padding: 9px; border: 0; border-radius: 13px; }
-    .plantel-cell { background:#fff; box-shadow: inset 0 0 0 1px #d9e2ec, 8px 0 18px rgba(16,35,63,.05); }
-    .plantel-code { font-size: 24px; color: var(--ink); }
-    .plantel-name { font-size: 10px; color: #66788f; }
+    .matrix { min-width: 1320px; border-spacing: 6px; }
+    .matrix th { height: 42px; border: 0; border-radius: 0; background: transparent; color: #233a5d; box-shadow: none; font-size: 9px; padding: 4px 5px 7px; }
+    .matrix th:first-child { width: 142px; }
+    .matrix .summary-header { width: 140px; }
+    .metric-head-inner { display:grid; justify-items:center; align-items:center; gap:3px; }
+    .metric-icon { font-size: 17px; line-height:1; color: var(--ink); opacity:.82; }
+    .matrix td { min-width: 100px; height: 60px; padding: 7px; border: 0; border-radius: 11px; text-align:center; vertical-align: middle; }
+    .plantel-cell { background:#fff; box-shadow: inset 0 0 0 1px #d9e2ec, 8px 0 18px rgba(16,35,63,.05); text-align:left; }
+    .plantel-code { font-size: 22px; color: var(--ink); }
+    .plantel-name { font-size: 10px; color: #66788f; line-height:1.25; }
     .summary-cell { background:#fff; box-shadow: inset 0 0 0 1px #d9e2ec; vertical-align: middle !important; }
     .summary-bars { display:grid; gap:7px; }
     .summary-track { display:flex; height:10px; border-radius:999px; overflow:hidden; background:#eef3f8; }
@@ -567,8 +566,8 @@ CORPORATE_COMPLIANCE_HTML = r'''
     .heat.yellow { background: #f8bd26; }
     .heat.red { background: #ef4d4f; }
     .heat.gray { background: #f4f7fb; }
-    .heat-cell-top { min-height: 50px; align-items:center; justify-content:center; flex-direction: column; gap: 0; }
-    .heat .cell-score { font-size: 21px; color: #fff !important; text-shadow: 0 1px 5px rgba(16,35,63,.14); }
+    .heat-cell-top { min-height: 44px; align-items:center; justify-content:center; flex-direction: column; gap: 0; }
+    .heat .cell-score { font-size: 20px; color: #fff !important; text-shadow: 0 1px 5px rgba(16,35,63,.14); }
     .heat.yellow .cell-score { color: #4f3300 !important; text-shadow: none; }
     .heat.gray .cell-score, .heat.gray .info-title { color: #516176 !important; }
     .cell-status { display: none !important; }
@@ -1075,7 +1074,7 @@ CORPORATE_COMPLIANCE_HTML = r'''
       var label = METRIC_LABELS[key] || key;
       var desc = METRIC_DESCRIPTIONS[key] || "";
       var icon = METRIC_ICONS[key] || "•";
-      return '<div class="metric-head-inner"><span class="metric-icon" aria-hidden="true">' + esc(icon) + '</span><span>' + esc(label) + '<span class="metric-help" title="' + esc(desc) + '" aria-label="' + esc(desc) + '">?</span></span></div>';
+      return '<div class="metric-head-inner"><span class="metric-icon" aria-hidden="true">' + esc(icon) + '</span><span>' + esc(label) + '</span></div>';
     }
     function renderMethodology() {
       var target = byId("methodologyList");

@@ -1,1 +1,1 @@
-Ajusta heatmap minimalista y hover visible
+Ajusta encabezados planos del heatmap
