@@ -1,1 +1,1 @@
-Ajusta planeaciones a docentes activos
+Ajusta planeaciones activas sin revertir reintentos
