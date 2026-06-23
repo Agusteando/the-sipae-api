@@ -1,1 +1,1 @@
-Mejora presentación y asegura ciclo escolar del Reporte SIPAE
+Asegura ciclo escolar y optimiza accesos Husky

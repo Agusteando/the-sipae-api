@@ -287,7 +287,7 @@ async def fetch_husky_daily_scan_counts(plantel_values: List[str] | str, start_d
               AND A.timestamp >= %s
               AND A.timestamp < DATE_ADD(%s, INTERVAL 1 DAY)
               AND A.timestamp IS NOT NULL
-              AND A.type IS NOT NULL
+              AND A.type IN ('entrada', 'salida', 'Entrada', 'Salida', 'ENTRADA', 'SALIDA')
 
             UNION ALL
 
@@ -299,10 +299,9 @@ async def fetch_husky_daily_scan_counts(plantel_values: List[str] | str, start_d
               AND A.timestamp >= %s
               AND A.timestamp < DATE_ADD(%s, INTERVAL 1 DAY)
               AND A.timestamp IS NOT NULL
-              AND A.type IS NOT NULL
+              AND A.type IN ('entrada', 'salida', 'Entrada', 'Salida', 'ENTRADA', 'SALIDA')
         ) src
         WHERE src.user_id IS NOT NULL
-          AND LOWER(TRIM(src.tipo_accion)) IN ('entrada', 'salida')
         GROUP BY DATE(src.timestamp), LOWER(TRIM(src.tipo_accion))
         ORDER BY DATE(src.timestamp)
     """
@@ -338,7 +337,7 @@ async def fetch_husky_daily_first_entry_time_stats(plantel_values: List[str] | s
                   AND A.timestamp >= %s
                   AND A.timestamp < DATE_ADD(%s, INTERVAL 1 DAY)
                   AND A.timestamp IS NOT NULL
-                  AND LOWER(TRIM(A.type)) = 'entrada'
+                  AND A.type IN ('entrada', 'Entrada', 'ENTRADA')
 
                 UNION ALL
 
@@ -350,7 +349,7 @@ async def fetch_husky_daily_first_entry_time_stats(plantel_values: List[str] | s
                   AND A.timestamp >= %s
                   AND A.timestamp < DATE_ADD(%s, INTERVAL 1 DAY)
                   AND A.timestamp IS NOT NULL
-                  AND LOWER(TRIM(A.type)) = 'entrada'
+                  AND A.type IN ('entrada', 'Entrada', 'ENTRADA')
             ) src
             WHERE src.user_id IS NOT NULL
             GROUP BY DATE(src.timestamp), src.user_id
@@ -384,7 +383,7 @@ async def fetch_husky_tardy_daily_counts(plantel_values: List[str] | str, start_
                   AND A.timestamp >= %s
               AND A.timestamp < DATE_ADD(%s, INTERVAL 1 DAY)
                   AND A.timestamp IS NOT NULL
-                  AND LOWER(TRIM(A.type)) = 'entrada'
+                  AND A.type IN ('entrada', 'Entrada', 'ENTRADA')
 
                 UNION ALL
 
@@ -396,7 +395,7 @@ async def fetch_husky_tardy_daily_counts(plantel_values: List[str] | str, start_
                   AND A.timestamp >= %s
               AND A.timestamp < DATE_ADD(%s, INTERVAL 1 DAY)
                   AND A.timestamp IS NOT NULL
-                  AND LOWER(TRIM(A.type)) = 'entrada'
+                  AND A.type IN ('entrada', 'Entrada', 'ENTRADA')
             ) src
             WHERE src.user_id IS NOT NULL
             GROUP BY DATE(src.timestamp), src.user_id

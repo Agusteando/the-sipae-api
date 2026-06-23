@@ -113,12 +113,19 @@ def _source_timeout_for_range(start_date: date, end_date: date, base_seconds: fl
     to return unavailable instead of breaking the whole report.
     """
     chunks = max(len(_date_chunks(start_date, end_date)), 1)
-    return max(base_seconds, min(45.0, chunks * 12.0))
+    return max(base_seconds, min(55.0, chunks * 10.0))
 
 
-async def _chunked_rows(fetcher: Callable[..., Awaitable[List[Dict[str, Any]]]], *prefix_args: Any, start_date: date, end_date: date, **kwargs: Any) -> List[Dict[str, Any]]:
+async def _chunked_rows(
+    fetcher: Callable[..., Awaitable[List[Dict[str, Any]]]],
+    *prefix_args: Any,
+    start_date: date,
+    end_date: date,
+    max_days: int = 45,
+    **kwargs: Any,
+) -> List[Dict[str, Any]]:
     rows: List[Dict[str, Any]] = []
-    for chunk_start, chunk_end in _date_chunks(start_date, end_date):
+    for chunk_start, chunk_end in _date_chunks(start_date, end_date, max_days=max_days):
         chunk_rows = await fetcher(*prefix_args, chunk_start, chunk_end, **kwargs)
         rows.extend(_as_list(chunk_rows))
     return rows
@@ -1005,12 +1012,12 @@ async def _collect_plantel(code: str, start_date: date, end_date: date, scope: s
         ),
         _safe_value_call(
             "husky_scans_db",
-            lambda: _chunked_rows(fetch_husky_daily_scan_counts, husky_values, start_date=start_date, end_date=end_date),
+            lambda: _chunked_rows(fetch_husky_daily_scan_counts, husky_values, start_date=start_date, end_date=end_date, max_days=21),
             heavy_timeout,
         ),
         _safe_value_call(
             "retardos_db",
-            lambda: _chunked_rows(fetch_husky_tardy_daily_counts, husky_values, start_date=start_date, end_date=end_date, threshold_time=threshold_time),
+            lambda: _chunked_rows(fetch_husky_tardy_daily_counts, husky_values, start_date=start_date, end_date=end_date, max_days=21, threshold_time=threshold_time),
             heavy_timeout,
         ),
         _safe_call("academic", lambda: _academic_metrics(plantel_info, start_date, end_date, business_days), max(SOURCE_TIMEOUTS["academic"], heavy_timeout)),
@@ -1130,7 +1137,7 @@ def _diagnostic(planteles: List[Dict[str, Any]], start_date: date, end_date: dat
             "general": _metric_evidence(metrics.get("general") or {}, ["weights_used", "weights_total", "metrics_used", "minimum_weight", "minimum_metrics"]),
         }
     return {
-        "v": "corp-diagnostic-v16",
+        "v": "corp-diagnostic-v17",
         "range": {"start": start_date.isoformat(), "end": end_date.isoformat(), "business_days": len(business_days)},
         "planteles": rows,
         "hora_promedio_entrada_nivel": _level_access_summary(planteles, business_days),
@@ -1353,7 +1360,7 @@ async def get_corporate_compliance_index(
     # several large source reads. The source queries are already bounded and
     # chunked, so collecting the selected planteles concurrently prevents proxy
     # 502s caused by request time, while each source can still fail closed as —.
-    concurrency = min(len(selected), 6 if scope == "ciclo_escolar" else 3) or 1
+    concurrency = min(len(selected), 3 if scope == "ciclo_escolar" else 3) or 1
     semaphore = asyncio.Semaphore(concurrency)
 
     async def collect(code: str) -> Dict[str, Any]:
@@ -1410,7 +1417,7 @@ async def get_corporate_compliance_index(
         "source_audit": {p["plantel"]: p.get("source_audit") for p in plantel_payloads},
         "diagnostic": _diagnostic(plantel_payloads, start_date, end_date, business_days),
         "meta": {
-            "logic_version": "2026-06-23-reporte-sipae-presentacion-v16",
+            "logic_version": "2026-06-22-cycle-husky-safe-v17",
             "start_date": start_date.isoformat(),
             "end_date": end_date.isoformat(),
             "business_days": len(business_days),
