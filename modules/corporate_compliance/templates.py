@@ -5,160 +5,562 @@ CORPORATE_COMPLIANCE_HTML = r'''
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Reporte SIPAE</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Montserrat:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
   <style>
     :root {
-      --bg: #f4f6f8;
-      --panel: #ffffff;
-      --panel-soft: #fbfcfd;
-      --text: #111827;
-      --muted: #6b7280;
-      --muted-2: #9ca3af;
-      --line: #e5e7eb;
-      --line-strong: #d1d5db;
-      --soft: #f9fafb;
-      --green: #009F5A;
-      --green-soft: #DDFBEA;
-      --yellow: #D97706;
-      --yellow-soft: #FFF1C7;
-      --red: #D1182C;
-      --red-soft: #FFE1E6;
-      --gray: #64748b;
-      --gray-soft: #f1f5f9;
-      --ink: #111827;
-      --radius: 16px;
-      --shadow: 0 14px 36px rgba(15, 23, 42, .06);
-      --font: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      --bg: #eef2f5;
+      --paper: #ffffff;
+      --paper-soft: #f7fafc;
+      --text: #17212b;
+      --muted: #67717f;
+      --muted-2: #8d98a7;
+      --line: #dfe6ee;
+      --line-strong: #c7d2df;
+      --green: #008f5a;
+      --green-soft: #e5f7ee;
+      --yellow: #c88400;
+      --yellow-soft: #fff4d8;
+      --red: #c63d35;
+      --red-soft: #fde9e7;
+      --blue: #2f6fe4;
+      --coral: #ef6b5b;
+      --gray: #667085;
+      --gray-soft: #edf1f5;
+      --ink: #17212b;
+      --radius: 8px;
+      --shadow: 0 22px 60px rgba(23, 33, 43, .10);
+      --font: "Montserrat", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      --title-font: "Fredoka", "Montserrat", ui-sans-serif, system-ui, sans-serif;
     }
     * { box-sizing: border-box; }
     html { background: var(--bg); }
-    body { margin: 0; color: var(--text); background: var(--bg); font-family: var(--font); }
+    body {
+      margin: 0;
+      color: var(--text);
+      background:
+        linear-gradient(90deg, rgba(0,143,90,.10), rgba(47,111,228,.06), rgba(239,107,91,.08)) 0 0 / 100% 210px no-repeat,
+        var(--bg);
+      font-family: var(--font);
+      font-size: 14px;
+      line-height: 1.5;
+    }
     button, input, select { font: inherit; }
     button { cursor: pointer; }
-    .topbar { position: sticky; top: 0; z-index: 10; border-bottom: 1px solid var(--line); background: rgba(255,255,255,.94); backdrop-filter: blur(16px); }
-    .topbar-inner { max-width: 1480px; margin: 0 auto; padding: 14px 22px; display: grid; grid-template-columns: minmax(260px, 1fr) auto; gap: 18px; align-items: center; }
-    .eyebrow { color: var(--muted); font-size: 11px; font-weight: 800; letter-spacing: .13em; text-transform: uppercase; }
-    .title { margin-top: 2px; font-size: 18px; font-weight: 850; letter-spacing: -.02em; }
+    h1, h2, h3 { font-family: var(--title-font); letter-spacing: 0; }
+    .topbar {
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      border-bottom: 1px solid rgba(199,210,223,.72);
+      background: rgba(255,255,255,.94);
+      backdrop-filter: blur(18px);
+    }
+    .topbar-inner {
+      max-width: 1440px;
+      margin: 0 auto;
+      padding: 13px 24px;
+      display: grid;
+      grid-template-columns: minmax(260px, 1fr) auto;
+      gap: 18px;
+      align-items: center;
+    }
+    .brand-lockup { display: flex; align-items: center; gap: 14px; min-width: 0; }
+    .brand-logo { width: 132px; height: auto; display: block; }
+    .eyebrow { color: var(--muted); font-size: 11px; font-weight: 800; letter-spacing: 0; text-transform: uppercase; }
+    .title { margin-top: 1px; font-family: var(--title-font); font-size: 20px; font-weight: 700; letter-spacing: 0; }
     .filters { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; align-items: center; }
-    .chip-row { display: inline-flex; gap: 4px; padding: 4px; border: 1px solid var(--line); background: var(--soft); border-radius: 999px; max-width: 100%; overflow-x: auto; }
-    .chip { border: 0; border-radius: 999px; padding: 7px 11px; background: transparent; color: #374151; font-size: 12px; font-weight: 750; white-space: nowrap; }
+    .chip-row { display: inline-flex; gap: 4px; padding: 4px; border: 1px solid var(--line); background: #f8fafc; border-radius: 999px; max-width: 100%; overflow-x: auto; }
+    .chip { border: 0; border-radius: 999px; padding: 7px 12px; background: transparent; color: #384454; font-size: 12px; font-weight: 700; white-space: nowrap; }
     .chip.active { background: var(--ink); color: #fff; }
-    .date-input { display: none; border: 1px solid var(--line); border-radius: 999px; padding: 7px 10px; color: #374151; background: #fff; font-size: 12px; font-weight: 700; }
+    .date-input { display: none; border: 1px solid var(--line); border-radius: 999px; padding: 7px 10px; color: #384454; background: #fff; font-size: 12px; font-weight: 700; }
     .date-input.visible { display: inline-block; }
-    .refresh { border: 0; border-radius: 999px; padding: 8px 14px; background: var(--ink); color: #fff; font-size: 12px; font-weight: 800; }
-    .page { max-width: 1480px; margin: 0 auto; padding: 22px 22px 64px; }
+    .refresh, .print-btn {
+      border: 0;
+      border-radius: 999px;
+      padding: 9px 14px;
+      background: var(--ink);
+      color: #fff;
+      font-size: 12px;
+      font-weight: 800;
+    }
+    .print-btn { border: 1px solid var(--line); background: #fff; color: var(--ink); }
+    .page { max-width: 1440px; margin: 0 auto; padding: 24px 24px 70px; }
     .hidden { display: none !important; }
-    .state { padding: 18px 20px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); box-shadow: var(--shadow); color: var(--muted); font-weight: 750; }
-    .state.error { border-color: rgba(185,28,28,.35); background: #fff7f7; color: var(--red); }
-    .hero { display: grid; grid-template-columns: minmax(0, 1.1fr) repeat(3, minmax(180px, .3fr)); gap: 12px; margin-bottom: 12px; }
-    .panel { background: var(--panel); border: 1px solid rgba(15,23,42,.08); border-radius: var(--radius); box-shadow: var(--shadow); }
-    .intro { padding: 22px; }
-    h1 { margin: 0; font-size: clamp(26px, 3.2vw, 42px); line-height: 1.02; letter-spacing: -.045em; font-weight: 900; }
-    .subtitle { margin-top: 10px; max-width: 760px; color: #4b5563; font-size: 14px; line-height: 1.55; }
-    .stamp-row { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 16px; }
-    .stamp { display: inline-flex; align-items: center; gap: 7px; padding: 6px 9px; border: 1px solid var(--line); border-radius: 999px; background: #fff; color: #374151; font-size: 12px; font-weight: 750; }
-    .kpi { padding: 17px; display: flex; min-height: 144px; flex-direction: column; justify-content: space-between; }
-    .kpi-label { color: var(--muted); font-size: 11px; font-weight: 850; letter-spacing: .1em; text-transform: uppercase; }
-    .kpi-value { margin-top: 12px; font-size: 37px; line-height: .95; font-weight: 900; letter-spacing: -.055em; }
-    .kpi-name { font-size: 15px; font-weight: 820; }
-    .kpi-detail { margin-top: 5px; color: var(--muted); font-size: 12px; font-weight: 650; }
+    .state {
+      padding: 18px 20px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: var(--paper);
+      box-shadow: var(--shadow);
+      color: var(--muted);
+      font-weight: 700;
+    }
+    .state.error { border-color: rgba(198,61,53,.38); background: #fff7f6; color: var(--red); }
+    .report-sheet {
+      background: var(--paper);
+      border: 1px solid rgba(199,210,223,.92);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+    .executive-cover {
+      position: relative;
+      padding: 28px 30px 24px;
+      background:
+        linear-gradient(135deg, #ffffff 0%, #fbfcfd 58%, #ecf8f1 100%),
+        var(--paper);
+      border-bottom: 1px solid var(--line);
+    }
+    .executive-cover::before {
+      content: "";
+      position: absolute;
+      inset: 0 0 auto;
+      height: 7px;
+      background: linear-gradient(90deg, var(--green) 0 40%, var(--blue) 40% 62%, var(--yellow) 62% 80%, var(--coral) 80% 100%);
+    }
+    .executive-cover::after {
+      content: "";
+      position: absolute;
+      right: 28px;
+      top: 30px;
+      width: 280px;
+      height: 130px;
+      background:
+        linear-gradient(135deg, transparent 0 46%, rgba(47,111,228,.08) 46% 48%, transparent 48% 100%),
+        repeating-linear-gradient(90deg, rgba(0,143,90,.10) 0 1px, transparent 1px 18px);
+      pointer-events: none;
+      opacity: .72;
+    }
+    .report-identity {
+      position: relative;
+      z-index: 1;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 20px;
+      margin-top: 9px;
+    }
+    .report-brand { display: flex; align-items: center; gap: 16px; min-width: 0; }
+    .report-logo { width: 172px; height: auto; display: block; }
+    .report-name {
+      font-family: var(--title-font);
+      font-size: 24px;
+      line-height: 1;
+      font-weight: 700;
+      letter-spacing: 0;
+      color: var(--ink);
+      white-space: nowrap;
+    }
+    .report-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 11px;
+      border: 1px solid rgba(0,143,90,.22);
+      border-radius: 999px;
+      background: rgba(255,255,255,.80);
+      color: #0a6b45;
+      font-size: 12px;
+      font-weight: 800;
+    }
+    .report-badge::before {
+      content: "";
+      width: 8px;
+      height: 8px;
+      border-radius: 999px;
+      background: var(--green);
+      box-shadow: 0 0 0 4px rgba(0,143,90,.12);
+    }
+    .cover-layout {
+      position: relative;
+      z-index: 1;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 330px;
+      gap: 28px;
+      align-items: end;
+      margin-top: 30px;
+    }
+    h1 {
+      margin: 0;
+      max-width: 860px;
+      font-size: 42px;
+      line-height: 1.04;
+      font-weight: 700;
+      letter-spacing: 0;
+      color: var(--ink);
+    }
+    .subtitle { margin-top: 12px; max-width: 830px; color: #465365; font-size: 14px; line-height: 1.7; }
+    .executive-summary {
+      margin-top: 18px;
+      max-width: 820px;
+      padding-left: 14px;
+      border-left: 4px solid var(--green);
+      color: #263341;
+      font-weight: 600;
+      line-height: 1.6;
+    }
+    .report-meta-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 10px;
+      margin-top: 22px;
+      max-width: 860px;
+    }
+    .meta-tile {
+      border: 1px solid rgba(199,210,223,.88);
+      border-radius: var(--radius);
+      background: rgba(255,255,255,.74);
+      padding: 12px;
+      min-height: 78px;
+    }
+    .meta-label, .kpi-label, .section-label, .level-label, .chart-title {
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: 0;
+      text-transform: uppercase;
+    }
+    .meta-value {
+      margin-top: 6px;
+      color: var(--ink);
+      font-size: 14px;
+      font-weight: 800;
+      line-height: 1.35;
+    }
+    .score-seal {
+      min-height: 220px;
+      border: 1px solid rgba(23,33,43,.10);
+      border-radius: var(--radius);
+      background:
+        linear-gradient(180deg, rgba(255,255,255,.92), rgba(255,255,255,.70)),
+        linear-gradient(135deg, rgba(0,143,90,.12), rgba(47,111,228,.10));
+      padding: 22px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+    .seal-label { color: var(--muted); font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: 0; }
+    .seal-score { margin-top: 8px; font-family: var(--title-font); font-size: 56px; line-height: .92; font-weight: 700; letter-spacing: 0; }
+    .seal-caption { color: #374558; font-size: 13px; font-weight: 700; line-height: 1.45; }
+    .kpi-strip {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+      padding: 18px 30px 30px;
+      background: linear-gradient(180deg, #fff, #fbfcfd);
+    }
+    .kpi {
+      min-height: 138px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: #fff;
+      padding: 17px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      box-shadow: 0 10px 26px rgba(23,33,43,.045);
+    }
+    .kpi-value { margin-top: 12px; font-family: var(--title-font); font-size: 40px; line-height: .96; font-weight: 700; letter-spacing: 0; }
+    .kpi-name { font-size: 15px; font-weight: 800; }
+    .kpi-detail { margin-top: 5px; color: var(--muted); font-size: 12px; font-weight: 600; line-height: 1.45; }
     .score.green { color: var(--green); } .score.yellow { color: var(--yellow); } .score.red { color: var(--red); } .score.gray { color: var(--gray); }
     .dot { width: 9px; height: 9px; display: inline-block; border-radius: 99px; margin-right: 7px; vertical-align: middle; background: var(--gray); }
     .dot.green { background: var(--green); } .dot.yellow { background: var(--yellow); } .dot.red { background: var(--red); } .dot.gray { background: var(--gray); }
-    .main-grid { display: grid; gap: 12px; }
-    .section-head { padding: 15px 17px 13px; border-bottom: 1px solid var(--line); display: flex; align-items: center; justify-content: space-between; gap: 14px; }
-    .section-label { color: var(--muted); font-size: 11px; font-weight: 850; letter-spacing: .11em; text-transform: uppercase; }
-    .section-title { margin-top: 3px; font-size: 19px; font-weight: 880; letter-spacing: -.025em; }
-    .section-body { padding: 17px; }
-    .matrix-wrap { overflow-x: auto; }
-    table { border-collapse: collapse; width: 100%; }
-    .matrix { min-width: 1460px; border: 1px solid var(--line); border-radius: 14px; overflow: hidden; border-collapse: separate; border-spacing: 0; }
-    .matrix th, .matrix td { padding: 12px; border-bottom: 1px solid var(--line); border-right: 1px solid var(--line); text-align: left; }
-    .matrix tr:last-child td { border-bottom: 0; }
-    .matrix th:last-child, .matrix td:last-child { border-right: 0; }
-    .matrix th { background: var(--panel-soft); color: #475569; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; font-weight: 850; }
-    .plantel-code { font-weight: 900; }
-    .plantel-name { margin-top: 2px; color: var(--muted); font-size: 12px; line-height: 1.35; }
-    .heat { min-width: 124px; cursor: pointer; transition: box-shadow .15s ease, transform .15s ease; }
-    .heat:hover { box-shadow: inset 0 0 0 1px rgba(15,23,42,.08); transform: translateY(-1px); }
-    .heat:hover { box-shadow: inset 0 0 0 999px rgba(17,24,39,.035); }
+    .main-grid { display: grid; }
+    .report-section { padding: 30px; border-top: 1px solid var(--line); }
+    .section-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; margin-bottom: 18px; }
+    .section-title { margin-top: 4px; font-family: var(--title-font); font-size: 27px; line-height: 1.08; font-weight: 700; letter-spacing: 0; }
+    .section-copy { margin-top: 7px; max-width: 780px; color: var(--muted); font-size: 13px; line-height: 1.6; }
+    .period-inline {
+      display: inline-flex;
+      align-items: center;
+      margin-left: 8px;
+      padding: 5px 9px;
+      border-radius: 999px;
+      background: #eaf1ff;
+      color: #274e9a;
+      font-family: var(--font);
+      font-size: 12px;
+      font-weight: 800;
+      letter-spacing: 0;
+      vertical-align: middle;
+      white-space: nowrap;
+    }
+    .status-legend { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; min-width: 260px; }
+    .stamp {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      padding: 7px 10px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: #fff;
+      color: #384454;
+      font-size: 12px;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+    .matrix-wrap { overflow-x: auto; padding-bottom: 2px; }
+    table { width: 100%; }
+    .matrix {
+      min-width: 1320px;
+      border-collapse: separate;
+      border-spacing: 8px;
+      table-layout: fixed;
+    }
+    .matrix th {
+      padding: 10px 9px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: #f5f7fa;
+      color: #526071;
+      font-size: 10px;
+      line-height: 1.2;
+      letter-spacing: 0;
+      text-transform: uppercase;
+      font-weight: 800;
+      text-align: center;
+      vertical-align: middle;
+    }
+    .matrix th:first-child { text-align: left; width: 150px; }
+    .matrix td {
+      min-width: 112px;
+      height: 94px;
+      padding: 10px;
+      border: 1px solid rgba(23,33,43,.10);
+      border-radius: var(--radius);
+      text-align: left;
+      vertical-align: top;
+    }
+    .plantel-cell {
+      position: sticky;
+      left: 0;
+      z-index: 2;
+      background: #fff;
+      border-color: var(--line-strong) !important;
+      box-shadow: 8px 0 18px rgba(23,33,43,.06);
+    }
+    .plantel-code { font-family: var(--title-font); font-size: 22px; line-height: 1; font-weight: 700; letter-spacing: 0; }
+    .plantel-name { margin-top: 5px; color: var(--muted); font-size: 11px; line-height: 1.35; }
+    .heat {
+      cursor: pointer;
+      position: relative;
+      overflow: hidden;
+      transition: box-shadow .15s ease, transform .15s ease;
+    }
+    .heat::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      border-top: 4px solid rgba(255,255,255,.50);
+      pointer-events: none;
+    }
+    .heat:hover { box-shadow: 0 10px 20px rgba(23,33,43,.10); transform: translateY(-1px); }
     .heat.green { background: var(--green-soft); } .heat.yellow { background: var(--yellow-soft); } .heat.red { background: var(--red-soft); } .heat.gray { background: var(--gray-soft); }
-    .cell-score { font-size: 19px; font-weight: 900; letter-spacing: -.035em; }
-    .cell-label { margin-top: 3px; color: #4b5563; font-size: 11px; line-height: 1.35; }
-    .info-title { color: #334155; font-size: 15px; line-height: 1.25; font-weight: 850; letter-spacing: -.015em; }
+    .heat-cell-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; position: relative; z-index: 1; }
+    .cell-score { font-family: var(--title-font); font-size: 20px; line-height: 1; font-weight: 700; letter-spacing: 0; }
+    .cell-status {
+      padding: 3px 6px;
+      border-radius: 999px;
+      background: rgba(255,255,255,.64);
+      color: #374558;
+      font-size: 9px;
+      line-height: 1.1;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0;
+      white-space: nowrap;
+    }
+    .cell-label { margin-top: 8px; color: #3e4b5b; font-size: 11px; line-height: 1.35; position: relative; z-index: 1; }
+    .info-title { color: #334155; font-size: 13px; line-height: 1.25; font-weight: 800; letter-spacing: 0; position: relative; z-index: 1; }
     .info-cell { background: linear-gradient(180deg, #f8fafc 0%, #eef2f7 100%) !important; }
-    .charts { display: grid; grid-template-columns: minmax(0, 1fr) minmax(310px, .44fr); gap: 12px; }
-    .chart-card { min-height: 335px; border: 1px solid var(--line); border-radius: 14px; background: #fff; padding: 14px; }
-    .level-access { display: grid; gap: 10px; }
-    .level-row { display: grid; grid-template-columns: 120px minmax(160px,1fr) 110px 90px; gap: 12px; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--line); }
-    .level-row:last-child { border-bottom: 0; }
-    .level-name { font-weight: 900; color: #1f2937; }
-    .level-meta { color: var(--muted); font-size: 12px; margin-top: 2px; }
-    .level-number { text-align: right; font-size: 19px; font-weight: 900; color: #111827; letter-spacing: -.035em; }
-    .level-label { text-align: right; color: var(--muted); font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .06em; }
-    .chart-title { margin-bottom: 12px; font-size: 13px; color: #374151; font-weight: 850; }
-    .bar-list { display: grid; gap: 11px; }
-    .bar-row { display: grid; grid-template-columns: 90px minmax(120px,1fr) 56px; gap: 10px; align-items: center; }
-    .bar-name { font-size: 12px; font-weight: 800; color: #374151; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .track { height: 12px; border-radius: 999px; background: #eef2f7; overflow: hidden; }
+    .metric-help {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 17px;
+      height: 17px;
+      margin-left: 5px;
+      border-radius: 999px;
+      border: 1px solid #cbd5e1;
+      color: #475569;
+      background: #fff;
+      font-size: 11px;
+      font-weight: 900;
+      line-height: 1;
+      cursor: help;
+      vertical-align: middle;
+    }
+    .metric-help:hover { border-color: var(--ink); color: var(--ink); }
+    .charts { display: grid; grid-template-columns: minmax(0, 1fr) minmax(330px, .48fr); gap: 14px; }
+    .chart-card {
+      min-height: 330px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: #fff;
+      padding: 16px;
+    }
+    .chart-title { margin-bottom: 14px; color: #374558; font-size: 12px; }
+    .bar-list { display: grid; gap: 12px; }
+    .bar-row { display: grid; grid-template-columns: minmax(110px, .32fr) minmax(130px,1fr) 64px; gap: 12px; align-items: center; }
+    .bar-name { font-size: 12px; font-weight: 800; color: #374558; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .track { height: 12px; border-radius: 999px; background: #edf1f5; overflow: hidden; }
     .fill { height: 100%; width: 0; border-radius: 999px; background: var(--gray); }
-    .fill.green { background: var(--green); } .fill.yellow { background: var(--yellow); } .fill.red { background: var(--red); } .fill.gray { background: var(--gray); }
-    .bar-value { text-align: right; font-size: 12px; font-weight: 850; }
-    .trend-grid { display: grid; grid-template-columns: minmax(0, 1fr) 260px; gap: 12px; }
-    .select { border: 1px solid var(--line); border-radius: 999px; background: #fff; color: #374151; padding: 7px 11px; font-size: 12px; font-weight: 800; }
-    .line-chart { width: 100%; height: 350px; border: 1px solid var(--line); border-radius: 14px; background: #fff; display: block; }
-    .trend-side { border: 1px solid var(--line); border-radius: 14px; background: #fff; padding: 15px; }
-    .trend-big { margin-top: 14px; font-size: 32px; font-weight: 900; letter-spacing: -.04em; }
-    .trend-small { margin-top: 8px; color: var(--muted); font-size: 13px; line-height: 1.45; }
+    .fill.green { background: linear-gradient(90deg, #00a66a, var(--green)); } .fill.yellow { background: linear-gradient(90deg, #e6a500, var(--yellow)); } .fill.red { background: linear-gradient(90deg, #e7594e, var(--red)); } .fill.gray { background: var(--gray); }
+    .bar-value { text-align: right; font-size: 12px; font-weight: 800; }
+    .level-access { display: grid; gap: 0; border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; background: #fff; }
+    .level-row { display: grid; grid-template-columns: 150px minmax(160px,1fr) 125px 160px; gap: 14px; align-items: center; padding: 14px 16px; border-bottom: 1px solid var(--line); }
+    .level-row:last-child { border-bottom: 0; }
+    .level-name { font-weight: 800; color: #263341; }
+    .level-meta { color: var(--muted); font-size: 12px; margin-top: 2px; line-height: 1.35; }
+    .level-number { text-align: right; font-family: var(--title-font); font-size: 24px; font-weight: 700; color: var(--ink); letter-spacing: 0; }
+    .level-label { text-align: right; }
+    .trend-grid { display: grid; grid-template-columns: minmax(0, 1fr) 280px; gap: 14px; }
+    .select { border: 1px solid var(--line); border-radius: 999px; background: #fff; color: #384454; padding: 8px 12px; font-size: 12px; font-weight: 800; }
+    .line-chart { width: 100%; height: 350px; border: 1px solid var(--line); border-radius: var(--radius); background: #fff; display: block; }
+    .trend-side { border: 1px solid var(--line); border-radius: var(--radius); background: #fff; padding: 18px; }
+    .trend-big { margin-top: 14px; font-family: var(--title-font); font-size: 38px; font-weight: 700; letter-spacing: 0; }
+    .trend-small { margin-top: 8px; color: var(--muted); font-size: 13px; line-height: 1.5; }
     .legend { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
     .legend-item { display: inline-flex; align-items: center; gap: 6px; color: #4b5563; font-size: 12px; font-weight: 700; }
     .legend-line { width: 18px; height: 3px; border-radius: 99px; background: var(--gray); }
-    .detail-grid { display: grid; grid-template-columns: 270px minmax(0,1fr); gap: 12px; }
+    .detail-grid { display: grid; grid-template-columns: 280px minmax(0,1fr); gap: 14px; }
     .plantel-list-detail { display: grid; gap: 8px; }
-    .plantel-option { border: 1px solid var(--line); background: #fff; border-radius: 12px; padding: 11px 12px; display: flex; justify-content: space-between; gap: 12px; align-items: center; text-align: left; }
+    .plantel-option { border: 1px solid var(--line); background: #fff; border-radius: var(--radius); padding: 12px; display: flex; justify-content: space-between; gap: 12px; align-items: center; text-align: left; }
     .plantel-option.active { border-color: var(--ink); box-shadow: inset 4px 0 0 var(--ink); }
-    .detail-table { border: 1px solid var(--line); border-radius: 14px; overflow: hidden; border-collapse: separate; border-spacing: 0; }
+    .detail-table { border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; border-collapse: separate; border-spacing: 0; background: #fff; }
     .detail-table th, .detail-table td { padding: 12px 13px; border-bottom: 1px solid var(--line); text-align: left; }
     .detail-table tr:last-child td { border-bottom: 0; }
-    .detail-table th { background: #fafafa; color: #4b5563; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; font-weight: 850; }
-
+    .detail-table th { background: #f6f8fa; color: #4b5563; font-size: 11px; letter-spacing: 0; text-transform: uppercase; font-weight: 800; }
+    .print-only { display: none; }
+    .methodology-section { background: #fbfcfd; }
+    .methodology-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 16px; }
+    .methodology-item { border-top: 1px solid var(--line); padding-top: 10px; }
+    .methodology-name { font-weight: 800; color: var(--ink); }
+    .methodology-copy { margin-top: 3px; color: var(--muted); font-size: 12px; line-height: 1.45; }
     .diagnostic-box { display: grid; gap: 10px; }
     .diag-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-    .copy-btn { border: 1px solid var(--line); background: #fff; border-radius: 999px; padding: 8px 12px; font-size: 12px; font-weight: 850; color: #374151; cursor: pointer; }
+    .copy-btn { border: 1px solid var(--line); background: #fff; border-radius: 999px; padding: 8px 12px; font-size: 12px; font-weight: 800; color: #374151; cursor: pointer; }
     .diag-help { color: var(--muted); font-size: 12px; }
-    .diag-json { margin: 0; min-height: 150px; max-height: 260px; overflow: auto; border: 1px solid var(--line); border-radius: 14px; background: #111827; color: #e5e7eb; padding: 12px; font-size: 11px; line-height: 1.5; white-space: pre-wrap; word-break: break-word; }
-
-
-    .print-btn { border: 1px solid var(--line); border-radius: 999px; padding: 8px 14px; background: #fff; color: var(--ink); font-size: 12px; font-weight: 850; }
-    .period-inline { display: inline-flex; align-items: center; margin-left: 8px; padding: 4px 8px; border-radius: 999px; background: #eef2ff; color: #334155; font-size: 12px; font-weight: 800; letter-spacing: 0; vertical-align: middle; }
-    .metric-help { display: inline-flex; align-items: center; justify-content: center; width: 17px; height: 17px; margin-left: 6px; border-radius: 999px; border: 1px solid #cbd5e1; color: #475569; background: #fff; font-size: 11px; font-weight: 900; line-height: 1; cursor: help; vertical-align: middle; }
-    .metric-help:hover { border-color: var(--ink); color: var(--ink); }
-    .diagnostic-panel { display: block; }
-    .diagnostic-panel summary { list-style: none; cursor: pointer; padding: 14px 17px; display: flex; justify-content: space-between; align-items: center; gap: 12px; color: #334155; font-weight: 850; }
+    .diag-json { margin: 0; min-height: 150px; max-height: 260px; overflow: auto; border: 1px solid var(--line); border-radius: var(--radius); background: #111827; color: #e5e7eb; padding: 12px; font-size: 11px; line-height: 1.5; white-space: pre-wrap; word-break: break-word; }
+    .diagnostic-panel { display: block; border-top: 1px solid var(--line); }
+    .diagnostic-panel summary { list-style: none; cursor: pointer; padding: 16px 30px; display: flex; justify-content: space-between; align-items: center; gap: 12px; color: #334155; font-weight: 800; }
     .diagnostic-panel summary::-webkit-details-marker { display: none; }
     .diagnostic-panel summary small { color: var(--muted); font-size: 12px; font-weight: 700; }
-    @media print {
-      @page { size: landscape; margin: 10mm; }
-      html, body { background: #fff !important; }
-      .topbar, .diagnostic-panel, .refresh, .print-btn, #scopeFilters, #plantelFilters, .date-input { display: none !important; }
-      .page { max-width: none; padding: 0; }
-      .panel { box-shadow: none !important; break-inside: avoid; border-color: #d1d5db; }
-      .hero { grid-template-columns: 1.2fr .4fr .4fr .4fr; }
-      .matrix-wrap { overflow: visible; }
-      .matrix { min-width: 0; font-size: 10px; }
-      .matrix th, .matrix td { padding: 7px; }
-      .charts, .trend-grid, .detail-grid { break-inside: avoid; }
+    .diagnostic-panel .section-body { padding: 0 30px 30px; }
+
+    @media (max-width: 1100px) {
+      .topbar-inner, .cover-layout, .charts, .trend-grid, .detail-grid { grid-template-columns: 1fr; }
+      .filters { justify-content: flex-start; }
+      .score-seal { min-height: auto; }
+      .report-meta-grid, .kpi-strip, .methodology-grid { grid-template-columns: 1fr; }
+      .status-legend { justify-content: flex-start; }
+    }
+    @media (max-width: 720px) {
+      .page { padding: 14px 12px 48px; }
+      .topbar-inner { padding: 12px; }
+      .report-identity { align-items: flex-start; flex-direction: column; }
+      .report-logo { width: 150px; }
+      h1 { font-size: 31px; }
+      .executive-cover, .report-section { padding: 22px 18px; }
+      .kpi-strip { padding: 14px 18px 22px; grid-template-columns: 1fr; }
+      .kpi-value { font-size: 36px; }
+      .chart-card, .line-chart { min-height: 300px; height: 300px; }
+      .level-row { grid-template-columns: 1fr; }
+      .level-number, .level-label { text-align: left; }
     }
 
-    @media (max-width: 1100px) { .topbar-inner, .hero, .charts, .trend-grid, .detail-grid { grid-template-columns: 1fr; } .filters { justify-content: flex-start; } }
-    @media (max-width: 720px) { .page { padding: 14px 12px 48px; } .topbar-inner { padding: 12px; } .kpi-value { font-size: 33px; } .chart-card, .line-chart { min-height: 300px; height: 300px; } }
+    @media print {
+      @page { size: landscape; margin: 8mm; }
+      * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      html, body { background: #fff !important; color: #17212b; font-size: 8.5pt; }
+      body { line-height: 1.35; }
+      .topbar, .diagnostic-panel, .refresh, .print-btn, #scopeFilters, #plantelFilters, .date-input, .metric-help, .select, .detail-section { display: none !important; }
+      .print-only { display: block !important; }
+      .page { max-width: none; padding: 0; }
+      .report-sheet { border: 0; border-radius: 0; box-shadow: none; overflow: visible; }
+      .executive-cover { padding: 0 0 2.5mm; background: #fff; border-bottom: .6pt solid var(--line-strong); break-inside: avoid; }
+      .executive-cover::before { height: 3.5pt; top: -1mm; }
+      .executive-cover::after { display: none; }
+      .report-identity { margin-top: 2mm; }
+      .report-logo { width: 30mm; }
+      .report-name { font-size: 13pt; }
+      .report-badge { padding: 1.3mm 2.4mm; font-size: 6.8pt; }
+      .cover-layout { grid-template-columns: minmax(0,1fr) 38mm; gap: 4mm; margin-top: 3mm; }
+      h1 { font-size: 18pt; line-height: 1.02; }
+      .subtitle { margin-top: 1.5mm; max-width: 190mm; font-size: 7.2pt; line-height: 1.28; }
+      .executive-summary { margin-top: 2mm; padding-left: 2.5mm; border-left-width: 1.6pt; font-size: 7.1pt; line-height: 1.28; }
+      .report-meta-grid { grid-template-columns: repeat(3, minmax(0,1fr)); gap: 2mm; margin-top: 2.5mm; }
+      .meta-tile { min-height: 13mm; padding: 2mm; border-width: .6pt; }
+      .meta-label, .kpi-label, .section-label, .level-label, .chart-title { font-size: 5.9pt; }
+      .meta-value { margin-top: .7mm; font-size: 7.4pt; line-height: 1.22; }
+      .score-seal { min-height: 32mm; padding: 3mm; border-width: .6pt; box-shadow: none; }
+      .seal-label { font-size: 6.2pt; }
+      .seal-score { font-size: 22pt; }
+      .seal-caption { font-size: 6.8pt; }
+      .kpi-strip { grid-template-columns: repeat(3, minmax(0,1fr)); gap: 2.4mm; padding: 2.2mm 0 2.8mm; background: #fff; break-inside: avoid; }
+      .kpi { min-height: 18mm; padding: 2mm; border-width: .6pt; box-shadow: none; }
+      .kpi-value { margin-top: .8mm; font-size: 14pt; }
+      .kpi-name { font-size: 7.1pt; }
+      .kpi-detail { margin-top: .4mm; font-size: 5.8pt; line-height: 1.18; }
+      .report-section { padding: 3mm 0; border-top: 0; }
+      .heatmap-section { break-inside: avoid; }
+      .section-head { margin-bottom: 1.7mm; gap: 2.5mm; }
+      .section-title { font-size: 13pt; }
+      .section-copy { margin-top: .7mm; max-width: 182mm; font-size: 6.5pt; line-height: 1.24; }
+      .period-inline { margin-left: 1.2mm; padding: .7mm 1.7mm; font-size: 6.5pt; }
+      .status-legend { gap: 1.5mm; min-width: 0; }
+      .stamp { padding: .9mm 1.7mm; border-width: .6pt; font-size: 6.2pt; }
+      .dot { width: 5pt; height: 5pt; margin-right: 3pt; }
+      .matrix-wrap { overflow: visible; padding: 0; }
+      .matrix { min-width: 0; width: 100%; border-spacing: 1.1mm; table-layout: fixed; }
+      .matrix th { padding: 1.3mm .8mm; border-width: .6pt; font-size: 5.2pt; line-height: 1.08; }
+      .matrix th:first-child { width: 26mm; }
+      .matrix td { min-width: 0; height: 12.4mm; padding: 1.2mm; border-width: .6pt; }
+      .plantel-cell { position: static; box-shadow: none; }
+      .plantel-code { font-size: 10pt; }
+      .plantel-name { margin-top: .6mm; font-size: 5pt; line-height: 1.1; }
+      .heat::before { border-top-width: 1.6pt; }
+      .cell-score { font-size: 8pt; }
+      .cell-status { padding: .55mm .8mm; font-size: 4.3pt; }
+      .cell-label { margin-top: .7mm; font-size: 4.8pt; line-height: 1.12; }
+      .info-title { font-size: 5.6pt; }
+      .methodology-section { break-before: page; background: #fff; }
+      .methodology-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 2.4mm 5mm; }
+      .methodology-item { padding-top: 1.6mm; border-top-width: .6pt; }
+      .methodology-name { font-size: 7.4pt; }
+      .methodology-copy { margin-top: .7mm; font-size: 6.4pt; line-height: 1.26; }
+      .support-section { break-inside: avoid; }
+      .charts { grid-template-columns: 1fr 1fr; gap: 3mm; }
+      .chart-card { min-height: 54mm; padding: 3mm; border-width: .6pt; }
+      .bar-list { gap: 2.2mm; }
+      .bar-row { grid-template-columns: 28mm minmax(30mm,1fr) 15mm; gap: 2.5mm; }
+      .bar-name, .bar-value { font-size: 6.6pt; }
+      .track { height: 2.2mm; }
+      .level-access { border-width: .6pt; }
+      .level-row { grid-template-columns: 33mm minmax(36mm,1fr) 25mm 34mm; gap: 3mm; padding: 2.4mm 3mm; border-bottom-width: .6pt; }
+      .level-name { font-size: 7.6pt; }
+      .level-meta { font-size: 6.2pt; }
+      .level-number { font-size: 12pt; }
+      .trend-grid { grid-template-columns: minmax(0,1fr) 46mm; gap: 3mm; }
+      .line-chart { height: 50mm; border-width: .6pt; }
+      .trend-side { padding: 3mm; border-width: .6pt; }
+      .trend-big { font-size: 18pt; }
+      .trend-small, .legend-item { font-size: 6.5pt; }
+    }
   </style>
 </head>
 <body>
   <header class="topbar">
     <div class="topbar-inner">
-      <div>
-        <div class="eyebrow">Reporte ejecutivo</div>
-        <div class="title">Reporte SIPAE</div>
+      <div class="brand-lockup">
+        <img class="brand-logo" src="https://sipae.casitaapps.com/logo-h.png" alt="SIPAE Casita" />
+        <div>
+          <div class="eyebrow">Reporte ejecutivo</div>
+          <div class="title">Reporte SIPAE</div>
+        </div>
       </div>
       <div class="filters">
         <div class="chip-row" id="scopeFilters">
@@ -180,84 +582,128 @@ CORPORATE_COMPLIANCE_HTML = r'''
     <div id="error" class="state error hidden"></div>
 
     <div id="report" class="hidden">
-      <section class="hero">
-        <div class="panel intro">
-          <h1>Reporte SIPAE</h1>
-          <div class="subtitle">Vista ejecutiva del periodo evaluado con métricas de 1 a 100 por plantel. Los indicadores operativos se calculan como valor positivo: 100 es sano, menor valor indica mayor atención requerida.</div>
-          <div class="stamp-row">
-            <span class="stamp" id="periodStamp">Periodo —</span><span class="stamp" id="businessDaysStamp">Días hábiles —</span>
-            <span class="stamp" id="updatedStamp">Actualizado —</span>
-            <span class="stamp"><span class="dot green"></span>85–100</span>
-            <span class="stamp"><span class="dot yellow"></span>70–84</span>
-            <span class="stamp"><span class="dot red"></span>1–69</span>
+      <article class="report-sheet">
+        <section class="executive-cover">
+          <div class="report-identity">
+            <div class="report-brand">
+              <img class="report-logo" src="https://sipae.casitaapps.com/logo-h.png" alt="SIPAE Casita" />
+              <div class="report-name">Reporte SIPAE</div>
+            </div>
+            <div class="report-badge">Informe institucional</div>
           </div>
-        </div>
-        <div class="panel kpi"><div><div class="kpi-label">General</div><div class="kpi-value score gray" id="generalScore">—</div></div><div><div class="kpi-name" id="generalTitle">Sin datos</div><div class="kpi-detail" id="generalDetail">—</div></div></div>
-        <div class="panel kpi"><div><div class="kpi-label">Mejor plantel</div><div class="kpi-value score gray" id="bestScore">—</div></div><div><div class="kpi-name" id="bestTitle">—</div><div class="kpi-detail" id="bestDetail">—</div></div></div>
-        <div class="panel kpi"><div><div class="kpi-label">Menor resultado</div><div class="kpi-value score gray" id="worstScore">—</div></div><div><div class="kpi-name" id="worstTitle">—</div><div class="kpi-detail" id="worstDetail">—</div></div></div>
-      </section>
 
-      <div class="main-grid">
-        <section class="panel">
-          <div class="section-head"><div><div class="section-label">Resumen</div><div class="section-title">Mapa de cumplimiento <span class="period-inline" id="matrixPeriod">Periodo —</span></div></div></div>
-          <div class="section-body"><div class="matrix-wrap"><table class="matrix" id="matrix"></table></div></div>
-        </section>
-
-        <section class="panel">
-          <div class="section-head"><div><div class="section-label">Comparativo</div><div class="section-title">Planteles y áreas</div></div></div>
-          <div class="section-body charts">
-            <div class="chart-card"><div class="chart-title">Cumplimiento general por plantel</div><div id="plantelBars" class="bar-list"></div></div>
-            <div class="chart-card"><div class="chart-title">Promedio por métrica</div><div id="metricBars" class="bar-list"></div></div>
-          </div>
-        </section>
-
-        <section class="panel">
-          <div class="section-head"><div><div class="section-label">Accesos</div><div class="section-title">Hora promedio de entrada por nivel</div></div></div>
-          <div class="section-body">
-            <div class="level-access" id="levelAccess"></div>
-          </div>
-        </section>
-
-        <section class="panel">
-          <div class="section-head">
-            <div><div class="section-label">Tendencia</div><div class="section-title">Evolución del periodo</div></div>
-            <select id="trendMetric" class="select">
-              <option value="general">General</option>
-              <option value="roll_call">Pase de lista</option>
-              <option value="student_attendance">Asistencia alumnos</option>
-              <option value="scans">Escaneos</option>
-              <option value="scan_balance">Balance accesos</option>
-              <option value="student_punctuality">Puntualidad alumnos</option>
-            </select>
-          </div>
-          <div class="section-body trend-grid">
+          <div class="cover-layout">
             <div>
-              <svg id="trendSvg" class="line-chart" viewBox="0 0 900 350" preserveAspectRatio="none" role="img" aria-label="Tendencia"></svg>
-              <div id="trendLegend" class="legend"></div>
+              <h1>Índice corporativo de cumplimiento</h1>
+              <div class="subtitle">Vista ejecutiva del periodo evaluado con métricas de 1 a 100 por plantel. Los indicadores operativos se leen en positivo: 100 representa operación sana y los valores menores señalan atención requerida.</div>
+              <div class="executive-summary" id="executiveSummary">Preparando lectura ejecutiva del periodo.</div>
+              <div class="report-meta-grid">
+                <div class="meta-tile"><div class="meta-label">Periodo del reporte</div><div class="meta-value" id="periodStamp">Periodo —</div></div>
+                <div class="meta-tile"><div class="meta-label">Días hábiles</div><div class="meta-value" id="businessDaysStamp">—</div></div>
+                <div class="meta-tile"><div class="meta-label">Generado</div><div class="meta-value" id="updatedStamp">—</div></div>
+              </div>
             </div>
-            <div class="trend-side"><div class="section-label" id="trendName">Métrica</div><div class="trend-big score gray" id="trendAverage">—</div><div class="trend-small" id="trendText">Promedio del periodo seleccionado.</div></div>
+            <div class="score-seal">
+              <div>
+                <div class="seal-label">Índice general</div>
+                <div class="seal-score score gray" id="coverGeneralScore">—</div>
+              </div>
+              <div>
+                <div class="seal-caption" id="coverGeneralTitle">Sin datos</div>
+                <div class="kpi-detail" id="coverGeneralDetail">—</div>
+              </div>
+            </div>
           </div>
         </section>
 
-        <section class="panel">
-          <div class="section-head"><div><div class="section-label">Detalle</div><div class="section-title">Plantel seleccionado</div></div></div>
-          <div class="section-body detail-grid">
-            <div class="plantel-list-detail" id="plantelSelector"></div>
-            <table class="detail-table" id="detailTable"></table>
-          </div>
+        <section class="kpi-strip">
+          <div class="kpi"><div><div class="kpi-label">General</div><div class="kpi-value score gray" id="generalScore">—</div></div><div><div class="kpi-name" id="generalTitle">Sin datos</div><div class="kpi-detail" id="generalDetail">—</div></div></div>
+          <div class="kpi"><div><div class="kpi-label">Mejor plantel</div><div class="kpi-value score gray" id="bestScore">—</div></div><div><div class="kpi-name" id="bestTitle">—</div><div class="kpi-detail" id="bestDetail">—</div></div></div>
+          <div class="kpi"><div><div class="kpi-label">Menor resultado</div><div class="kpi-value score gray" id="worstScore">—</div></div><div><div class="kpi-name" id="worstTitle">—</div><div class="kpi-detail" id="worstDetail">—</div></div></div>
         </section>
 
-        <details class="panel diagnostic-panel">
-          <summary><span>Diagnóstico técnico</span><small>Oculto por defecto</small></summary>
-          <div class="section-body diagnostic-box">
-            <div class="diag-actions">
-              <button class="copy-btn" id="copyDiagnosticBtn">Copiar diagnóstico</button>
-              <span class="diag-help">Solo para validación técnica; no se imprime.</span>
+        <div class="main-grid">
+          <section class="report-section heatmap-section">
+            <div class="section-head">
+              <div>
+                <div class="section-label">Centro ejecutivo</div>
+                <div class="section-title">Mapa de cumplimiento <span class="period-inline" id="matrixPeriod">Periodo —</span></div>
+                <div class="section-copy">Lectura comparativa por plantel y métrica. El color comunica prioridad inmediata; el porcentaje conserva la trazabilidad del cálculo aprobado.</div>
+              </div>
+              <div class="status-legend">
+                <span class="stamp"><span class="dot green"></span>85-100 sano</span>
+                <span class="stamp"><span class="dot yellow"></span>70-84 atención</span>
+                <span class="stamp"><span class="dot red"></span>1-69 crítico</span>
+              </div>
             </div>
-            <pre class="diag-json" id="diagnosticJson">{}</pre>
-          </div>
-        </details>
-      </div>
+            <div class="matrix-wrap"><table class="matrix" id="matrix"></table></div>
+          </section>
+
+          <section class="report-section methodology-section print-only">
+            <div class="section-head">
+              <div>
+                <div class="section-label">Notas de lectura</div>
+                <div class="section-title">Metodología de métricas</div>
+                <div class="section-copy">Resumen breve para que el PDF sea autocontenido. Las fórmulas y reglas de negocio se mantienen sin cambios.</div>
+              </div>
+            </div>
+            <div class="methodology-grid" id="methodologyList"></div>
+          </section>
+
+          <section class="report-section support-section">
+            <div class="section-head"><div><div class="section-label">Comparativo</div><div class="section-title">Planteles y áreas</div><div class="section-copy">Ranking ejecutivo para ubicar fortalezas y áreas que concentran seguimiento.</div></div></div>
+            <div class="charts">
+              <div class="chart-card"><div class="chart-title">Cumplimiento general por plantel</div><div id="plantelBars" class="bar-list"></div></div>
+              <div class="chart-card"><div class="chart-title">Promedio por métrica</div><div id="metricBars" class="bar-list"></div></div>
+            </div>
+          </section>
+
+          <section class="report-section support-section">
+            <div class="section-head"><div><div class="section-label">Accesos</div><div class="section-title">Hora promedio de entrada por nivel</div><div class="section-copy">Síntesis de comportamiento de acceso para contextualizar puntualidad y flujo operativo.</div></div></div>
+            <div class="level-access" id="levelAccess"></div>
+          </section>
+
+          <section class="report-section support-section">
+            <div class="section-head">
+              <div><div class="section-label">Tendencia</div><div class="section-title">Evolución del periodo</div><div class="section-copy">Seguimiento visual de la métrica seleccionada durante el periodo del reporte.</div></div>
+              <select id="trendMetric" class="select">
+                <option value="general">General</option>
+                <option value="roll_call">Pase de lista</option>
+                <option value="student_attendance">Asistencia alumnos</option>
+                <option value="scans">Escaneos</option>
+                <option value="scan_balance">Balance accesos</option>
+                <option value="student_punctuality">Puntualidad alumnos</option>
+              </select>
+            </div>
+            <div class="trend-grid">
+              <div>
+                <svg id="trendSvg" class="line-chart" viewBox="0 0 900 350" preserveAspectRatio="none" role="img" aria-label="Tendencia"></svg>
+                <div id="trendLegend" class="legend"></div>
+              </div>
+              <div class="trend-side"><div class="section-label" id="trendName">Métrica</div><div class="trend-big score gray" id="trendAverage">—</div><div class="trend-small" id="trendText">Promedio del periodo seleccionado.</div></div>
+            </div>
+          </section>
+
+          <section class="report-section detail-section">
+            <div class="section-head"><div><div class="section-label">Detalle</div><div class="section-title">Plantel seleccionado</div><div class="section-copy">Vista de exploración en pantalla para revisar el detalle de cada indicador.</div></div></div>
+            <div class="detail-grid">
+              <div class="plantel-list-detail" id="plantelSelector"></div>
+              <table class="detail-table" id="detailTable"></table>
+            </div>
+          </section>
+
+          <details class="diagnostic-panel">
+            <summary><span>Diagnóstico técnico</span><small>Oculto por defecto</small></summary>
+            <div class="section-body diagnostic-box">
+              <div class="diag-actions">
+                <button class="copy-btn" id="copyDiagnosticBtn">Copiar diagnóstico</button>
+                <span class="diag-help">Solo para validación técnica; no se imprime.</span>
+              </div>
+              <pre class="diag-json" id="diagnosticJson">{}</pre>
+            </div>
+          </details>
+        </div>
+      </article>
     </div>
   </main>
 
@@ -313,16 +759,23 @@ CORPORATE_COMPLIANCE_HTML = r'''
       if (n >= 70) return "yellow";
       return "red";
     }
-    function mix(a, b, t) { return a + (b - a) * t; }
+    function statusText(metric) {
+      if (isInformational(metric)) return "Info";
+      var color = metricColor(metric);
+      if (color === "green") return "Sano";
+      if (color === "yellow") return "Atenc.";
+      if (color === "red") return "Crít.";
+      return "Sin dato";
+    }
     function heatBackground(score) {
       var n = num(score);
       if (n === null) return "linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%)";
-      var red = [185, 28, 28], yellow = [180, 83, 9], green = [21, 128, 61];
+      var red = [198, 61, 53], yellow = [200, 132, 0], green = [0, 143, 90];
       var from = n < 70 ? red : (n < 85 ? yellow : green);
-      var alpha = 0.20 + (Math.max(0, Math.min(100, n)) / 100) * 0.20;
+      var alpha = 0.18 + (Math.max(0, Math.min(100, n)) / 100) * 0.18;
       var top = 'rgba(' + from[0] + ',' + from[1] + ',' + from[2] + ',' + alpha.toFixed(3) + ')';
-      var bottom = 'rgba(' + from[0] + ',' + from[1] + ',' + from[2] + ',' + (alpha * 0.55).toFixed(3) + ')';
-      return 'linear-gradient(180deg, ' + top + ' 0%, ' + bottom + ' 100%)';
+      var bottom = 'rgba(' + from[0] + ',' + from[1] + ',' + from[2] + ',' + (alpha * 0.46).toFixed(3) + ')';
+      return 'linear-gradient(135deg, ' + top + ' 0%, ' + bottom + ' 100%)';
     }
     function heatStyle(metric) { return ' style="background:' + heatBackground(metric ? metric.score : null) + '"'; }
     function metricColor(metric) { return metric && metric.color ? metric.color : colorFor(metric ? metric.score : null); }
@@ -330,9 +783,9 @@ CORPORATE_COMPLIANCE_HTML = r'''
     function isInformational(metric) { return !!(metric && metric.informational); }
     function metricCellHtml(metric) {
       if (isInformational(metric)) {
-        return '<div class="info-title">' + esc(metric.label || 'Sin registros') + '</div><div class="cell-label">' + esc(metric.detail || 'Dato informativo') + '</div>';
+        return '<div class="heat-cell-top"><div class="info-title">' + esc(metric.label || 'Sin registros') + '</div><span class="cell-status">Info</span></div><div class="cell-label">' + esc(metric.detail || 'Dato informativo') + '</div>';
       }
-      return '<div class="cell-score score ' + metricColor(metric) + '">' + pct(metric.score) + '</div><div class="cell-label">' + esc(metric.label || "Sin datos") + '</div>';
+      return '<div class="heat-cell-top"><div class="cell-score score ' + metricColor(metric) + '">' + pct(metric.score) + '</div><span class="cell-status">' + esc(statusText(metric)) + '</span></div><div class="cell-label">' + esc(metric.label || "Sin datos") + '</div>';
     }
     function metricValueHtml(metric) {
       if (isInformational(metric)) return '<span class="score gray">Informativo</span>';
@@ -342,6 +795,32 @@ CORPORATE_COMPLIANCE_HTML = r'''
       var out = [];
       for (var i = 0; i < PLANTELES.length; i += 1) if (state.planteles[PLANTELES[i]]) out.push(PLANTELES[i]);
       return out;
+    }
+    function complianceCounts() {
+      var rows = get(state.data, ["matrix"], []);
+      var counts = { green: 0, yellow: 0, red: 0, gray: 0, total: 0 };
+      for (var r = 0; r < rows.length; r += 1) {
+        for (var c = 0; c < METRIC_ORDER.length; c += 1) {
+          var metric = get(rows[r], ["cells", METRIC_ORDER[c]], {});
+          if (isInformational(metric)) continue;
+          var color = metricColor(metric);
+          if (!hasOwn(counts, color)) color = "gray";
+          counts[color] += 1;
+          counts.total += 1;
+        }
+      }
+      return counts;
+    }
+    function executiveSummaryText(aggregate, general) {
+      var counts = complianceCounts();
+      var best = aggregate.best_plantel || null;
+      var worst = aggregate.worst_plantel || null;
+      var alertText = "sin indicadores críticos";
+      if (counts.red > 0) alertText = counts.red + " indicadores en zona crítica";
+      else if (counts.yellow > 0) alertText = counts.yellow + " indicadores en zona de atención";
+      var summary = "El índice general se ubica en " + pct(general.score) + " (" + (general.traffic_label || "sin clasificación") + "), con " + alertText + " dentro del mapa.";
+      if (best && worst) summary += " Mejor desempeño: " + best.plantel + "; foco de seguimiento: " + worst.plantel + ".";
+      return summary;
     }
 
     function monthName(index) {
@@ -364,6 +843,16 @@ CORPORATE_COMPLIANCE_HTML = r'''
       var label = METRIC_LABELS[key] || key;
       var desc = METRIC_DESCRIPTIONS[key] || "";
       return esc(label) + '<span class="metric-help" title="' + esc(desc) + '" aria-label="' + esc(desc) + '">?</span>';
+    }
+    function renderMethodology() {
+      var target = byId("methodologyList");
+      if (!target) return;
+      var html = "";
+      for (var i = 0; i < METRIC_ORDER.length; i += 1) {
+        var key = METRIC_ORDER[i];
+        html += '<div class="methodology-item"><div class="methodology-name">' + esc(METRIC_LABELS[key] || key) + '</div><div class="methodology-copy">' + esc(METRIC_DESCRIPTIONS[key] || "Métrica del reporte ejecutivo.") + '</div></div>';
+      }
+      target.innerHTML = html;
     }
 
     function initControls() {
@@ -441,6 +930,7 @@ CORPORATE_COMPLIANCE_HTML = r'''
     function renderReport() {
       renderHero();
       renderMatrix();
+      renderMethodology();
       renderBars();
       renderLevelAccess();
       renderTrend();
@@ -452,11 +942,16 @@ CORPORATE_COMPLIANCE_HTML = r'''
       var general = get(aggregate, ["corporate_index"], {});
       var win = get(aggregate, ["window"], {});
       var label = periodLabel(win);
-      byId("periodStamp").textContent = "Periodo evaluado: " + (win.start || "—") + " → " + (win.end || "—");
+      byId("periodStamp").textContent = label + " · " + (win.start || "—") + " → " + (win.end || "—");
       byId("matrixPeriod").textContent = label;
       byId("businessDaysStamp").textContent = (win.business_days || 0) + " días hábiles";
       var generated = get(state.data, ["generated_at"], null);
-      byId("updatedStamp").textContent = generated ? "Actualizado " + new Date(generated).toLocaleString("es-MX") : "Actualizado —";
+      byId("updatedStamp").textContent = generated ? new Date(generated).toLocaleString("es-MX") : "Actualizado —";
+      byId("executiveSummary").textContent = executiveSummaryText(aggregate, general);
+      byId("coverGeneralScore").className = "seal-score score " + metricColor(general);
+      byId("coverGeneralScore").textContent = pct(general.score);
+      byId("coverGeneralTitle").innerHTML = dot(general) + esc(general.traffic_label || "Sin datos");
+      byId("coverGeneralDetail").textContent = general.detail || "—";
       byId("generalScore").className = "kpi-value score " + metricColor(general);
       byId("generalScore").textContent = pct(general.score);
       byId("generalTitle").innerHTML = dot(general) + esc(general.traffic_label || "Sin datos");
@@ -478,7 +973,7 @@ CORPORATE_COMPLIANCE_HTML = r'''
       html += "</tr>";
       for (var r = 0; r < rows.length; r += 1) {
         var row = rows[r];
-        html += "<tr><td><div class=\"plantel-code\">" + esc(row.plantel) + "</div><div class=\"plantel-name\">" + esc(row.name) + "</div></td>";
+        html += "<tr><td class=\"plantel-cell\"><div class=\"plantel-code\">" + esc(row.plantel) + "</div><div class=\"plantel-name\">" + esc(row.name) + "</div></td>";
         for (var c = 0; c < METRIC_ORDER.length; c += 1) {
           var key = METRIC_ORDER[c];
           var metric = get(row, ["cells", key], {});
@@ -555,6 +1050,9 @@ CORPORATE_COMPLIANCE_HTML = r'''
       var plotW = width - padL - padR;
       var plotH = height - padT - padB;
       var html = '';
+      html += '<rect x="' + padL + '" y="' + padT + '" width="' + plotW + '" height="' + (plotH * .15) + '" fill="#e5f7ee" opacity=".65" />';
+      html += '<rect x="' + padL + '" y="' + (padT + plotH * .15) + '" width="' + plotW + '" height="' + (plotH * .15) + '" fill="#fff4d8" opacity=".72" />';
+      html += '<rect x="' + padL + '" y="' + (padT + plotH * .30) + '" width="' + plotW + '" height="' + (plotH * .70) + '" fill="#fde9e7" opacity=".40" />';
       for (var y = 0; y <= 100; y += 25) {
         var py = padT + plotH - (y / 100) * plotH;
         html += '<line x1="' + padL + '" y1="' + py + '" x2="' + (width - padR) + '" y2="' + py + '" stroke="#e5e7eb" stroke-width="1" />';
@@ -577,7 +1075,7 @@ CORPORATE_COMPLIANCE_HTML = r'''
           path += (started ? ' L ' : ' M ') + px.toFixed(1) + ' ' + py2.toFixed(1);
           started = true;
         }
-        if (path) html += '<path d="' + path + '" fill="none" stroke="' + LINE_COLORS[s % LINE_COLORS.length] + '" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />';
+        if (path) html += '<path d="' + path + '" fill="none" stroke="' + LINE_COLORS[s % LINE_COLORS.length] + '" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round" />';
       }
       byId("trendSvg").innerHTML = html;
     }
