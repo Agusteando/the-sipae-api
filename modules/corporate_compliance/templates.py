@@ -708,7 +708,7 @@ CORPORATE_COMPLIANCE_HTML = r'''
               <div>
                 <div class="section-label">Notas de lectura</div>
                 <div class="section-title">Metodología de métricas</div>
-                <div class="section-copy">Resumen breve para que el PDF sea autocontenido. Las fórmulas y reglas de negocio se mantienen sin cambios.</div>
+                <div class="section-copy">Resumen breve para que el PDF sea autocontenido, con criterios, denominadores y exclusiones visibles.</div>
               </div>
             </div>
             <div class="methodology-grid" id="methodologyList"></div>
@@ -1382,7 +1382,11 @@ CORPORATE_COMPLIANCE_HTML = r'''
         ".value { margin-top: .8mm; font-weight: 800; font-size: 7.2pt; }",
         ".seal { min-height: 31mm; background: linear-gradient(135deg, rgba(0,143,90,.09), rgba(47,111,228,.06)); display: flex; flex-direction: column; justify-content: space-between; }",
         ".seal .score { font-size: 22pt; }",
-        ".kpis { display: grid; grid-template-columns: repeat(3,1fr); gap: 2.3mm; margin: 2.6mm 0 3.2mm; break-inside: avoid; }",
+        ".signals { display: grid; grid-template-columns: repeat(3,1fr); gap: 2.2mm; margin-top: 2.4mm; max-width: 190mm; }",
+        ".signal { border-top: .8pt solid #dfe6ee; padding-top: 1.4mm; }",
+        ".signal strong { display: block; margin-top: .5mm; font-size: 8.6pt; }",
+        ".signal .score { font-size: 9.5pt; font-weight: 800; }",
+        ".kpis { display: none; }",
         ".kpi .score { font-size: 14pt; margin-top: .8mm; }",
         ".section { padding-top: 2.6mm; break-inside: avoid; }",
         ".section.break { break-before: page; }",
@@ -1414,9 +1418,6 @@ CORPORATE_COMPLIANCE_HTML = r'''
         ".month-table th,.month-table td { border-bottom: .6pt solid #dfe6ee; padding: 1.2mm; text-align: left; vertical-align: top; }",
         ".month-table th { background: #f6f8fa; color: #526071; font-size: 5.2pt; text-transform: uppercase; }",
       ].join("\n");
-    }
-    function printScoreCard(label, metric, title, detail) {
-      return '<div class="kpi"><div class="label">' + esc(label) + '</div><div class="score ' + metricColor(metric) + '">' + pct(metric ? metric.score : null) + '</div><div class="value">' + esc(title || "—") + '</div><div class="copy">' + esc(detail || "—") + '</div></div>';
     }
     function printMatrixHtml() {
       var rows = get(state.data, ["matrix"], []);
@@ -1468,9 +1469,9 @@ CORPORATE_COMPLIANCE_HTML = r'''
       var generated = get(state.data, ["generated_at"], null);
       var generatedText = generated ? new Date(generated).toLocaleString("es-MX") : "—";
       var title = periodLabel(win);
+      var signals = '<div class="signals"><div class="signal"><div class="label">General</div><strong class="score ' + metricColor(general) + '">' + pct(general.score) + '</strong><div class="copy">' + esc(general.detail || general.traffic_label || "Sin datos") + '</div></div><div class="signal"><div class="label">Mejor plantel</div><strong class="score ' + metricColor(best) + '">' + pct(best.score) + ' · ' + esc(best.plantel || "—") + '</strong><div class="copy">' + esc(best.resolved_name || "—") + '</div></div><div class="signal"><div class="label">Foco de seguimiento</div><strong class="score ' + metricColor(worst) + '">' + pct(worst.score) + ' · ' + esc(worst.plantel || "—") + '</strong><div class="copy">' + esc(worst.resolved_name || "—") + '</div></div></div>';
       return '<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Reporte SIPAE PDF</title><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Montserrat:wght@400;500;600;700;800&display=swap" rel="stylesheet"><style>' + printDocumentCss() + '</style></head><body>' +
-        '<section class="cover"><div class="brand"><div class="brand-left"><img class="logo" src="https://sipae.casitaapps.com/logo-h.png" alt="SIPAE Casita"><div class="brand-title">Reporte SIPAE</div></div><div class="badge">Informe institucional</div></div><div class="hero"><div><h1>Índice corporativo de cumplimiento</h1><div class="summary">' + esc(executiveSummaryText(aggregate, general)) + '</div><div class="meta"><div class="meta-tile"><div class="label">Periodo</div><div class="value">' + esc(title) + '<br>' + esc(periodRangeText(win)) + '</div></div><div class="meta-tile"><div class="label">Días hábiles</div><div class="value">' + esc(win.business_days || 0) + '</div></div><div class="meta-tile"><div class="label">Generado</div><div class="value">' + esc(generatedText) + '</div></div></div></div><div class="seal"><div><div class="label">Índice general</div><div class="score ' + metricColor(general) + '">' + pct(general.score) + '</div></div><div class="copy">' + esc(general.detail || general.traffic_label || "Sin datos") + '</div></div></div></section>' +
-        '<section class="kpis">' + printScoreCard("General", general, general.traffic_label, general.detail) + printScoreCard("Mejor plantel", best, best.plantel, best.resolved_name) + printScoreCard("Menor resultado", worst, worst.plantel, worst.resolved_name) + '</section>' +
+        '<section class="cover"><div class="brand"><div class="brand-left"><img class="logo" src="https://sipae.casitaapps.com/logo-h.png" alt="SIPAE Casita"><div class="brand-title">Reporte SIPAE</div></div><div class="badge">Informe institucional</div></div><div class="hero"><div><h1>Índice corporativo de cumplimiento</h1><div class="summary">' + esc(executiveSummaryText(aggregate, general)) + '</div><div class="meta"><div class="meta-tile"><div class="label">Periodo</div><div class="value">' + esc(title) + '<br>' + esc(periodRangeText(win)) + '</div></div><div class="meta-tile"><div class="label">Días hábiles</div><div class="value">' + esc(win.business_days || 0) + '</div></div><div class="meta-tile"><div class="label">Generado</div><div class="value">' + esc(generatedText) + '</div></div></div>' + signals + '</div><div class="seal"><div><div class="label">Índice general</div><div class="score ' + metricColor(general) + '">' + pct(general.score) + '</div></div><div class="copy">' + esc(general.detail || general.traffic_label || "Sin datos") + '</div></div></div></section>' +
         '<section class="section"><div class="section-head"><div><div class="label">Centro ejecutivo</div><h2>Mapa de cumplimiento <span class="period">' + esc(title) + '</span></h2><div class="copy">Mapa institucional con colores PDF-safe y trazabilidad de métrica preservada.</div></div><div class="legend"><span class="stamp">85-100 sano</span><span class="stamp">70-84 atención</span><span class="stamp">1-69 crítico</span></div></div>' + printMatrixHtml() + '</section>' +
         '<section class="section break"><div class="section-head"><div><div class="label">Notas de lectura</div><h2>Metodología de métricas</h2><div class="copy">Resumen autocontenido para lectura ejecutiva del PDF.</div></div></div>' + printMethodologyHtml() + '</section>' +
         printTraceHtml() +

@@ -56,28 +56,40 @@ async def _fetch_base_simple_uncached(code: str) -> List[Dict[str, Any]]:
         return []
 
     logger.info("Fetching base-simple for sheets_code: %s", code)
-    try:
-        async with httpx.AsyncClient() as client:
-            resp = await client.post(
-                settings.external_bot_api_url,
-                json={"data": {"plantel": code}},
-                timeout=10.0,
-            )
+    last_error: Optional[str] = None
+    for attempt in range(2):
+        try:
+            async with httpx.AsyncClient() as client:
+                resp = await client.post(
+                    settings.external_bot_api_url,
+                    json={"data": {"plantel": code}},
+                    timeout=8.0,
+                )
 
-        if resp.status_code != 200:
-            detail = (resp.text or "").strip().replace("\n", " ")[:240]
-            logger.warning("Base-simple returned %s for %s: %s", resp.status_code, code, detail)
-            return []
+            if resp.status_code != 200:
+                detail = (resp.text or "").strip().replace("\n", " ")[:240]
+                last_error = f"HTTP {resp.status_code}: {detail}"
+                logger.warning("Base-simple returned %s for %s on attempt %s: %s", resp.status_code, code, attempt + 1, detail)
+                continue
 
-        data = resp.json()
-        if not isinstance(data, list):
-            logger.warning("Base-simple returned non-list payload for %s", code)
-            return []
+            data = resp.json()
+            if not isinstance(data, list):
+                last_error = "non-list payload"
+                logger.warning("Base-simple returned non-list payload for %s on attempt %s", code, attempt + 1)
+                continue
 
-        return data
-    except Exception as exc:
-        logger.warning("Error fetching base-simple for %s: %s", code, exc)
-        return []
+            if not data:
+                last_error = "empty payload"
+                logger.warning("Base-simple returned empty payload for %s on attempt %s", code, attempt + 1)
+                continue
+
+            return data
+        except Exception as exc:
+            last_error = str(exc)
+            logger.warning("Error fetching base-simple for %s on attempt %s: %s", code, attempt + 1, exc)
+
+    logger.warning("Base-simple unavailable for %s after retries: %s", code, last_error or "unknown")
+    return []
 
 
 async def _fetch_base_simple(code: str) -> List[Dict[str, Any]]:

@@ -16,8 +16,7 @@ from integrations.external_bot import fetch_expected_groups, fetch_expected_popu
 from .report_repository import (
     count_active_academic_teachers,
     fetch_attendance_rollup,
-    fetch_husky_daily_scan_counts,
-    fetch_husky_tardy_daily_counts,
+    fetch_husky_access_user_rollup,
     fetch_observation_monthly_totals,
     fetch_observation_period_monthly_totals,
     fetch_planning_review_totals,
@@ -109,12 +108,12 @@ def _source_timeout_for_range(start_date: date, end_date: date, base_seconds: fl
     """Bound long-range source waits so ciclo escolar never holds the HTTP request indefinitely.
 
     Long ranges are chunked before querying. The timeout only needs to cover the
-    bounded chunk loop, not a monolithic year-sized SQL scan. Keeping this under
-    typical proxy timeouts prevents HTTP 502 while still allowing slower sources
-    to return unavailable instead of breaking the whole report.
+    bounded chunk loop, not a monolithic year-sized SQL scan. Ciclo Escolar
+    Husky reads can legitimately take more than a minute under load, so keep
+    enough budget to finish instead of publishing failed heatmap cells.
     """
     chunks = max(len(_date_chunks(start_date, end_date)), 1)
-    return max(base_seconds, min(55.0, chunks * 10.0))
+    return max(base_seconds, min(95.0, chunks * 12.0))
 
 
 async def _chunked_rows(
@@ -509,6 +508,94 @@ def _tardy_threshold(plantel_info: Dict[str, Any]) -> str:
     return "09:01:00"
 
 
+def _clock_seconds(value: Any) -> Optional[float]:
+    if value is None or value == "":
+        return None
+    if isinstance(value, datetime):
+        return float(value.hour * 3600 + value.minute * 60 + value.second) + (value.microsecond / 1_000_000)
+    if isinstance(value, timedelta):
+        return float(value.total_seconds() % 86400)
+    if hasattr(value, "hour") and hasattr(value, "minute") and hasattr(value, "second"):
+        return float(value.hour * 3600 + value.minute * 60 + value.second)
+    text = str(value).strip()
+    if not text:
+        return None
+    if "T" in text:
+        text = text.split("T")[-1]
+    if " " in text:
+        text = text.split(" ")[-1]
+    text = text.split(".")[0]
+    parts = text.split(":")
+    if len(parts) < 2:
+        return safe_float(text)
+    try:
+        hours = int(parts[0])
+        minutes = int(parts[1])
+        seconds = int(parts[2]) if len(parts) > 2 else 0
+        return float(((hours * 3600) + (minutes * 60) + seconds) % 86400)
+    except Exception:
+        return None
+
+
+def _summarize_husky_access_rollup(
+    rows: List[Dict[str, Any]],
+    threshold_time: str,
+) -> tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+    scan_stats: Dict[tuple[str, str], Dict[str, Any]] = defaultdict(
+        lambda: {
+            "total_scans": 0,
+            "samples": 0,
+            "seconds_sum": 0.0,
+            "first_seconds": None,
+            "last_seconds": None,
+        }
+    )
+    tardies_by_day: Dict[str, int] = defaultdict(int)
+    threshold_seconds = _clock_seconds(threshold_time)
+
+    for row in rows or []:
+        day = _date_key(row.get("fecha"))
+        tipo = str(row.get("tipo_accion") or "").strip().lower()
+        if not day or tipo not in {"entrada", "salida"}:
+            continue
+
+        samples = safe_int(row.get("samples"))
+        seconds_sum = safe_float(row.get("seconds_sum")) or 0.0
+        first_seconds = _clock_seconds(row.get("first_timestamp"))
+        last_seconds = _clock_seconds(row.get("last_timestamp"))
+
+        stats = scan_stats[(day, tipo)]
+        stats["total_scans"] += 1
+        stats["samples"] += samples
+        stats["seconds_sum"] += seconds_sum
+        if first_seconds is not None and (stats["first_seconds"] is None or first_seconds < stats["first_seconds"]):
+            stats["first_seconds"] = first_seconds
+        if last_seconds is not None and (stats["last_seconds"] is None or last_seconds > stats["last_seconds"]):
+            stats["last_seconds"] = last_seconds
+
+        if tipo == "entrada" and threshold_seconds is not None and first_seconds is not None and first_seconds > threshold_seconds:
+            tardies_by_day[day] += 1
+
+    scan_rows: List[Dict[str, Any]] = []
+    for (day, tipo), stats in sorted(scan_stats.items()):
+        samples = safe_int(stats.get("samples"))
+        scan_rows.append({
+            "fecha": day,
+            "tipo_accion": tipo,
+            "total_scans": safe_int(stats.get("total_scans")),
+            "samples": samples,
+            "avg_entry_seconds": (safe_float(stats.get("seconds_sum")) or 0.0) / samples if samples > 0 else None,
+            "first_entry_time": _format_hhmm(stats.get("first_seconds")),
+            "last_entry_time": _format_hhmm(stats.get("last_seconds")),
+        })
+
+    tardy_rows = [
+        {"date": day, "tardies": count}
+        for day, count in sorted(tardies_by_day.items())
+    ]
+    return scan_rows, tardy_rows
+
+
 async def _safe_value_call(name: str, fn: Callable[[], Awaitable[Any]], timeout_seconds: float) -> Dict[str, Any]:
     started = time.perf_counter()
     try:
@@ -633,14 +720,23 @@ def _scans_metric_from_rows(
 
     entries_by_business_day = [safe_int((by_day.get(day.isoformat()) or {}).get("entrada")) for day in business_days]
     observed_max_entries = max(entries_by_business_day, default=0)
-    if expected_population > 0:
-        daily_expected_base = expected_population
-        basis = "daily_population_reference"
-    elif observed_max_entries > 0:
-        daily_expected_base = observed_max_entries
-        basis = "observed_max_daily_entries"
+    observed_max_attendance_records = max((safe_int(item.get("records")) for item in attendance_daily or []), default=0)
+    population_candidates = {
+        "expected_population": expected_population,
+        "observed_max_daily_attendance_records": observed_max_attendance_records,
+        "observed_max_daily_entries": observed_max_entries,
+    }
+    daily_expected_base = max(population_candidates.values())
+    if daily_expected_base > 0:
+        basis = next(
+            (
+                key
+                for key in ("expected_population", "observed_max_daily_attendance_records", "observed_max_daily_entries")
+                if population_candidates[key] == daily_expected_base
+            ),
+            "max_available_population_base",
+        )
     else:
-        daily_expected_base = 0
         basis = "none"
 
     expected = daily_expected_base * len(business_days) if daily_expected_base > 0 else 0
@@ -687,6 +783,8 @@ def _scans_metric_from_rows(
             "expected": expected,
             "expected_population": expected_population,
             "observed_max_entries": observed_max_entries,
+            "observed_max_attendance_records": observed_max_attendance_records,
+            "population_candidates": population_candidates,
             "basis": basis,
             "days_with_records": len(daily_scan_scores),
         },
@@ -723,9 +821,24 @@ def _student_punctuality_metric_from_counts(
     expected_population = safe_int(population_result.get("value")) if population_result.get("_ok") else 0
     total_attendance_records = sum(safe_int(item.get("records")) for item in attendance_daily)
     total_scan_entries = sum(safe_int(item.get("entries")) for item in scans_daily)
-    if expected_population > 0:
-        opportunities = expected_population * len(business_days)
-        basis = "bot_expected_population"
+    observed_max_attendance_records = max((safe_int(item.get("records")) for item in attendance_daily or []), default=0)
+    observed_max_entries = max((safe_int(item.get("entries")) for item in scans_daily or []), default=0)
+    population_candidates = {
+        "expected_population": expected_population,
+        "observed_max_daily_attendance_records": observed_max_attendance_records,
+        "observed_max_daily_entries": observed_max_entries,
+    }
+    daily_population_base = max(population_candidates.values())
+    if daily_population_base > 0:
+        opportunities = daily_population_base * len(business_days)
+        basis = next(
+            (
+                key
+                for key in ("expected_population", "observed_max_daily_attendance_records", "observed_max_daily_entries")
+                if population_candidates[key] == daily_population_base
+            ),
+            "max_available_population_base",
+        )
     elif total_attendance_records > 0:
         opportunities = total_attendance_records
         basis = "attendance_records"
@@ -743,8 +856,8 @@ def _student_punctuality_metric_from_counts(
     days_with_records = 0
     for day in business_days:
         key = day.isoformat()
-        if expected_population > 0:
-            day_opportunities = expected_population
+        if daily_population_base > 0:
+            day_opportunities = daily_population_base
         else:
             day_opportunities = safe_int((attendance_by_day.get(key) or {}).get("records")) or safe_int((scans_by_day.get(key) or {}).get("entries"))
         day_tardies = safe_int(tardies_by_day.get(key))
@@ -757,7 +870,16 @@ def _student_punctuality_metric_from_counts(
         average_score(daily_scores),
         f"{total_tardies:,} retardos" if opportunities > 0 else "—",
         f"Promedio diario del periodo · {opportunities:,} oportunidades base {basis.replace('_', ' ')}" if opportunities > 0 else "Sin oportunidades para comparar",
-        {"tardies": total_tardies, "opportunities": opportunities, "basis": basis, "days_with_records": days_with_records},
+        {
+            "tardies": total_tardies,
+            "opportunities": opportunities,
+            "expected_population": expected_population,
+            "observed_max_attendance_records": observed_max_attendance_records,
+            "observed_max_entries": observed_max_entries,
+            "population_candidates": population_candidates,
+            "basis": basis,
+            "days_with_records": days_with_records,
+        },
     ), daily
 
 
@@ -1108,20 +1230,22 @@ def _sapf_population_base(
     population_result: Dict[str, Any],
     attendance_daily: List[Dict[str, Any]],
     scans_daily: List[Dict[str, Any]],
-) -> tuple[int, str]:
+) -> tuple[int, str, Dict[str, int]]:
     expected_population = safe_int(population_result.get("value")) if population_result.get("_ok") else 0
-    if expected_population > 0:
-        return expected_population, "expected_population"
-
     observed_scan_population = max((safe_int(item.get("entries")) for item in scans_daily or []), default=0)
-    if observed_scan_population > 0:
-        return observed_scan_population, "observed_max_daily_entries"
-
     observed_attendance_population = max((safe_int(item.get("records")) for item in attendance_daily or []), default=0)
-    if observed_attendance_population > 0:
-        return observed_attendance_population, "observed_max_daily_attendance_records"
-
-    return 0, "none"
+    candidates = {
+        "expected_population": expected_population,
+        "observed_max_daily_attendance_records": observed_attendance_population,
+        "observed_max_daily_entries": observed_scan_population,
+    }
+    population = max(candidates.values())
+    if population <= 0:
+        return 0, "none", candidates
+    for basis in ("expected_population", "observed_max_daily_attendance_records", "observed_max_daily_entries"):
+        if candidates[basis] == population:
+            return population, basis, candidates
+    return population, "max_available_population_base", candidates
 
 
 def _sapf_monthly_breakdown(
@@ -1184,7 +1308,7 @@ def _sapf_metric(
     if not payload.get("_ok", True) or payload.get("error"):
         return _unavailable("—", "Seguimientos no respondió")
 
-    population, population_basis = _sapf_population_base(population_result, attendance_daily, scans_daily)
+    population, population_basis, population_candidates = _sapf_population_base(population_result, attendance_daily, scans_daily)
     open_cases = safe_int(payload.get("open_cases"))
     closed_cases = safe_int(payload.get("closed_cases"))
     total_fichas = safe_int(payload.get("total_fichas"))
@@ -1223,6 +1347,7 @@ def _sapf_metric(
             "target_followups": target_followups,
             "population": population,
             "population_basis": population_basis,
+            "population_candidates": population_candidates,
             "followups_per_100_students": followups_per_100,
             "target_per_100_students": target_per_100,
             "monthly_target_per_100_students": monthly_target_per_100,
@@ -1599,35 +1724,52 @@ async def _collect_plantel(code: str, start_date: date, end_date: date, scope: s
     threshold_time = _tardy_threshold(plantel_info)
 
     heavy_timeout = _source_timeout_for_range(start_date, end_date, 24.0)
+    roster_timeout = 32.0
     sources = await asyncio.gather(
-        _safe_value_call("expected_groups", lambda: fetch_expected_groups(sheets_code), 18.0),
-        _safe_value_call("expected_population", lambda: fetch_expected_population(sheets_code), 18.0),
+        _safe_value_call("expected_groups", lambda: fetch_expected_groups(sheets_code), roster_timeout),
+        _safe_value_call("expected_population", lambda: fetch_expected_population(sheets_code), roster_timeout),
         _safe_value_call(
             "attendance_db",
             lambda: _chunked_rows(fetch_attendance_rollup, attendance_aliases, start_date=start_date, end_date=end_date),
             heavy_timeout,
         ),
         _safe_value_call(
-            "husky_scans_db",
-            lambda: _chunked_rows(fetch_husky_daily_scan_counts, husky_values, start_date=start_date, end_date=end_date, max_days=21),
-            heavy_timeout,
-        ),
-        _safe_value_call(
-            "retardos_db",
-            lambda: _chunked_rows(fetch_husky_tardy_daily_counts, husky_values, start_date=start_date, end_date=end_date, max_days=21, threshold_time=threshold_time),
+            "husky_access_db",
+            lambda: _chunked_rows(fetch_husky_access_user_rollup, husky_values, start_date=start_date, end_date=end_date, max_days=14),
             heavy_timeout,
         ),
         _safe_call("academic", lambda: _academic_metrics(plantel_info, start_date, end_date, business_days), max(SOURCE_TIMEOUTS["academic"], heavy_timeout)),
         _safe_call("sapf", lambda: get_sapf_overview_report(code, start_date, end_date, scope), max(SOURCE_TIMEOUTS["sapf"], heavy_timeout)),
     )
+    husky_source = dict(sources[3])
+    if husky_source.get("_ok"):
+        summarized_husky_rows, summarized_tardy_rows = _summarize_husky_access_rollup(husky_source.get("value") or [], threshold_time)
+        husky_source["raw_rows"] = len(husky_source.get("value") or [])
+        husky_source["value"] = summarized_husky_rows
+        retardos_source = {
+            "_ok": True,
+            "value": summarized_tardy_rows,
+            "_duration_ms": husky_source.get("_duration_ms"),
+            "derived_from": "husky_access_db",
+            "raw_rows": husky_source.get("raw_rows"),
+        }
+    else:
+        retardos_source = {
+            "_ok": False,
+            "value": [],
+            "_duration_ms": husky_source.get("_duration_ms"),
+            "error": husky_source.get("error"),
+            "timeout": husky_source.get("timeout"),
+            "derived_from": "husky_access_db",
+        }
     source_map = {
         "expected_groups": sources[0],
         "expected_population": sources[1],
         "attendance": sources[2],
-        "husky": sources[3],
-        "retardos": sources[4],
-        "academic": sources[5],
-        "seguimientos": sources[6],
+        "husky": husky_source,
+        "retardos": retardos_source,
+        "academic": sources[4],
+        "seguimientos": sources[5],
     }
 
     attendance_rows = source_map["attendance"].get("value") if source_map["attendance"].get("_ok") else []
@@ -1712,6 +1854,7 @@ def _followups_evidence(metric: Dict[str, Any]) -> Dict[str, Any]:
         "esperados": metric.get("target_followups"),
         "poblacion": safe_int(metric.get("population")),
         "population_basis": metric.get("population_basis"),
+        "population_candidates": metric.get("population_candidates"),
         "por_100": metric.get("followups_per_100_students"),
         "meta_por_100_periodo": metric.get("target_per_100_students"),
         "activity_score": metric.get("activity_score"),
@@ -1731,9 +1874,9 @@ def _diagnostic(planteles: List[Dict[str, Any]], start_date: date, end_date: dat
             "metrics": {
                 "pase_lista": _metric_evidence(metrics.get("roll_call") or {}, ["completed", "expected", "missing", "basis", "bot_groups", "observed_max_groups"]),
                 "asistencia_alumnos": _metric_evidence(metrics.get("student_attendance") or {}, ["present", "records", "absent", "basis"]),
-                "escaneos": _metric_evidence(metrics.get("scans") or {}, ["entries", "exits", "expected", "expected_population", "observed_max_entries", "days_with_records", "basis"]),
+                "escaneos": _metric_evidence(metrics.get("scans") or {}, ["entries", "exits", "expected", "expected_population", "observed_max_entries", "observed_max_attendance_records", "population_candidates", "days_with_records", "basis"]),
                 "balance_escaneos": _metric_evidence(metrics.get("scan_balance") or {}, ["entries", "exits", "gap_total", "days_with_records", "basis"]),
-                "puntualidad_alumnos": _metric_evidence(metrics.get("student_punctuality") or {}, ["tardies", "opportunities", "days_with_records", "basis"]),
+                "puntualidad_alumnos": _metric_evidence(metrics.get("student_punctuality") or {}, ["tardies", "opportunities", "expected_population", "observed_max_entries", "observed_max_attendance_records", "population_candidates", "days_with_records", "basis"]),
                 "planeaciones": _metric_evidence(metrics.get("planning") or {}, ["submitted", "reviewed", "pending", "raw_rows", "active_teachers", "submitted_teachers", "created_at_start", "created_at_end", "min_created_at", "max_created_at", "basis"]),
                 "observaciones": _metric_evidence(metrics.get("observations") or {}, ["total_observations", "avg_monthly_observations", "monthly_goal", "months_count", "active_teachers", "window_start", "window_end", "active_window_start", "active_window_end", "basis"]),
                 "cobertura_observaciones": _metric_evidence(metrics.get("observation_coverage") or {}, ["active_teachers", "avg_active_teachers", "avg_teachers_with_2plus", "observed_teachers", "teachers_with_2plus", "without_observation", "months_count", "window_start", "window_end", "basis"]),

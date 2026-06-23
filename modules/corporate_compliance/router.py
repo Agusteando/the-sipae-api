@@ -1,3 +1,4 @@
+import asyncio
 from datetime import date, datetime, timedelta
 from typing import Optional
 from zoneinfo import ZoneInfo
@@ -11,6 +12,8 @@ from .templates import CORPORATE_COMPLIANCE_HTML
 
 router = APIRouter(tags=["Cumplimiento operativo"])
 DASHBOARD_DATA_VERSION = "2026-06-23-drilldown-sapf-v19"
+_REPORT_PENDING: dict[str, asyncio.Task] = {}
+_REPORT_PENDING_LOCK = asyncio.Lock()
 
 
 @router.get("/corporate-compliance-risk-index", response_class=HTMLResponse, include_in_schema=False)
@@ -114,17 +117,40 @@ async def get_corporate_compliance_dashboard_data(
             data["meta"] = meta
             return data
 
-    data = await get_corporate_compliance_index(
-        planteles=planteles,
-        start_date=resolved_start,
-        end_date=resolved_end,
-        scope=resolved_scope,
-        include_baselines=include_baselines,
-    )
-    meta = dict(data.get("meta") or {})
-    meta.update({"is_cached": False, "cached_at": datetime.now(ZoneInfo("America/Mexico_City")).isoformat()})
-    data["meta"] = meta
-    set_cache(cache_key, data)
+    async def build_report():
+        data = await get_corporate_compliance_index(
+            planteles=planteles,
+            start_date=resolved_start,
+            end_date=resolved_end,
+            scope=resolved_scope,
+            include_baselines=include_baselines,
+        )
+        meta = dict(data.get("meta") or {})
+        meta.update({"is_cached": False, "cached_at": datetime.now(ZoneInfo("America/Mexico_City")).isoformat()})
+        data["meta"] = meta
+        set_cache(cache_key, data)
+        return data
+
+    async with _REPORT_PENDING_LOCK:
+        if not force_refresh:
+            cached = get_cache(cache_key)
+            if cached and _cache_age_seconds(cached) < 600:
+                data = dict(cached["data"])
+                meta = dict(data.get("meta") or {})
+                meta.update({"is_cached": True, "cached_at": cached["timestamp"].isoformat()})
+                data["meta"] = meta
+                return data
+        pending = _REPORT_PENDING.get(cache_key)
+        if pending is None or pending.done():
+            pending = asyncio.create_task(build_report())
+            _REPORT_PENDING[cache_key] = pending
+
+    try:
+        data = await pending
+    finally:
+        async with _REPORT_PENDING_LOCK:
+            if _REPORT_PENDING.get(cache_key) is pending and pending.done():
+                _REPORT_PENDING.pop(cache_key, None)
     return data
 
 

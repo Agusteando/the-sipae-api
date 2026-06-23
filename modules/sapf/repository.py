@@ -165,7 +165,7 @@ async def _fetch_monthly_for_table(
     join_sql, dept_expr, join_params = _deptos_join_and_expr(table_alias, columns, has_deptos_map, map_campus_values)
 
     sql = f"""
-        SELECT /*+ MAX_EXECUTION_TIME(5000) */
+        SELECT /*+ MAX_EXECUTION_TIME(45000) */
             {dept_expr} AS department_name,
             YEAR({date_expression}) AS year,
             MONTH({date_expression}) AS month,
@@ -244,7 +244,7 @@ async def _fetch_motivos_for_table(
     join_sql, dept_expr, join_params = _deptos_join_and_expr(table_alias, columns, has_deptos_map, map_campus_values)
 
     sql = f"""
-        SELECT /*+ MAX_EXECUTION_TIME(5000) */
+        SELECT /*+ MAX_EXECUTION_TIME(45000) */
             {dept_expr} AS department_name,
             {motive_expr} AS motivo,
             %s AS source,
@@ -340,7 +340,7 @@ async def _fetch_fichas_overview(
     )
 
     sql = f"""
-        SELECT /*+ MAX_EXECUTION_TIME(5000) */
+        SELECT /*+ MAX_EXECUTION_TIME(45000) */
             COUNT(*) AS total_fichas,
             SUM(CASE WHEN {open_case} THEN 1 ELSE 0 END) AS open_cases,
             SUM(CASE WHEN {closed_case} THEN 1 ELSE 0 END) AS closed_cases,
@@ -357,7 +357,7 @@ async def _fetch_fichas_overview(
     kpi = dict(await cur.fetchone() or {})
 
     area_sql = f"""
-        SELECT /*+ MAX_EXECUTION_TIME(5000) */ {dept_expr} AS area, COUNT(*) AS conteo
+        SELECT /*+ MAX_EXECUTION_TIME(45000) */ {dept_expr} AS area, COUNT(*) AS conteo
         FROM fichas_atencion fa
         {join_sql}
         WHERE {campus_clause}
@@ -387,7 +387,7 @@ async def _fetch_followups_count(
     campus_clause, campus_params = _normalized_campus_clause("se", columns, campus_values)
 
     sql = f"""
-        SELECT /*+ MAX_EXECUTION_TIME(5000) */ COUNT(*) AS total_followups
+        SELECT /*+ MAX_EXECUTION_TIME(45000) */ COUNT(*) AS total_followups
         FROM seguimiento se
         WHERE {campus_clause}
           AND {date_expression} >= %s
@@ -415,7 +415,7 @@ async def _fetch_monthly_activity_counts(
     campus_clause, campus_params = _normalized_campus_clause(table_alias, columns, campus_values)
 
     sql = f"""
-        SELECT /*+ MAX_EXECUTION_TIME(5000) */
+        SELECT /*+ MAX_EXECUTION_TIME(45000) */
             DATE_FORMAT({date_expression}, '%%Y-%%m') AS month_key,
             %s AS source,
             COUNT(*) AS total
