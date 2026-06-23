@@ -1,1 +1,1 @@
-Asegura ciclo escolar y optimiza accesos Husky
+Ajusta observaciones como promedio mensual del ciclo escolar

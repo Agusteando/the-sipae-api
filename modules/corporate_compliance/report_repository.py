@@ -191,6 +191,62 @@ async def fetch_observation_monthly_totals(
 
 
 
+async def fetch_observation_period_monthly_totals(
+    academic_filters: List[Dict[str, str]],
+    start_date: date,
+    end_date: date,
+) -> Dict[str, Any]:
+    """Monthly observation and active-teacher aggregates for long periods.
+
+    Used for ciclo escolar/rangos largos so Observaciones is a monthly average
+    across the evaluated period instead of a single current-month snapshot.
+    """
+    user_where, user_params = _build_academic_where(academic_filters, "u")
+    plan_where, plan_params = _build_academic_where(academic_filters, "p")
+    obs_where, obs_params = _build_academic_where(academic_filters, "obs")
+    active_query = f"""
+        SELECT
+            DATE_FORMAT(p.created_at, '%%Y-%%m') AS month_key,
+            COUNT(DISTINCT p.docente) AS active_teachers
+        FROM planeaciones p
+        JOIN usuarios u ON u.username = p.docente
+        WHERE {user_where}
+          AND {plan_where}
+          AND p.created_at >= %s
+          AND p.created_at < DATE_ADD(%s, INTERVAL 1 DAY)
+          AND p.flagged = 0
+          AND p.docente IS NOT NULL
+          AND TRIM(p.docente) <> ''
+          AND COALESCE(u.coordinador, 0) = 0
+          AND COALESCE(u.banned, 0) = 0
+          AND (u.ISSSTE IS NULL OR u.ISSSTE = 0)
+        GROUP BY month_key
+    """
+    obs_query = f"""
+        SELECT
+            DATE_FORMAT(obs.submission_date, '%%Y-%%m') AS month_key,
+            obs.docente,
+            COUNT(obs.id) AS total_observations
+        FROM observaciones_form_submissions obs
+        WHERE {obs_where}
+          AND obs.submission_date >= %s
+          AND obs.submission_date < DATE_ADD(%s, INTERVAL 1 DAY)
+          AND obs.docente IS NOT NULL
+          AND TRIM(obs.docente) <> ''
+        GROUP BY month_key, obs.docente
+    """
+    conn = await get_attendance_db_connection()
+    try:
+        async with conn.cursor(aiomysql.DictCursor) as cur:
+            await cur.execute(active_query, (*user_params, *plan_params, start_date, end_date))
+            active_rows = await cur.fetchall() or []
+            await cur.execute(obs_query, (*obs_params, start_date, end_date))
+            observation_rows = await cur.fetchall() or []
+            return {"active_by_month": active_rows, "observations_by_month": observation_rows}
+    finally:
+        conn.close()
+
+
 def _normalize_values(values: List[str] | str) -> List[str]:
     if isinstance(values, str):
         raw = [values]

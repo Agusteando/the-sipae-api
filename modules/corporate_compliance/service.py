@@ -19,6 +19,7 @@ from .report_repository import (
     fetch_husky_daily_scan_counts,
     fetch_husky_tardy_daily_counts,
     fetch_observation_monthly_totals,
+    fetch_observation_period_monthly_totals,
     fetch_planning_review_totals,
 )
 from .scoring import (
@@ -145,6 +146,23 @@ def _week_window_for_period(start_date: date, end_date: date) -> tuple[date, dat
 
 def _month_window_for(value: date) -> tuple[date, date]:
     return value.replace(day=1), value
+
+
+def _month_keys_between(start_date: date, end_date: date) -> List[str]:
+    keys: List[str] = []
+    cursor = start_date.replace(day=1)
+    end_month = end_date.replace(day=1)
+    while cursor <= end_month:
+        keys.append(f"{cursor.year:04d}-{cursor.month:02d}")
+        if cursor.month == 12:
+            cursor = date(cursor.year + 1, 1, 1)
+        else:
+            cursor = date(cursor.year, cursor.month + 1, 1)
+    return keys
+
+
+def _is_long_observation_period(start_date: date, end_date: date) -> bool:
+    return (end_date - start_date).days > 45
 
 
 def _monthly_target_per_100_for_period(start_date: date, end_date: date, monthly_target_per_100: float = 5.0) -> float:
@@ -729,16 +747,89 @@ async def _planning_metric(plantel_info: Dict[str, Any], start_date: date, end_d
     )
 
 
-async def _observation_metrics(plantel_info: Dict[str, Any], end_date: date) -> Dict[str, Dict[str, Any]]:
+async def _observation_metrics(plantel_info: Dict[str, Any], start_date: date, end_date: date) -> Dict[str, Dict[str, Any]]:
     academic_filters = plantel_info.get("academic_filters") or []
     if not academic_filters:
         return {
             "observations": _unavailable("—", "Plantel sin filtro académico"),
             "observation_coverage": _unavailable("—", "Plantel sin filtro académico"),
         }
+
+    monthly_goal = 40
+
+    if _is_long_observation_period(start_date, end_date):
+        month_keys = _month_keys_between(start_date, end_date)
+        month_count = max(len(month_keys), 1)
+        totals = await fetch_observation_period_monthly_totals(academic_filters, start_date, end_date)
+        active_by_month = {
+            str(row.get("month_key") or ""): safe_int(row.get("active_teachers"))
+            for row in (totals.get("active_by_month") or [])
+        }
+        observations_by_month: Dict[str, Dict[str, int]] = defaultdict(dict)
+        total_observations = 0
+        for row in totals.get("observations_by_month") or []:
+            month_key = str(row.get("month_key") or "")
+            docente = str(row.get("docente") or "").strip()
+            count = safe_int(row.get("total_observations"))
+            if not month_key or not docente:
+                continue
+            observations_by_month[month_key][docente] = count
+            total_observations += count
+
+        monthly_observation_counts: List[int] = []
+        monthly_coverage_scores: List[Optional[float]] = []
+        monthly_active_counts: List[int] = []
+        monthly_two_plus_counts: List[int] = []
+        months_with_active = 0
+        for month_key in month_keys:
+            teacher_counts = observations_by_month.get(month_key) or {}
+            month_total = sum(teacher_counts.values())
+            active_teachers = safe_int(active_by_month.get(month_key))
+            teachers_with_2plus = sum(1 for value in teacher_counts.values() if safe_int(value) >= 2)
+            monthly_observation_counts.append(month_total)
+            monthly_active_counts.append(active_teachers)
+            monthly_two_plus_counts.append(teachers_with_2plus)
+            if active_teachers > 0:
+                months_with_active += 1
+                monthly_coverage_scores.append(pct(min(teachers_with_2plus, active_teachers), active_teachers))
+
+        avg_monthly_observations = total_observations / month_count if month_count else 0.0
+        observation_score = pct(min(avg_monthly_observations, monthly_goal), monthly_goal)
+        avg_active_teachers = (sum(monthly_active_counts) / months_with_active) if months_with_active else 0.0
+        avg_two_plus = (sum(monthly_two_plus_counts) / months_with_active) if months_with_active else 0.0
+        coverage_score = average_score(monthly_coverage_scores)
+        observations = _metric(
+            observation_score,
+            f"{avg_monthly_observations:.1f} prom/mes de {monthly_goal:,}",
+            f"{total_observations:,} observaciones en {month_count:,} meses del periodo",
+            {
+                "total_observations": total_observations,
+                "avg_monthly_observations": round(avg_monthly_observations, 1),
+                "monthly_goal": monthly_goal,
+                "months_count": month_count,
+                "window_start": start_date.isoformat(),
+                "window_end": end_date.isoformat(),
+                "basis": "period_monthly_average_observation_goal",
+            },
+        )
+        coverage = _metric(
+            coverage_score,
+            f"{avg_two_plus:.1f} prom/mes con 2+" if months_with_active else "—",
+            f"Promedio mensual sobre {avg_active_teachers:.1f} docentes activos" if months_with_active else "Sin docentes activos por mes",
+            {
+                "avg_active_teachers": round(avg_active_teachers, 1),
+                "avg_teachers_with_2plus": round(avg_two_plus, 1),
+                "months_with_active": months_with_active,
+                "months_count": month_count,
+                "window_start": start_date.isoformat(),
+                "window_end": end_date.isoformat(),
+                "basis": "period_monthly_average_teachers_observed_twice",
+            },
+        )
+        return {"observations": observations, "observation_coverage": coverage}
+
     active_start = end_date - timedelta(days=20)
     month_start, month_end = _month_window_for(end_date)
-    monthly_goal = 40
     totals = await fetch_observation_monthly_totals(
         academic_filters,
         active_start,
@@ -794,7 +885,7 @@ async def _observation_metrics(plantel_info: Dict[str, Any], end_date: date) -> 
 async def _academic_metrics(plantel_info: Dict[str, Any], start_date: date, end_date: date, business_days: List[date]) -> Dict[str, Dict[str, Any]]:
     planning_result, observation_result = await asyncio.gather(
         _planning_metric(plantel_info, start_date, end_date, business_days),
-        _observation_metrics(plantel_info, end_date),
+        _observation_metrics(plantel_info, start_date, end_date),
         return_exceptions=True,
     )
     errors: List[str] = []
@@ -1130,14 +1221,14 @@ def _diagnostic(planteles: List[Dict[str, Any]], start_date: date, end_date: dat
                 "balance_escaneos": _metric_evidence(metrics.get("scan_balance") or {}, ["entries", "exits", "gap_total", "days_with_records", "basis"]),
                 "puntualidad_alumnos": _metric_evidence(metrics.get("student_punctuality") or {}, ["tardies", "opportunities", "days_with_records", "basis"]),
                 "planeaciones": _metric_evidence(metrics.get("planning") or {}, ["submitted", "reviewed", "pending", "raw_rows", "active_teachers", "submitted_teachers", "created_at_start", "created_at_end", "min_created_at", "max_created_at", "basis"]),
-                "observaciones": _metric_evidence(metrics.get("observations") or {}, ["total_observations", "monthly_goal", "active_teachers", "window_start", "window_end", "active_window_start", "active_window_end", "basis"]),
-                "cobertura_observaciones": _metric_evidence(metrics.get("observation_coverage") or {}, ["active_teachers", "observed_teachers", "teachers_with_2plus", "without_observation", "window_start", "window_end", "basis"]),
+                "observaciones": _metric_evidence(metrics.get("observations") or {}, ["total_observations", "avg_monthly_observations", "monthly_goal", "months_count", "active_teachers", "window_start", "window_end", "active_window_start", "active_window_end", "basis"]),
+                "cobertura_observaciones": _metric_evidence(metrics.get("observation_coverage") or {}, ["active_teachers", "avg_active_teachers", "avg_teachers_with_2plus", "observed_teachers", "teachers_with_2plus", "without_observation", "months_count", "window_start", "window_end", "basis"]),
                 "seguimientos": _followups_evidence(metrics.get("sapf") or {}),
             },
             "general": _metric_evidence(metrics.get("general") or {}, ["weights_used", "weights_total", "metrics_used", "minimum_weight", "minimum_metrics"]),
         }
     return {
-        "v": "corp-diagnostic-v17",
+        "v": "corp-diagnostic-v18",
         "range": {"start": start_date.isoformat(), "end": end_date.isoformat(), "business_days": len(business_days)},
         "planteles": rows,
         "hora_promedio_entrada_nivel": _level_access_summary(planteles, business_days),
@@ -1417,7 +1508,7 @@ async def get_corporate_compliance_index(
         "source_audit": {p["plantel"]: p.get("source_audit") for p in plantel_payloads},
         "diagnostic": _diagnostic(plantel_payloads, start_date, end_date, business_days),
         "meta": {
-            "logic_version": "2026-06-22-cycle-husky-safe-v17",
+            "logic_version": "2026-06-22-cycle-observations-average-v18",
             "start_date": start_date.isoformat(),
             "end_date": end_date.isoformat(),
             "business_days": len(business_days),

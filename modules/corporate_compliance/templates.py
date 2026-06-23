@@ -266,16 +266,16 @@ CORPORATE_COMPLIANCE_HTML = r'''
     var METRIC_ORDER = ["general", "roll_call", "student_attendance", "scans", "scan_balance", "student_punctuality", "planning", "observations", "observation_coverage", "sapf"];
     var METRIC_LABELS = { general: "General", roll_call: "Pase de lista", student_attendance: "Asistencia alumnos", scans: "Escaneos", scan_balance: "Balance accesos", student_punctuality: "Puntualidad alumnos", planning: "Planeaciones", observations: "Observaciones", observation_coverage: "Cobertura obs.", sapf: "Seguimientos" };
     var METRIC_DESCRIPTIONS = {
-      general: "Promedio ponderado de las métricas calculables del plantel.",
-      roll_call: "Grupos/día con pase de lista capturado contra grupos esperados.",
-      student_attendance: "Promedio diario de alumnos presentes dentro de listas capturadas.",
-      scans: "Entradas registradas contra población esperada diaria.",
-      scan_balance: "Qué tan balanceadas están entradas y salidas registradas.",
-      student_punctuality: "100 significa sin retardos; baja cuando suben los retardos contra oportunidades alumno-día.",
-      planning: "Planeaciones creadas en el periodo que ya tienen revisión.",
-      observations: "Observaciones realizadas contra la meta mensual definida.",
-      observation_coverage: "Docentes activos con al menos dos observaciones en el mes.",
-      sapf: "Seguimientos realizados contra meta poblacional del periodo."
+      general: "Promedio ponderado de las métricas con cálculo real. En ciclo escolar usa el periodo completo salvo observaciones, que se promedian por mes.",
+      roll_call: "Promedio del periodo: grupos/día con pase de lista capturado contra grupos esperados por día.",
+      student_attendance: "Promedio diario del periodo: alumnos presentes dentro de listas capturadas.",
+      scans: "Promedio diario del periodo: entradas registradas contra población esperada del plantel.",
+      scan_balance: "Promedio diario del periodo: correspondencia entre entradas y salidas registradas; mayor balance = mejor.",
+      student_punctuality: "Métrica positiva: 100 es sin retardos; baja según retardos contra oportunidades alumno-día del periodo.",
+      planning: "Planeaciones creadas en el periodo que ya tienen revisión registrada.",
+      observations: "Mes/rango corto: observaciones del mes contra meta 40. Ciclo escolar/rango largo: promedio mensual contra meta 40.",
+      observation_coverage: "Mes/rango corto: docentes activos con 2+ observaciones. Ciclo escolar/rango largo: promedio mensual de esa cobertura.",
+      sapf: "Seguimientos realizados contra meta poblacional positiva del periodo: 0 seguimientos = 0; cumplir/superar meta = 100."
     };
     var LINE_COLORS = ["#111827", "#009F5A", "#D1182C", "#D97706", "#2563eb", "#7c3aed"];
     var state = { scope: "ciclo_escolar", planteles: {}, data: null, selectedPlantel: null };
